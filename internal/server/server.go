@@ -56,6 +56,9 @@ func (s *Server) Setup() error {
 	// Setup API routes
 	s.setupRoutes()
 
+	// Serve static files
+	s.ServeStaticFiles()
+
 	return nil
 }
 
