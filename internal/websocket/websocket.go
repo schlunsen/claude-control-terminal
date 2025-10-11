@@ -100,13 +100,8 @@ func (h *Hub) HandleWebSocket() func(*websocket.Conn) {
 
 // SendUpdate sends an update notification to all clients
 func (h *Hub) SendUpdate(updateType string, data interface{}) {
-	message := map[string]interface{}{
-		"type": updateType,
-		"data": data,
-		"time": time.Now(),
-	}
-
 	// Convert to JSON bytes
 	// Note: In production, use proper JSON marshaling
+	_ = data // Ignore data for now, just send update type
 	h.Broadcast([]byte(fmt.Sprintf(`{"type":"%s","time":"%s"}`, updateType, time.Now().Format(time.RFC3339))))
 }
