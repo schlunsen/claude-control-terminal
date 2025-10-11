@@ -54,8 +54,34 @@ func (mi *MCPInstaller) InstallMCP(mcpName, targetDir string, silent bool) error
 		goto Success
 	}
 
+	// Format 3: Search in common categories
+	if !strings.Contains(mcpName, "/") {
+		categories := []string{
+			"browser_automation",
+			"database",
+			"deepgraph",
+			"devtools",
+			"filesystem",
+			"integration",
+			"marketing",
+			"productivity",
+			"web",
+		}
+
+		for _, category := range categories {
+			githubPath = fmt.Sprintf("components/mcps/%s/%s.json", category, mcpName)
+			if !silent {
+				fmt.Printf("📥 Searching in %s category...\n", category)
+			}
+			content, err = fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
+			if err == nil {
+				goto Success
+			}
+		}
+	}
+
 	// All attempts failed
-	return fmt.Errorf("MCP '%s' not found", mcpName)
+	return fmt.Errorf("MCP '%s' not found (tried multiple paths)", mcpName)
 
 Success:
 	if !silent {
