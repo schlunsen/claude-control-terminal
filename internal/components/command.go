@@ -57,12 +57,25 @@ func (ci *CommandInstaller) InstallCommand(commandName, targetDir string, silent
 	// Format 3: Search in common categories
 	if !strings.Contains(commandName, "/") {
 		categories := []string{
-			"development",
-			"testing",
+			"automation",
+			"database",
 			"deployment",
-			"security",
 			"documentation",
+			"game-development",
+			"git",
+			"git-workflow",
+			"nextjs-vercel",
+			"orchestration",
 			"performance",
+			"project-management",
+			"security",
+			"setup",
+			"simulation",
+			"svelte",
+			"sync",
+			"team",
+			"testing",
+			"utilities",
 		}
 
 		for _, category := range categories {
