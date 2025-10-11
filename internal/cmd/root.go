@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/davila7/go-claude-templates/internal/components"
 	"github.com/spf13/cobra"
 )
 
@@ -218,27 +220,89 @@ func handleCommand(cmd *cobra.Command, args []string) {
 
 	// Component installation
 	if agent != "" || command != "" || mcp != "" || setting != "" || hook != "" {
-		fmt.Println("📦 Installing Components...")
-		if agent != "" {
-			fmt.Printf("  🤖 Agent: %s\n", agent)
-		}
-		if command != "" {
-			fmt.Printf("  ⚡ Command: %s\n", command)
-		}
-		if mcp != "" {
-			fmt.Printf("  🔌 MCP: %s\n", mcp)
-		}
-		if setting != "" {
-			fmt.Printf("  ⚙️  Setting: %s\n", setting)
-		}
-		if hook != "" {
-			fmt.Printf("  🔧 Hook: %s\n", hook)
-		}
-		fmt.Println("(Implementation coming soon)")
+		handleComponentInstallation(directory)
 		return
 	}
 
 	// Default: Project setup
 	fmt.Println("⚙️  Project Setup")
 	fmt.Println("(Implementation coming soon)")
+}
+
+// handleComponentInstallation handles installation of individual components
+func handleComponentInstallation(targetDir string) {
+	fmt.Println("📦 Installing Components...")
+
+	hasErrors := false
+
+	// Install agents
+	if agent != "" {
+		agents := parseComponentList(agent)
+		if len(agents) > 0 {
+			fmt.Printf("\n🤖 Installing %d agent(s)...\n", len(agents))
+			installer := components.NewAgentInstaller()
+			if err := installer.InstallMultipleAgents(agents, targetDir, false); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				hasErrors = true
+			}
+		}
+	}
+
+	// Install commands
+	if command != "" {
+		commands := parseComponentList(command)
+		if len(commands) > 0 {
+			fmt.Printf("\n⚡ Installing %d command(s)...\n", len(commands))
+			installer := components.NewCommandInstaller()
+			if err := installer.InstallMultipleCommands(commands, targetDir, false); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				hasErrors = true
+			}
+		}
+	}
+
+	// Install MCPs
+	if mcp != "" {
+		mcps := parseComponentList(mcp)
+		if len(mcps) > 0 {
+			fmt.Printf("\n🔌 Installing %d MCP(s)...\n", len(mcps))
+			installer := components.NewMCPInstaller()
+			if err := installer.InstallMultipleMCPs(mcps, targetDir, false); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				hasErrors = true
+			}
+		}
+	}
+
+	// Settings and hooks
+	if setting != "" {
+		fmt.Println("\n⚙️  Settings installation coming soon...")
+	}
+
+	if hook != "" {
+		fmt.Println("\n🔧 Hooks installation coming soon...")
+	}
+
+	if !hasErrors {
+		fmt.Println("\n✅ All components installed successfully!")
+	}
+}
+
+// parseComponentList parses comma-separated component names
+func parseComponentList(input string) []string {
+	if input == "" {
+		return nil
+	}
+
+	parts := strings.Split(input, ",")
+	result := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+
+	return result
 }
