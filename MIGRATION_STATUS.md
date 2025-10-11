@@ -2,7 +2,7 @@
 
 ## 📊 Progress Overview
 
-### ✅ Completed (Tasks 1-4)
+### ✅ Completed (Tasks 1-6)
 
 1. **✅ Go Module Structure**
    - Created project in `/Users/schlunsen/projects/go-claude-templates`
@@ -31,16 +31,26 @@
    - Progress bars
    - Box displays
 
-### 🚧 In Progress (Task 5)
+5. **✅ File Operations Module**
+   - GitHub file downloading with retry logic
+   - Rate limiting and exponential backoff
+   - Download caching to avoid repeated requests
+   - Template processing (settings.json, .mcp.json)
+   - Backup creation for existing files
+   - JSON processing and filtering
+   - Cross-platform file/directory operations
 
-5. **🚧 File Operations Module**
-   - Need to port template copying logic
-   - Need to implement path handling utilities
-   - Need to port JSON parsing for components
+6. **✅ Component Management**
+   - Agent installation system
+   - Command installation system
+   - MCP installation system
+   - Comma-separated component lists
+   - Bulk installation with reporting
+   - Auto-directory creation
+   - Error handling and summaries
 
-### ⏳ Pending (Tasks 6-17)
+### ⏳ Pending (Tasks 7-17)
 
-6. Component Management (agents, commands, MCPs)
 7. Analytics Core Modules (StateCalculator, ProcessDetector)
 8. ConversationAnalyzer and FileWatcher
 9. Fiber Web Server with API endpoints
@@ -55,59 +65,73 @@
 
 ## 🎯 Current Features
 
-### Working Commands
+### Working Commands (Make & Just)
 
 ```bash
 # Build the application
-make build
+make build   # or: just build
 
 # Run the application
-make run
+make run     # or: just run
 
 # Run specific modes
-make run-analytics
-make run-agents
-make run-chats
-make run-help
+make run-analytics    # or: just analytics
+make run-agents      # or: just agents
+make run-chats       # or: just chats
+
+# Install components
+just install-agent security-auditor
+just install-command check-file
+just install-mcp postgresql
 
 # Development
-make clean
-make test
-make fmt
-make lint
-make deps
+make clean   # or: just clean
+make test    # or: just test
+make fmt     # or: just fmt
+make deps    # or: just deps
 
 # Cross-platform builds
-make build-all
+make build-all   # or: just build-all
 ```
 
 ### CLI Commands (All flags implemented)
 
 ```bash
 # Service launches
-./cct --analytics       # Analytics dashboard
-./cct --agents          # Agents dashboard
-./cct --chats           # Chats interface
-./cct --plugins         # Plugin dashboard
-./cct --health-check    # Health check
+./cct --analytics       # Analytics dashboard (coming soon)
+./cct --agents          # Agents dashboard (coming soon)
+./cct --chats           # Chats interface (coming soon)
+./cct --plugins         # Plugin dashboard (coming soon)
+./cct --health-check    # Health check (coming soon)
 
-# Component installation
-./cct --agent <name>    # Install agent
-./cct --command <name>  # Install command
-./cct --mcp <name>      # Install MCP
-./cct --setting <name>  # Install setting
-./cct --hook <name>     # Install hook
+# Component installation (WORKING!)
+./cct --agent agent1                    # Install single agent
+./cct --agent "agent1,agent2,agent3"    # Install multiple agents
+./cct --command cmd1                    # Install single command
+./cct --command "cmd1,cmd2"             # Install multiple commands
+./cct --mcp mcp1                        # Install single MCP
+./cct --mcp "mcp1,mcp2"                 # Install multiple MCPs
+
+# Mix components in one command
+./cct --agent security-auditor --command check-file --mcp postgresql
+
+# Directory specification
+./cct --agent test --directory ./my-project
+
+# Component installation with settings/hooks
+./cct --setting <name>  # Coming soon
+./cct --hook <name>     # Coming soon
 
 # Analysis
-./cct --command-stats   # Analyze commands
-./cct --hook-stats      # Analyze hooks
-./cct --mcp-stats       # Analyze MCPs
+./cct --command-stats   # Coming soon
+./cct --hook-stats      # Coming soon
+./cct --mcp-stats       # Coming soon
 
 # Agent management
-./cct --list-agents
-./cct --create-agent <name>
-./cct --remove-agent <name>
-./cct --update-agent <name>
+./cct --list-agents          # Coming soon
+./cct --create-agent <name>  # Coming soon
+./cct --remove-agent <name>  # Coming soon
+./cct --update-agent <name>  # Coming soon
 
 # Options
 ./cct --help
