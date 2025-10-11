@@ -27,27 +27,62 @@ func (ci *CommandInstaller) InstallCommand(commandName, targetDir string, silent
 		fmt.Printf("⚡ Installing command: %s\n", commandName)
 	}
 
-	// Support both category/command-name and direct command-name formats
+	// Try multiple path formats to find the command
+	var content string
+	var err error
 	var githubPath string
+
+	// Format 1: Try with category (e.g., security/vulnerability-scan)
 	if strings.Contains(commandName, "/") {
-		// Category/command format: security/vulnerability-scan
 		githubPath = fmt.Sprintf("components/commands/%s.md", commandName)
-	} else {
-		// Direct command format: check-file
-		githubPath = fmt.Sprintf("components/commands/%s.md", commandName)
-	}
-
-	if !silent {
-		fmt.Println("📥 Downloading from GitHub (main branch)...")
-	}
-
-	// Download the command file
-	content, err := fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
-	if err != nil {
-		if strings.Contains(err.Error(), "404") {
-			return fmt.Errorf("command '%s' not found", commandName)
+		if !silent {
+			fmt.Printf("📥 Trying path: %s\n", githubPath)
 		}
-		return fmt.Errorf("failed to download command: %w", err)
+		content, err = fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
+		if err == nil {
+			goto Success
+		}
+	}
+
+	// Format 2: Try direct path
+	githubPath = fmt.Sprintf("components/commands/%s.md", commandName)
+	if !silent {
+		fmt.Printf("📥 Trying direct path: %s\n", githubPath)
+	}
+	content, err = fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
+	if err == nil {
+		goto Success
+	}
+
+	// Format 3: Search in common categories
+	if !strings.Contains(commandName, "/") {
+		categories := []string{
+			"development",
+			"testing",
+			"deployment",
+			"security",
+			"documentation",
+			"performance",
+		}
+
+		for _, category := range categories {
+			githubPath = fmt.Sprintf("components/commands/%s/%s.md", category, commandName)
+			if !silent {
+				fmt.Printf("📥 Searching in %s category...\n", category)
+			}
+			content, err = fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
+			if err == nil {
+				goto Success
+			}
+		}
+	}
+
+	// All attempts failed
+	return fmt.Errorf("command '%s' not found (tried multiple paths)", commandName)
+
+Success:
+	if !silent {
+		fmt.Printf("✅ Found command at: %s\n", githubPath)
 	}
 
 	// Create .claude/commands directory if it doesn't exist

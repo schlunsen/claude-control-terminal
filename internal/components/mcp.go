@@ -27,20 +27,39 @@ func (mi *MCPInstaller) InstallMCP(mcpName, targetDir string, silent bool) error
 		fmt.Printf("🔌 Installing MCP: %s\n", mcpName)
 	}
 
-	// MCP path format
-	githubPath := fmt.Sprintf("components/mcps/%s.json", mcpName)
+	// Try multiple path formats to find the MCP
+	var content string
+	var err error
+	var githubPath string
 
-	if !silent {
-		fmt.Println("📥 Downloading from GitHub (main branch)...")
+	// Format 1: Try with category if provided
+	if strings.Contains(mcpName, "/") {
+		githubPath = fmt.Sprintf("components/mcps/%s.json", mcpName)
+		if !silent {
+			fmt.Printf("📥 Trying path: %s\n", githubPath)
+		}
+		content, err = fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
+		if err == nil {
+			goto Success
+		}
 	}
 
-	// Download the MCP file
-	content, err := fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
-	if err != nil {
-		if strings.Contains(err.Error(), "404") {
-			return fmt.Errorf("MCP '%s' not found", mcpName)
-		}
-		return fmt.Errorf("failed to download MCP: %w", err)
+	// Format 2: Try direct path (most common)
+	githubPath = fmt.Sprintf("components/mcps/%s.json", mcpName)
+	if !silent {
+		fmt.Printf("📥 Trying direct path: %s\n", githubPath)
+	}
+	content, err = fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
+	if err == nil {
+		goto Success
+	}
+
+	// All attempts failed
+	return fmt.Errorf("MCP '%s' not found", mcpName)
+
+Success:
+	if !silent {
+		fmt.Printf("✅ Found MCP at: %s\n", githubPath)
 	}
 
 	// MCP files go to .claude/mcp/ directory
