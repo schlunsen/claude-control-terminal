@@ -27,27 +27,66 @@ func (ai *AgentInstaller) InstallAgent(agentName, targetDir string, silent bool)
 		fmt.Printf("🤖 Installing agent: %s\n", agentName)
 	}
 
-	// Support both category/agent-name and direct agent-name formats
+	// Try multiple path formats to find the agent
+	var content string
+	var err error
 	var githubPath string
+
+	// Format 1: Try with category (e.g., ai-specialists/data-scientist)
 	if strings.Contains(agentName, "/") {
-		// Category/agent format: deep-research-team/academic-researcher
 		githubPath = fmt.Sprintf("components/agents/%s.md", agentName)
-	} else {
-		// Direct agent format: api-security-audit
-		githubPath = fmt.Sprintf("components/agents/%s.md", agentName)
-	}
-
-	if !silent {
-		fmt.Println("📥 Downloading from GitHub (main branch)...")
-	}
-
-	// Download the agent file
-	content, err := fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
-	if err != nil {
-		if strings.Contains(err.Error(), "404") {
-			return fmt.Errorf("agent '%s' not found", agentName)
+		if !silent {
+			fmt.Printf("📥 Trying path: %s\n", githubPath)
 		}
-		return fmt.Errorf("failed to download agent: %w", err)
+		content, err = fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
+		if err == nil {
+			goto Success
+		}
+	}
+
+	// Format 2: Try direct path (e.g., api-security-audit)
+	githubPath = fmt.Sprintf("components/agents/%s.md", agentName)
+	if !silent {
+		fmt.Printf("📥 Trying direct path: %s\n", githubPath)
+	}
+	content, err = fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
+	if err == nil {
+		goto Success
+	}
+
+	// Format 3: Search in common categories if simple name provided
+	if !strings.Contains(agentName, "/") {
+		categories := []string{
+			"ai-specialists",
+			"api-graphql",
+			"blockchain-web3",
+			"business-strategy",
+			"code-quality",
+			"data-science",
+			"devops-cloud",
+			"frontend-backend",
+			"mobile-development",
+			"security",
+		}
+
+		for _, category := range categories {
+			githubPath = fmt.Sprintf("components/agents/%s/%s.md", category, agentName)
+			if !silent {
+				fmt.Printf("📥 Searching in %s category...\n", category)
+			}
+			content, err = fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
+			if err == nil {
+				goto Success
+			}
+		}
+	}
+
+	// All attempts failed
+	return fmt.Errorf("agent '%s' not found (tried multiple paths)", agentName)
+
+Success:
+	if !silent {
+		fmt.Printf("✅ Found agent at: %s\n", githubPath)
 	}
 
 	// Create .claude/agents directory if it doesn't exist

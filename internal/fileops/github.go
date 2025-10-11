@@ -23,7 +23,7 @@ func DefaultGitHubConfig() *GitHubConfig {
 		Owner:         "davila7",
 		Repo:          "claude-code-templates",
 		Branch:        "main",
-		TemplatesPath: "cli-tool/templates",
+		TemplatesPath: "cli-tool",
 	}
 }
 
