@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/davila7/go-claude-templates/internal/components"
+	"github.com/davila7/go-claude-templates/internal/server"
 	"github.com/spf13/cobra"
 )
 
@@ -147,9 +150,23 @@ func handleCommand(cmd *cobra.Command, args []string) {
 	// Analytics dashboard
 	if analytics {
 		spinner := ShowSpinner("Launching Analytics Dashboard...")
-		// Simulate some work
-		spinner.Success("Analytics Dashboard ready!")
-		ShowInfo("Implementation coming soon")
+
+		// Import server package
+		server := createAnalyticsServer(directory)
+
+		spinner.Success("Analytics Dashboard starting!")
+		ShowInfo(fmt.Sprintf("Dashboard: http://localhost:3333"))
+		ShowInfo(fmt.Sprintf("API: http://localhost:3333/api/data"))
+		ShowInfo("Press Ctrl+C to stop")
+
+		if err := server.Setup(); err != nil {
+			ShowError(fmt.Sprintf("Failed to setup server: %v", err))
+			return
+		}
+
+		if err := server.Start(); err != nil {
+			ShowError(fmt.Sprintf("Failed to start server: %v", err))
+		}
 		return
 	}
 
@@ -305,4 +322,17 @@ func parseComponentList(input string) []string {
 	}
 
 	return result
+}
+
+// createAnalyticsServer creates an analytics server instance
+func createAnalyticsServer(targetDir string) *server.Server {
+	// Get Claude directory (default to ~/.claude)
+	claudeDir := filepath.Join(os.Getenv("HOME"), ".claude")
+
+	// Check if custom directory specified
+	if targetDir != "." && targetDir != "" {
+		claudeDir = filepath.Join(targetDir, ".claude")
+	}
+
+	return server.NewServer(claudeDir, 3333)
 }
