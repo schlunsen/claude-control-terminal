@@ -244,3 +244,41 @@ func (mi *MCPInstaller) PreviewMultipleMCPs(mcpNames []string) error {
 
 	return nil
 }
+
+// RemoveMCP removes an installed MCP by removing its server entries from the config
+func (mi *MCPInstaller) RemoveMCP(mcpName, targetDir string, silent bool) error {
+	if !silent {
+		fmt.Printf("🗑️  Removing MCP: %s\n", mcpName)
+	}
+
+	// For MCPs, we need to remove server entries from the config file
+	// Since MCPs register servers with specific names, we'll use the MCP name as a hint
+	// to find and remove matching server entries
+
+	configPath := fileops.GetMCPConfigPath(mi.scope, targetDir)
+	removed, err := fileops.RemoveMCPServers(mi.scope, targetDir, mcpName)
+	if err != nil {
+		return fmt.Errorf("failed to remove MCP: %w", err)
+	}
+
+	if len(removed) == 0 {
+		return fmt.Errorf("MCP '%s' is not installed or no matching servers found", mcpName)
+	}
+
+	if !silent {
+		fmt.Printf("✅ Removed %d server(s) from config:\n", len(removed))
+		for _, serverName := range removed {
+			fmt.Printf("   🔌 %s\n", serverName)
+		}
+
+		scopeName := "project"
+		if mi.scope == fileops.MCPScopeUser {
+			scopeName = "user (global)"
+		}
+		fmt.Printf("📁 Scope: %s\n", scopeName)
+		fmt.Printf("📄 Config: %s\n", configPath)
+		fmt.Printf("✅ MCP '%s' removed successfully!\n", mcpName)
+	}
+
+	return nil
+}

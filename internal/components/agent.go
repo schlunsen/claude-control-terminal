@@ -261,3 +261,64 @@ func (ai *AgentInstaller) PreviewMultipleAgents(agentNames []string) error {
 
 	return nil
 }
+
+// RemoveAgent removes an installed agent
+func (ai *AgentInstaller) RemoveAgent(agentName, targetDir string, silent bool) error {
+	if !silent {
+		fmt.Printf("🗑️  Removing agent: %s\n", agentName)
+	}
+
+	// Extract filename if category path provided
+	var fileName string
+	if strings.Contains(agentName, "/") {
+		parts := strings.Split(agentName, "/")
+		fileName = parts[len(parts)-1]
+	} else {
+		fileName = agentName
+	}
+
+	// Check project installation
+	projectFile := filepath.Join(targetDir, ".claude", "agents", fileName+".md")
+	projectExists := false
+	if _, err := os.Stat(projectFile); err == nil {
+		projectExists = true
+	}
+
+	// Check global installation
+	homeDir, _ := os.UserHomeDir()
+	globalFile := filepath.Join(homeDir, ".claude", "agents", fileName+".md")
+	globalExists := false
+	if _, err := os.Stat(globalFile); err == nil {
+		globalExists = true
+	}
+
+	if !projectExists && !globalExists {
+		return fmt.Errorf("agent '%s' is not installed", agentName)
+	}
+
+	// Remove project installation if exists
+	if projectExists {
+		if err := os.Remove(projectFile); err != nil {
+			return fmt.Errorf("failed to remove project agent: %w", err)
+		}
+		if !silent {
+			fmt.Printf("✅ Removed from project: %s\n", projectFile)
+		}
+	}
+
+	// Remove global installation if exists
+	if globalExists {
+		if err := os.Remove(globalFile); err != nil {
+			return fmt.Errorf("failed to remove global agent: %w", err)
+		}
+		if !silent {
+			fmt.Printf("✅ Removed from global: %s\n", globalFile)
+		}
+	}
+
+	if !silent {
+		fmt.Printf("✅ Agent '%s' removed successfully!\n", agentName)
+	}
+
+	return nil
+}

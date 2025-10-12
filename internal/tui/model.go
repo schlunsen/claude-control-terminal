@@ -18,7 +18,9 @@ const (
 	ScreenComponentList
 	ScreenPreview
 	ScreenConfirm
+	ScreenConfirmRemove
 	ScreenInstalling
+	ScreenRemoving
 	ScreenComplete
 )
 
@@ -132,6 +134,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.screen = ScreenComplete
 		return m, nil
 
+	case removeCompleteMsg:
+		m.installing = false
+		m.installSuccess = msg.success
+		m.installFailed = msg.failed
+		m.installError = msg.err
+		m.screen = ScreenComplete
+		return m, nil
+
 	case previewLoadedMsg:
 		m.previewLoading = false
 		m.previewContent = msg.content
@@ -163,6 +173,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handlePreviewScreen(msg)
 	case ScreenConfirm:
 		return m.handleConfirmScreen(msg)
+	case ScreenConfirmRemove:
+		return m.handleConfirmRemoveScreen(msg)
 	case ScreenComplete:
 		return m.handleCompleteScreen(msg)
 	}
@@ -287,6 +299,22 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.previewError = nil
 			return m, loadPreviewCmd(m.previewComponent)
 		}
+	case "d", "x":
+		// Remove selected component (only if installed)
+		if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
+			idx := m.filteredIndices[m.cursor]
+			comp := m.components[idx]
+			// Only allow removal if component is installed
+			if comp.InstalledProject || comp.InstalledGlobal {
+				// Mark for removal and go to confirm screen
+				for i := range m.components {
+					m.components[i].Selected = false
+				}
+				m.components[idx].Selected = true
+				m.screen = ScreenConfirmRemove
+				return m, nil
+			}
+		}
 	case "r":
 		// Refresh components from GitHub
 		m.loading = true
@@ -369,6 +397,22 @@ func (m Model) handleConfirmScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleConfirmRemoveScreen handles input on the removal confirmation screen
+func (m Model) handleConfirmRemoveScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "y", "enter":
+		// Start removal
+		m.screen = ScreenRemoving
+		m.installing = true
+		return m, removeComponentsCmd(m.getSelectedComponents(), m.targetDir)
+	case "n", "esc":
+		// Go back to component list
+		m.screen = ScreenComponentList
+		return m, nil
+	}
+	return m, nil
+}
+
 // handleCompleteScreen handles input on the complete screen
 func (m Model) handleCompleteScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
@@ -417,8 +461,12 @@ func (m Model) View() string {
 		return m.viewPreviewScreen()
 	case ScreenConfirm:
 		return m.viewConfirmScreen()
+	case ScreenConfirmRemove:
+		return m.viewConfirmRemoveScreen()
 	case ScreenInstalling:
 		return m.viewInstallingScreen()
+	case ScreenRemoving:
+		return m.viewRemovingScreen()
 	case ScreenComplete:
 		return m.viewCompleteScreen()
 	}
@@ -584,13 +632,13 @@ func (m Model) viewComponentListScreen() string {
 	// Help - keep compact for small terminals
 	if m.height < 20 {
 		// Compact help for small terminals
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • P: Preview • Enter: Install • Esc: Back\n"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • P: Preview • Enter: Install • D: Remove • Esc: Back\n"))
 		b.WriteString(StatusSuccessStyle.Render("[P]=Project  "))
 		b.WriteString(StatusWarningStyle.Render("[G]=Global"))
 	} else {
 		// Full help for larger terminals
 		b.WriteString(HelpStyle.Render("↑/↓: Navigate • PgUp/PgDn: Page • /: Search • P: Preview • R: Refresh\n"))
-		b.WriteString(HelpStyle.Render("Enter: Install • Esc: Back • "))
+		b.WriteString(HelpStyle.Render("Enter: Install • D: Remove • Esc: Back • "))
 		b.WriteString(StatusSuccessStyle.Render("[P]=Project  "))
 		b.WriteString(StatusWarningStyle.Render("[G]=Global"))
 	}
@@ -716,6 +764,56 @@ func (m Model) viewInstallingScreen() string {
 	return BoxStyle.Render(b.String())
 }
 
+// viewConfirmRemoveScreen renders the removal confirmation screen
+func (m Model) viewConfirmRemoveScreen() string {
+	var b strings.Builder
+
+	selected := m.getSelectedComponents()
+	if len(selected) == 0 {
+		b.WriteString(StatusErrorStyle.Render("No component selected") + "\n")
+		return BoxStyle.Render(b.String())
+	}
+
+	comp := selected[0] // Single component
+	icon := m.getIconForType(comp.Type + "s")
+
+	b.WriteString(TitleStyle.Render("Confirm Removal") + "\n\n")
+
+	b.WriteString(fmt.Sprintf("Are you sure you want to remove:\n\n"))
+	b.WriteString(fmt.Sprintf("  %s %s", icon, StatusWarningStyle.Render(comp.Name)))
+	if comp.Category != "root" && comp.Category != "" {
+		b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
+	}
+	b.WriteString("\n")
+
+	// Show installation locations
+	b.WriteString("\n")
+	b.WriteString(StatusInfoStyle.Render("Installed in:"))
+	if comp.InstalledGlobal {
+		b.WriteString(" [Global]")
+	}
+	if comp.InstalledProject {
+		b.WriteString(" [Project]")
+	}
+	b.WriteString("\n\n")
+
+	b.WriteString(StatusWarningStyle.Render("⚠️  This will remove the component from your system.") + "\n\n")
+
+	b.WriteString(HelpStyle.Render("Y/Enter: Remove • N/Esc: Cancel"))
+
+	return BoxStyle.Render(b.String())
+}
+
+// viewRemovingScreen renders the removing screen
+func (m Model) viewRemovingScreen() string {
+	var b strings.Builder
+
+	b.WriteString(TitleStyle.Render("Removing Components") + "\n\n")
+	b.WriteString(m.spinner.View() + " Removing components, please wait...\n")
+
+	return BoxStyle.Render(b.String())
+}
+
 // viewCompleteScreen renders the completion screen
 func (m Model) viewCompleteScreen() string {
 	var b strings.Builder
@@ -833,6 +931,12 @@ type installCompleteMsg struct {
 	err     error
 }
 
+type removeCompleteMsg struct {
+	success []string
+	failed  []string
+	err     error
+}
+
 type previewLoadedMsg struct {
 	content string
 	err     error
@@ -884,6 +988,40 @@ func installComponentsCmd(components []ComponentItem, targetDir string) tea.Cmd 
 		}
 
 		return installCompleteMsg{
+			success: success,
+			failed:  failed,
+			err:     nil,
+		}
+	}
+}
+
+func removeComponentsCmd(components []ComponentItem, targetDir string) tea.Cmd {
+	return func() tea.Msg {
+		var success []string
+		var failed []string
+
+		for _, comp := range components {
+			var err error
+			switch comp.Type {
+			case "agent":
+				installer := NewAgentInstallerForTUI()
+				err = installer.RemoveAgent(comp.Name, targetDir)
+			case "command":
+				installer := NewCommandInstallerForTUI()
+				err = installer.RemoveCommand(comp.Name, targetDir)
+			case "mcp":
+				installer := NewMCPInstallerForTUI()
+				err = installer.RemoveMCP(comp.Name, targetDir)
+			}
+
+			if err != nil {
+				failed = append(failed, comp.Name)
+			} else {
+				success = append(success, comp.Name)
+			}
+		}
+
+		return removeCompleteMsg{
 			success: success,
 			failed:  failed,
 			err:     nil,

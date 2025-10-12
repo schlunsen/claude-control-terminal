@@ -247,3 +247,109 @@ func (mi *MCPInstallerForTUI) PreviewMCP(mcpName, category string) (string, erro
 
 	return content, nil
 }
+
+// RemoveAgent removes an installed agent
+func (ai *AgentInstallerForTUI) RemoveAgent(agentName, targetDir string) error {
+	// Check project installation
+	projectFile := filepath.Join(targetDir, ".claude", "agents", agentName+".md")
+	projectExists := false
+	if _, err := os.Stat(projectFile); err == nil {
+		projectExists = true
+	}
+
+	// Check global installation
+	homeDir, _ := os.UserHomeDir()
+	globalFile := filepath.Join(homeDir, ".claude", "agents", agentName+".md")
+	globalExists := false
+	if _, err := os.Stat(globalFile); err == nil {
+		globalExists = true
+	}
+
+	if !projectExists && !globalExists {
+		return fmt.Errorf("agent '%s' is not installed", agentName)
+	}
+
+	// Remove project installation if exists
+	if projectExists {
+		if err := os.Remove(projectFile); err != nil {
+			return fmt.Errorf("failed to remove project agent: %w", err)
+		}
+	}
+
+	// Remove global installation if exists
+	if globalExists {
+		if err := os.Remove(globalFile); err != nil {
+			return fmt.Errorf("failed to remove global agent: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RemoveCommand removes an installed command
+func (ci *CommandInstallerForTUI) RemoveCommand(commandName, targetDir string) error {
+	// Extract filename if category path provided
+	var fileName string
+	if strings.Contains(commandName, "/") {
+		parts := strings.Split(commandName, "/")
+		fileName = parts[len(parts)-1]
+	} else {
+		fileName = commandName
+	}
+
+	// Check project installation
+	projectFile := filepath.Join(targetDir, ".claude", "commands", fileName+".md")
+	projectExists := false
+	if _, err := os.Stat(projectFile); err == nil {
+		projectExists = true
+	}
+
+	// Check global installation
+	homeDir, _ := os.UserHomeDir()
+	globalFile := filepath.Join(homeDir, ".claude", "commands", fileName+".md")
+	globalExists := false
+	if _, err := os.Stat(globalFile); err == nil {
+		globalExists = true
+	}
+
+	if !projectExists && !globalExists {
+		return fmt.Errorf("command '%s' is not installed", commandName)
+	}
+
+	// Remove project installation if exists
+	if projectExists {
+		if err := os.Remove(projectFile); err != nil {
+			return fmt.Errorf("failed to remove project command: %w", err)
+		}
+	}
+
+	// Remove global installation if exists
+	if globalExists {
+		if err := os.Remove(globalFile); err != nil {
+			return fmt.Errorf("failed to remove global command: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RemoveMCP removes an installed MCP
+func (mi *MCPInstallerForTUI) RemoveMCP(mcpName, targetDir string) error {
+	// Remove from .mcp.json config
+	removed, err := fileops.RemoveMCPServers(fileops.MCPScopeProject, targetDir, mcpName)
+	if err != nil {
+		return fmt.Errorf("failed to remove MCP from config: %w", err)
+	}
+
+	if len(removed) == 0 {
+		return fmt.Errorf("MCP '%s' is not installed or no matching servers found", mcpName)
+	}
+
+	// Optionally remove the MCP JSON file from .claude/mcp directory
+	mcpFile := filepath.Join(targetDir, ".claude", "mcp", mcpName+".json")
+	if _, err := os.Stat(mcpFile); err == nil {
+		os.Remove(mcpFile) // Ignore error, file removal is optional
+	}
+
+	return nil
+}

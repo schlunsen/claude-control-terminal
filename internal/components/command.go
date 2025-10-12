@@ -247,3 +247,64 @@ func (ci *CommandInstaller) PreviewMultipleCommands(commandNames []string) error
 
 	return nil
 }
+
+// RemoveCommand removes an installed command
+func (ci *CommandInstaller) RemoveCommand(commandName, targetDir string, silent bool) error {
+	if !silent {
+		fmt.Printf("🗑️  Removing command: %s\n", commandName)
+	}
+
+	// Extract filename if category path provided
+	var fileName string
+	if strings.Contains(commandName, "/") {
+		parts := strings.Split(commandName, "/")
+		fileName = parts[len(parts)-1]
+	} else {
+		fileName = commandName
+	}
+
+	// Check project installation
+	projectFile := filepath.Join(targetDir, ".claude", "commands", fileName+".md")
+	projectExists := false
+	if _, err := os.Stat(projectFile); err == nil {
+		projectExists = true
+	}
+
+	// Check global installation
+	homeDir, _ := os.UserHomeDir()
+	globalFile := filepath.Join(homeDir, ".claude", "commands", fileName+".md")
+	globalExists := false
+	if _, err := os.Stat(globalFile); err == nil {
+		globalExists = true
+	}
+
+	if !projectExists && !globalExists {
+		return fmt.Errorf("command '%s' is not installed", commandName)
+	}
+
+	// Remove project installation if exists
+	if projectExists {
+		if err := os.Remove(projectFile); err != nil {
+			return fmt.Errorf("failed to remove project command: %w", err)
+		}
+		if !silent {
+			fmt.Printf("✅ Removed from project: %s\n", projectFile)
+		}
+	}
+
+	// Remove global installation if exists
+	if globalExists {
+		if err := os.Remove(globalFile); err != nil {
+			return fmt.Errorf("failed to remove global command: %w", err)
+		}
+		if !silent {
+			fmt.Printf("✅ Removed from global: %s\n", globalFile)
+		}
+	}
+
+	if !silent {
+		fmt.Printf("✅ Command '%s' removed successfully!\n", commandName)
+	}
+
+	return nil
+}
