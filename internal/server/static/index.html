@@ -209,6 +209,88 @@
             font-size: 0.8125rem;
         }
 
+        .actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-primary {
+            background: #6366f1;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #4f46e5;
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #d97706;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .reset-info {
+            margin-top: 16px;
+            padding: 12px 16px;
+            background: #fef3c7;
+            border: 1px solid #fbbf24;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            color: #92400e;
+            display: none;
+        }
+
+        .reset-info.active {
+            display: block;
+        }
+
+        .reset-info strong {
+            color: #78350f;
+        }
+
         @keyframes pulse {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.4; }
@@ -262,6 +344,17 @@
                     <div class="stat-label">Running Processes</div>
                 </div>
             </div>
+
+            <div id="reset-info" class="reset-info">
+                <strong>Reset Active:</strong> <span id="reset-details"></span>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-primary" onclick="softReset()">🔄 Soft Reset (Recommended)</button>
+                <button class="btn btn-secondary" id="clear-reset-btn" onclick="clearReset()" style="display: none;">↩️ Restore Original Counts</button>
+                <button class="btn btn-warning" onclick="archiveReset()">📦 Archive & Reset</button>
+                <button class="btn btn-danger" onclick="hardReset()">⚠️ Delete All (Permanent)</button>
+            </div>
         </div>
 
         <div class="grid-2">
@@ -312,6 +405,9 @@
                 const processData = await processResponse.json();
                 document.getElementById('processes').textContent = processData.activeProcessCount || 0;
 
+                // Update reset status display
+                updateResetStatus(data);
+
                 // Load Claude processes
                 const claudeResponse = await fetch('/api/processes');
                 const claudeData = await claudeResponse.json();
@@ -326,6 +422,113 @@
                 const status = document.getElementById('status');
                 status.innerHTML = '<div class="status-dot" style="background: #f44336;"></div><span>Error loading data</span>';
                 status.classList.remove('loading');
+            }
+        }
+
+        // Update reset status display
+        function updateResetStatus(data) {
+            const resetInfo = document.getElementById('reset-info');
+            const resetDetails = document.getElementById('reset-details');
+            const clearResetBtn = document.getElementById('clear-reset-btn');
+
+            if (data.resetActive) {
+                const resetDate = new Date(data.resetTimestamp);
+                resetDetails.textContent = `Reset since ${resetDate.toLocaleString()} - ${data.resetReason}`;
+                resetInfo.classList.add('active');
+                clearResetBtn.style.display = 'inline-block';
+            } else {
+                resetInfo.classList.remove('active');
+                clearResetBtn.style.display = 'none';
+            }
+        }
+
+        // Soft reset (recommended - delta-based)
+        async function softReset() {
+            if (!confirm('Apply soft reset? This will reset counts to zero without deleting any data. You can undo this later.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/reset/soft', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.status === 'reset') {
+                    alert(`✅ ${data.message}\n\nPrevious: ${data.previousTokens.toLocaleString()} tokens, ${data.previousConversations} conversations`);
+                    loadData();
+                    loadBackgroundShells();
+                } else {
+                    alert('❌ Reset failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error performing soft reset: ' + error.message);
+            }
+        }
+
+        // Clear soft reset (restore original counts)
+        async function clearReset() {
+            if (!confirm('Restore original counts? This will undo the soft reset.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/reset', { method: 'DELETE' });
+                const data = await response.json();
+
+                alert(`✅ ${data.message}`);
+                loadData();
+                loadBackgroundShells();
+            } catch (error) {
+                alert('❌ Error clearing reset: ' + error.message);
+            }
+        }
+
+        // Archive reset (moves files to archive)
+        async function archiveReset() {
+            if (!confirm('⚠️ Archive all conversations?\n\nThis will move all conversation files to an archive folder. You can recover them later if needed.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/reset/archive', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.status === 'archived') {
+                    alert(`✅ ${data.message}`);
+                    loadData();
+                    loadBackgroundShells();
+                } else {
+                    alert('❌ Archive failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error archiving conversations: ' + error.message);
+            }
+        }
+
+        // Hard reset (permanent delete)
+        async function hardReset() {
+            if (!confirm('⚠️ DANGER: Permanently delete ALL conversations?\n\nThis action CANNOT be undone. All conversation data will be lost forever.\n\nType "DELETE" in the next prompt to confirm.')) {
+                return;
+            }
+
+            const confirmation = prompt('Type DELETE (in capital letters) to confirm permanent deletion:');
+            if (confirmation !== 'DELETE') {
+                alert('Deletion cancelled.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/reset/clear', { method: 'POST' });
+                const data = await response.json();
+
+                if (data.status === 'cleared') {
+                    alert(`✅ ${data.message}`);
+                    loadData();
+                    loadBackgroundShells();
+                } else {
+                    alert('❌ Delete failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error deleting conversations: ' + error.message);
             }
         }
 
