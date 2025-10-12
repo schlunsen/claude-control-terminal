@@ -57,10 +57,8 @@ func (rt *ResetTracker) loadResetPoint() {
 }
 
 // saveResetPoint saves the reset point to disk
+// NOTE: Caller must hold the mutex lock
 func (rt *ResetTracker) saveResetPoint() error {
-	rt.mutex.RLock()
-	defer rt.mutex.RUnlock()
-
 	if rt.resetPoint == nil {
 		return nil
 	}
