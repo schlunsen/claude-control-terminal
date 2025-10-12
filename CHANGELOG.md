@@ -1,4 +1,25 @@
-# Changelog - go-claude-templates
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Comprehensive documentation improvements
+- LICENSE file with MIT License
+- CONTRIBUTING.md with development guidelines
+- GitHub issue templates (bug report, feature request, question)
+- Pull request template
+- Badges to README.md (Go version, license, build status, release)
+- Table of contents to README.md
+
+### Changed
+- Updated all repository URLs from placeholders to actual repository
+- Added language labels to code blocks in markdown files
+- Enhanced CHANGELOG.md to follow Keep a Changelog format
 
 ## [2.0.0] - 2024-10-12
 
@@ -118,7 +139,7 @@ None! All features from Node.js version fully implemented and working.
 ---
 
 **Full Git History**:
-```
+```text
 e9d56c0 docs: update TESTING.md with comprehensive category search info
 3f9c8af test: add comprehensive category search test suite
 b0e1be8 feat: comprehensive category search for all component types
@@ -135,3 +156,10 @@ e2ca59c feat: implement component management system and justfile
 ```
 
 **Status**: ✅ COMPLETE - All features working, all tests passing
+
+---
+
+## Version Comparison Links
+
+[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/schlunsen/claude-templates-go/releases/tag/v2.0.0

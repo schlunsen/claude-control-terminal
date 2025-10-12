@@ -1,6 +1,41 @@
 # Go Claude Templates (CCT)
 
+[![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://github.com/schlunsen/claude-templates-go/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-templates-go/actions)
+[![Release](https://img.shields.io/github/v/release/schlunsen/claude-templates-go)](https://github.com/schlunsen/claude-templates-go/releases)
+
 Go port of the [claude-code-templates](https://github.com/davila7/claude-code-templates) Node.js CLI tool.
+
+## Table of Contents
+
+- [Project Status](#-project-status)
+- [Quick Start](#-quick-start)
+  - [Installation](#installation)
+  - [Usage](#usage)
+- [Component Installation](#-component-installation---smart-category-search)
+  - [Agents](#agents-25-categories)
+  - [Commands](#commands-19-categories)
+  - [MCPs](#mcps-9-categories)
+  - [Multiple Components](#multiple-components)
+- [Analytics Dashboard](#-analytics-dashboard)
+  - [Features](#features)
+  - [API Endpoints](#api-endpoints)
+- [Project Structure](#-project-structure)
+- [Tech Stack](#-tech-stack)
+- [Build & Development](#-build--development)
+  - [Using Makefile](#using-makefile)
+  - [Using justfile](#using-justfile)
+  - [Cross-platform Builds](#cross-platform-builds)
+- [Testing](#-testing)
+- [Documentation](#-documentation)
+- [Migration Complete](#-migration-complete)
+- [Features](#-features)
+- [Requirements](#-requirements)
+- [Example Workflow](#-example-workflow)
+- [Contributing](#-contributing)
+- [License](#-license)
+- [Acknowledgments](#-acknowledgments)
 
 ## 🎉 Project Status
 
@@ -19,7 +54,7 @@ Go port of the [claude-code-templates](https://github.com/davila7/claude-code-te
 
 ```bash
 # Clone and build
-git clone <repository-url>
+git clone https://github.com/schlunsen/claude-templates-go
 cd go-claude-templates
 go build -o cct ./cmd/cct
 
@@ -116,7 +151,7 @@ Real-time monitoring of Claude Code conversations:
 
 ## 📁 Project Structure
 
-```
+```text
 go-claude-templates/
 ├── cmd/
 │   └── cct/                    # Main CLI entry point
@@ -245,7 +280,7 @@ All 17 tasks completed:
 - ✅ Complete documentation
 
 ### Test Results
-```
+```text
 ✅ Quick Tests: 7/7 passing
 ✅ Category Tests: 9/9 passing
 ✅ Component Installation: Fully working with smart search
