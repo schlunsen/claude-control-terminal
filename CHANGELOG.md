@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2025-10-12
+
+### Added
+- Analytics server now enabled by default in TUI mode
+- Toggle shortcut (Ctrl+A) to start/stop analytics dashboard from TUI
+- Quiet mode for analytics server to reduce console output
+- Analytics server management integrated into TUI model lifecycle
+- Dashboard screenshot in documentation
+
+### Changed
+- Analytics server runs automatically when TUI is launched (can be toggled off)
+- Improved analytics server lifecycle management with graceful shutdown
+- Enhanced TUI experience with integrated analytics control
+
+### Fixed
+- Removed debug print statements from WebSocket handler
+- Improved analytics server startup/shutdown reliability
+
 ## [0.2.4] - 2025-10-12
 
 ### Added
@@ -221,7 +239,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.1...v0.2.2
