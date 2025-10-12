@@ -120,7 +120,7 @@ cd /Users/schlunsen/projects/go-claude-templates
 ```
 
 **Expected Output:**
-```
+```text
 ⠋ Launching Analytics Dashboard...
 ✔ Analytics Dashboard starting!
 ℹ Dashboard: http://localhost:3333
