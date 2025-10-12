@@ -22,6 +22,7 @@ A high-performance Go port of [claude-code-templates](https://github.com/davila7
 
 ## Features
 
+- **Interactive TUI**: Modern terminal interface for browsing and installing components with search, multi-select, and real-time loading
 - **Component Management**: Install agents, commands, and MCPs from 600+ templates with automatic category search across 50+ categories
 - **Analytics Dashboard**: Real-time WebSocket-based monitoring of Claude Code conversations with state detection and process correlation
 - **Cross-Platform**: Single binary for Linux, macOS, and Windows (amd64/arm64)
@@ -65,6 +66,29 @@ make build  # or: just build
 ```
 
 ## Quick Start
+
+### Interactive TUI (Recommended)
+
+Launch the interactive Terminal User Interface to browse and install components:
+
+```bash
+# Run without arguments to launch TUI
+cct
+
+# Or with custom directory
+cct -d ~/my-project
+```
+
+**Features**:
+- Browse 600+ agents, 200+ commands, and MCPs
+- Real-time search and filtering
+- Multi-select with checkboxes
+- Modern, hip terminal aesthetic
+- Keyboard-driven interface
+
+[View TUI Guide](docs/TUI_GUIDE.md) | [View Screenshots](docs/TUI_SCREENS.md)
+
+### CLI Flags (For Automation)
 
 ```bash
 # Install components with smart category search
@@ -156,6 +180,9 @@ cct --analytics
 
 ## Documentation
 
+- [TUI User Guide (docs/TUI_GUIDE.md)](docs/TUI_GUIDE.md) - Interactive interface guide and keyboard shortcuts
+- [TUI Screen Flow (docs/TUI_SCREENS.md)](docs/TUI_SCREENS.md) - Visual documentation of all TUI screens
+- [TUI Developer Guide (docs/TUI_DEVELOPER_GUIDE.md)](docs/TUI_DEVELOPER_GUIDE.md) - Technical implementation details
 - [Development Guide (CLAUDE.md)](CLAUDE.md) - Architecture, development workflow, and best practices
 - [Testing Guide (TESTING.md)](TESTING.md) - Comprehensive testing instructions and examples
 - [Changelog (CHANGELOG.md)](CHANGELOG.md) - Version history and migration details
@@ -186,6 +213,7 @@ make clean      # or: just clean
 
 - **Language**: Go 1.23+ (using go1.24.8 toolchain)
 - **CLI**: Cobra (commands), Pterm (terminal UI)
+- **TUI**: Bubble Tea (interactive interface), Lipgloss (styling), Bubbles (components)
 - **Web**: Fiber v2 (HTTP server), Gorilla WebSocket
 - **System**: fsnotify (file watching), gopsutil (process detection)
 

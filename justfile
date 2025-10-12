@@ -114,209 +114,195 @@ dev: fmt build test
 release version:
     #!/usr/bin/env bash
     set -euo pipefail
-
-    echo "🚀 Creating release v{{version}}..."
-
-    # Check if version starts with 'v', if not add it
-    if [[ "{{version}}" != v* ]]; then
-        VERSION="v{{version}}"
-    else
-        VERSION="{{version}}"
-    fi
-
-    # Check if we're in a clean git state
-    if [[ -n $(git status -s) ]]; then
-        echo "❌ Working directory is not clean. Please commit or stash changes first."
-        exit 1
-    fi
-
-    # Create and push tag
-    echo "📝 Creating tag $VERSION..."
-    git tag -a "$VERSION" -m "Release $VERSION"
-    git push origin "$VERSION"
-
-    echo "⏳ Waiting 60 seconds for GitHub Actions to build binaries..."
-    sleep 60
-
-    echo "📦 Downloading binaries and calculating checksums..."
-    mkdir -p /tmp/cct-release
-    cd /tmp/cct-release
-
-    # Download binaries
-    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64" -o cct-darwin-arm64
-    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64" -o cct-darwin-amd64
-    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64" -o cct-linux-arm64
-    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64" -o cct-linux-amd64
-
-    # Calculate checksums
-    SHA_DARWIN_ARM64=$(shasum -a 256 cct-darwin-arm64 | awk '{print $1}')
-    SHA_DARWIN_AMD64=$(shasum -a 256 cct-darwin-amd64 | awk '{print $1}')
-    SHA_LINUX_ARM64=$(shasum -a 256 cct-linux-arm64 | awk '{print $1}')
-    SHA_LINUX_AMD64=$(shasum -a 256 cct-linux-amd64 | awk '{print $1}')
-
-    echo "✅ Checksums calculated"
-
-    # Update Homebrew formula
-    echo "🍺 Updating Homebrew formula..."
-    VERSION_NUM="${VERSION#v}"  # Remove 'v' prefix for version number
-
-    cd /Users/schlunsen/projects/homebrew-cct
-
-    cat > Formula/cct.rb <<EOF
-class Cct < Formula
-  desc "High-performance CLI tool for Claude Code component templates and analytics"
-  homepage "https://github.com/schlunsen/claude-templates-go"
-  version "$VERSION_NUM"
-
-  # This is a precompiled binary, no build tools required
-  uses_from_macos "unzip" => :build
-
-  on_macos do
-    if Hardware::CPU.arm?
-      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64"
-      sha256 "$SHA_DARWIN_ARM64"
-    else
-      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64"
-      sha256 "$SHA_DARWIN_AMD64"
-    end
-  end
-
-  on_linux do
-    if Hardware::CPU.arm?
-      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64"
-      sha256 "$SHA_LINUX_ARM64"
-    else
-      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64"
-      sha256 "$SHA_LINUX_AMD64"
-    end
-  end
-
-  def install
-    # The downloaded file is a precompiled binary
-    downloaded_file = Dir["cct-*"].first
-    bin.install downloaded_file => "cct"
-    chmod 0755, bin/"cct"
-  end
-
-  test do
-    system "#{bin}/cct", "--help"
-  end
-end
-EOF
-
-    # Commit and push Homebrew formula
-    git add Formula/cct.rb
-    git commit -m "chore: update cct formula to $VERSION"
-    git push origin main
-
-    # Cleanup
-    rm -rf /tmp/cct-release
-
-    echo ""
-    echo "✅ Release $VERSION complete!"
-    echo ""
-    echo "📦 GitHub Release: https://github.com/schlunsen/claude-templates-go/releases/tag/$VERSION"
-    echo ""
-    echo "🍺 Homebrew users can upgrade with:"
-    echo "   brew update && brew upgrade cct"
-    echo ""
-    echo "📝 Or force cache refresh:"
-    echo "   brew untap schlunsen/cct && brew tap schlunsen/cct && brew install cct"
-    echo ""
+    \
+    echo "🚀 Creating release v{{version}}..."; \
+    \
+    if [[ "{{version}}" != v* ]]; then \
+        VERSION="v{{version}}"; \
+    else \
+        VERSION="{{version}}"; \
+    fi; \
+    \
+    if [[ -n $(git status -s) ]]; then \
+        echo "❌ Working directory is not clean. Please commit or stash changes first."; \
+        exit 1; \
+    fi; \
+    \
+    echo "📝 Creating tag $VERSION..."; \
+    git tag -a "$VERSION" -m "Release $VERSION"; \
+    git push origin "$VERSION"; \
+    \
+    echo "⏳ Waiting 60 seconds for GitHub Actions to build binaries..."; \
+    sleep 60; \
+    \
+    echo "📦 Downloading binaries and calculating checksums..."; \
+    mkdir -p /tmp/cct-release; \
+    cd /tmp/cct-release; \
+    \
+    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64" -o cct-darwin-arm64; \
+    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64" -o cct-darwin-amd64; \
+    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64" -o cct-linux-arm64; \
+    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64" -o cct-linux-amd64; \
+    \
+    SHA_DARWIN_ARM64=$(shasum -a 256 cct-darwin-arm64 | awk '{print $1}'); \
+    SHA_DARWIN_AMD64=$(shasum -a 256 cct-darwin-amd64 | awk '{print $1}'); \
+    SHA_LINUX_ARM64=$(shasum -a 256 cct-linux-arm64 | awk '{print $1}'); \
+    SHA_LINUX_AMD64=$(shasum -a 256 cct-linux-amd64 | awk '{print $1}'); \
+    \
+    echo "✅ Checksums calculated"; \
+    \
+    echo "🍺 Updating Homebrew formula..."; \
+    VERSION_NUM="${VERSION#v}"; \
+    \
+    cd /Users/schlunsen/projects/homebrew-cct; \
+    \
+    printf '%s\n' \
+        'class Cct '"<"' Formula' \
+        '  desc "High-performance CLI tool for Claude Code component templates and analytics"' \
+        '  homepage "https://github.com/schlunsen/claude-templates-go"' \
+        "  version \"$VERSION_NUM\"" \
+        '' \
+        '  # This is a precompiled binary, no build tools required' \
+        '  uses_from_macos "unzip" '"=>"' :build' \
+        '' \
+        '  on_macos do' \
+        '    if Hardware::CPU.arm?' \
+        "      url \"https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64\"" \
+        "      sha256 \"$SHA_DARWIN_ARM64\"" \
+        '    else' \
+        "      url \"https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64\"" \
+        "      sha256 \"$SHA_DARWIN_AMD64\"" \
+        '    end' \
+        '  end' \
+        '' \
+        '  on_linux do' \
+        '    if Hardware::CPU.arm?' \
+        "      url \"https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64\"" \
+        "      sha256 \"$SHA_LINUX_ARM64\"" \
+        '    else' \
+        "      url \"https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64\"" \
+        "      sha256 \"$SHA_LINUX_AMD64\"" \
+        '    end' \
+        '  end' \
+        '' \
+        '  def install' \
+        '    # The downloaded file is a precompiled binary' \
+        '    downloaded_file = Dir["cct-*"].first' \
+        '    bin.install downloaded_file '"=>"' "cct"' \
+        '    chmod 0755, bin/"cct"' \
+        '  end' \
+        '' \
+        '  test do' \
+        '    system "#{bin}/cct", "--help"' \
+        '  end' \
+        'end' \
+        > Formula/cct.rb; \
+    \
+    git add Formula/cct.rb; \
+    git commit -m "chore: update cct formula to $VERSION"; \
+    git push origin main; \
+    \
+    rm -rf /tmp/cct-release; \
+    \
+    echo ""; \
+    echo "✅ Release $VERSION complete!"; \
+    echo ""; \
+    echo "📦 GitHub Release: https://github.com/schlunsen/claude-templates-go/releases/tag/$VERSION"; \
+    echo ""; \
+    echo "🍺 Homebrew users can upgrade with:"; \
+    echo "   brew update && brew upgrade cct"; \
+    echo ""; \
+    echo "📝 Or force cache refresh:"; \
+    echo "   brew untap schlunsen/cct && brew tap schlunsen/cct && brew install cct"; \
+    echo "";
 
 # Update Homebrew formula only (use after manual release)
 update-homebrew version:
     #!/usr/bin/env bash
     set -euo pipefail
-
-    echo "🍺 Updating Homebrew formula for v{{version}}..."
-
-    # Check if version starts with 'v', if not add it
-    if [[ "{{version}}" != v* ]]; then
-        VERSION="v{{version}}"
-    else
-        VERSION="{{version}}"
-    fi
-
-    echo "📦 Downloading binaries and calculating checksums..."
-    mkdir -p /tmp/cct-release
-    cd /tmp/cct-release
-
-    # Download binaries
-    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64" -o cct-darwin-arm64
-    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64" -o cct-darwin-amd64
-    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64" -o cct-linux-arm64
-    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64" -o cct-linux-amd64
-
-    # Calculate checksums
-    SHA_DARWIN_ARM64=$(shasum -a 256 cct-darwin-arm64 | awk '{print $1}')
-    SHA_DARWIN_AMD64=$(shasum -a 256 cct-darwin-amd64 | awk '{print $1}')
-    SHA_LINUX_ARM64=$(shasum -a 256 cct-linux-arm64 | awk '{print $1}')
-    SHA_LINUX_AMD64=$(shasum -a 256 cct-linux-amd64 | awk '{print $1}')
-
-    echo "✅ Checksums calculated"
-
-    # Update Homebrew formula
-    VERSION_NUM="${VERSION#v}"
-
-    cd /Users/schlunsen/projects/homebrew-cct
-
-    cat > Formula/cct.rb <<EOF
-class Cct < Formula
-  desc "High-performance CLI tool for Claude Code component templates and analytics"
-  homepage "https://github.com/schlunsen/claude-templates-go"
-  version "$VERSION_NUM"
-
-  # This is a precompiled binary, no build tools required
-  uses_from_macos "unzip" => :build
-
-  on_macos do
-    if Hardware::CPU.arm?
-      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64"
-      sha256 "$SHA_DARWIN_ARM64"
-    else
-      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64"
-      sha256 "$SHA_DARWIN_AMD64"
-    end
-  end
-
-  on_linux do
-    if Hardware::CPU.arm?
-      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64"
-      sha256 "$SHA_LINUX_ARM64"
-    else
-      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64"
-      sha256 "$SHA_LINUX_AMD64"
-    end
-  end
-
-  def install
-    # The downloaded file is a precompiled binary
-    downloaded_file = Dir["cct-*"].first
-    bin.install downloaded_file => "cct"
-    chmod 0755, bin/"cct"
-  end
-
-  test do
-    system "#{bin}/cct", "--help"
-  end
-end
-EOF
-
-    # Commit and push
-    git add Formula/cct.rb
-    git commit -m "chore: update cct formula to $VERSION"
-    git push origin main
-
-    # Cleanup
-    rm -rf /tmp/cct-release
-
-    echo ""
-    echo "✅ Homebrew formula updated to $VERSION!"
-    echo ""
-    echo "🍺 Users can upgrade with:"
-    echo "   brew update && brew upgrade cct"
-    echo ""
-    echo "📝 Or force cache refresh:"
-    echo "   brew untap schlunsen/cct && brew tap schlunsen/cct && brew install cct"
-    echo ""
+    \
+    echo "🍺 Updating Homebrew formula for v{{version}}..."; \
+    \
+    if [[ "{{version}}" != v* ]]; then \
+        VERSION="v{{version}}"; \
+    else \
+        VERSION="{{version}}"; \
+    fi; \
+    \
+    echo "📦 Downloading binaries and calculating checksums..."; \
+    mkdir -p /tmp/cct-release; \
+    cd /tmp/cct-release; \
+    \
+    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64" -o cct-darwin-arm64; \
+    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64" -o cct-darwin-amd64; \
+    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64" -o cct-linux-arm64; \
+    curl -sL "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64" -o cct-linux-amd64; \
+    \
+    SHA_DARWIN_ARM64=$(shasum -a 256 cct-darwin-arm64 | awk '{print $1}'); \
+    SHA_DARWIN_AMD64=$(shasum -a 256 cct-darwin-amd64 | awk '{print $1}'); \
+    SHA_LINUX_ARM64=$(shasum -a 256 cct-linux-arm64 | awk '{print $1}'); \
+    SHA_LINUX_AMD64=$(shasum -a 256 cct-linux-amd64 | awk '{print $1}'); \
+    \
+    echo "✅ Checksums calculated"; \
+    \
+    VERSION_NUM="${VERSION#v}"; \
+    \
+    cd /Users/schlunsen/projects/homebrew-cct; \
+    \
+    printf '%s\n' \
+        'class Cct '"<"' Formula' \
+        '  desc "High-performance CLI tool for Claude Code component templates and analytics"' \
+        '  homepage "https://github.com/schlunsen/claude-templates-go"' \
+        "  version \"$VERSION_NUM\"" \
+        '' \
+        '  # This is a precompiled binary, no build tools required' \
+        '  uses_from_macos "unzip" '"=>"' :build' \
+        '' \
+        '  on_macos do' \
+        '    if Hardware::CPU.arm?' \
+        "      url \"https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64\"" \
+        "      sha256 \"$SHA_DARWIN_ARM64\"" \
+        '    else' \
+        "      url \"https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64\"" \
+        "      sha256 \"$SHA_DARWIN_AMD64\"" \
+        '    end' \
+        '  end' \
+        '' \
+        '  on_linux do' \
+        '    if Hardware::CPU.arm?' \
+        "      url \"https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64\"" \
+        "      sha256 \"$SHA_LINUX_ARM64\"" \
+        '    else' \
+        "      url \"https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64\"" \
+        "      sha256 \"$SHA_LINUX_AMD64\"" \
+        '    end' \
+        '  end' \
+        '' \
+        '  def install' \
+        '    # The downloaded file is a precompiled binary' \
+        '    downloaded_file = Dir["cct-*"].first' \
+        '    bin.install downloaded_file '"=>"' "cct"' \
+        '    chmod 0755, bin/"cct"' \
+        '  end' \
+        '' \
+        '  test do' \
+        '    system "#{bin}/cct", "--help"' \
+        '  end' \
+        'end' \
+        > Formula/cct.rb; \
+    \
+    git add Formula/cct.rb; \
+    git commit -m "chore: update cct formula to $VERSION"; \
+    git push origin main; \
+    \
+    rm -rf /tmp/cct-release; \
+    \
+    echo ""; \
+    echo "✅ Homebrew formula updated to $VERSION!"; \
+    echo ""; \
+    echo "🍺 Users can upgrade with:"; \
+    echo "   brew update && brew upgrade cct"; \
+    echo ""; \
+    echo "📝 Or force cache refresh:"; \
+    echo "   brew untap schlunsen/cct && brew tap schlunsen/cct && brew install cct"; \
+    echo "";
