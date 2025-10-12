@@ -2,12 +2,13 @@ package analytics
 
 import (
 	"bytes"
+	"context"
 	"os/exec"
 	"strings"
 	"time"
 )
 
-// Process represents a detected Claude process
+// Process represents a detected Claude process with metadata about its execution.
 type Process struct {
 	PID        string
 	Command    string
@@ -17,19 +18,20 @@ type Process struct {
 	User       string
 }
 
-// ProcessCache holds cached process data
+// ProcessCache holds cached process data with TTL for performance.
 type ProcessCache struct {
 	Data      []Process
 	Timestamp time.Time
 	TTL       time.Duration
 }
 
-// ProcessDetector handles Claude CLI process detection
+// ProcessDetector handles Claude CLI process detection using system commands.
+// It caches results to reduce system overhead.
 type ProcessDetector struct {
 	cache ProcessCache
 }
 
-// NewProcessDetector creates a new ProcessDetector
+// NewProcessDetector creates a new ProcessDetector with default cache TTL.
 func NewProcessDetector() *ProcessDetector {
 	return &ProcessDetector{
 		cache: ProcessCache{
@@ -40,7 +42,8 @@ func NewProcessDetector() *ProcessDetector {
 	}
 }
 
-// DetectRunningClaudeProcesses detects running Claude CLI processes
+// DetectRunningClaudeProcesses detects running Claude CLI processes using ps command.
+// It returns a list of active processes matching the Claude CLI pattern.
 func (pd *ProcessDetector) DetectRunningClaudeProcesses() ([]Process, error) {
 	// Check cache first
 	now := time.Now()
@@ -48,18 +51,42 @@ func (pd *ProcessDetector) DetectRunningClaudeProcesses() ([]Process, error) {
 		return pd.cache.Data, nil
 	}
 
-	// Run ps command to find Claude processes
-	cmd := exec.Command("sh", "-c", "ps aux | grep -i claude | grep -v grep | grep -v analytics | grep -v '/Applications/Claude.app' | grep -v 'npm start' | grep -v chats-mobile")
+	// Create context with timeout to prevent hanging
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Use exec.CommandContext with separate arguments (no shell injection)
+	// Build the command safely without shell
+	cmd := exec.CommandContext(ctx, "ps", "aux")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 
 	err := cmd.Run()
 	if err != nil {
-		// No processes found is not an error
+		// ps command error, but no processes is not an error
+		if ctx.Err() == context.DeadlineExceeded {
+			return []Process{}, nil
+		}
 		return []Process{}, nil
 	}
 
-	lines := strings.Split(out.String(), "\n")
+	// Filter output for Claude processes
+	processes := pd.parseProcessOutput(out.String())
+
+	// Cache the result
+	pd.cache = ProcessCache{
+		Data:      processes,
+		Timestamp: now,
+		TTL:       500 * time.Millisecond,
+	}
+
+	return processes, nil
+}
+
+// parseProcessOutput parses ps aux output and filters for Claude CLI processes.
+// It avoids false positives from Chrome, analytics tools, and mobile apps.
+func (pd *ProcessDetector) parseProcessOutput(output string) []Process {
+	lines := strings.Split(output, "\n")
 	processes := []Process{}
 
 	for _, line := range lines {
@@ -83,6 +110,9 @@ func (pd *ProcessDetector) DetectRunningClaudeProcesses() ([]Process, error) {
 			!strings.Contains(fullCommand, "create-claude-config") &&
 			!strings.Contains(fullCommand, "chats-mobile") &&
 			!strings.Contains(fullCommand, "analytics") &&
+			!strings.Contains(fullCommand, "/Applications/Claude.app") &&
+			!strings.Contains(fullCommand, "npm start") &&
+			!strings.Contains(fullCommand, "grep") &&
 			(strings.TrimSpace(fullCommand) == "claude" ||
 				strings.Contains(fullCommand, "claude --") ||
 				strings.Contains(fullCommand, "claude ") ||
@@ -118,17 +148,10 @@ func (pd *ProcessDetector) DetectRunningClaudeProcesses() ([]Process, error) {
 		processes = append(processes, process)
 	}
 
-	// Cache the result
-	pd.cache = ProcessCache{
-		Data:      processes,
-		Timestamp: now,
-		TTL:       500 * time.Millisecond,
-	}
-
-	return processes, nil
+	return processes
 }
 
-// GetCachedProcesses returns cached process data
+// GetCachedProcesses returns cached process data if available and fresh.
 func (pd *ProcessDetector) GetCachedProcesses() []Process {
 	now := time.Now()
 	if pd.cache.Data != nil && now.Sub(pd.cache.Timestamp) < pd.cache.TTL {
@@ -137,7 +160,7 @@ func (pd *ProcessDetector) GetCachedProcesses() []Process {
 	return []Process{}
 }
 
-// ClearCache clears the process cache
+// ClearCache clears the process cache, forcing a fresh scan on next detection.
 func (pd *ProcessDetector) ClearCache() {
 	pd.cache = ProcessCache{
 		Data:      nil,
@@ -146,7 +169,7 @@ func (pd *ProcessDetector) ClearCache() {
 	}
 }
 
-// HasActiveProcesses checks if there are any active Claude processes
+// HasActiveProcesses checks if there are any active Claude processes.
 func (pd *ProcessDetector) HasActiveProcesses() (bool, error) {
 	processes, err := pd.DetectRunningClaudeProcesses()
 	if err != nil {
@@ -155,7 +178,7 @@ func (pd *ProcessDetector) HasActiveProcesses() (bool, error) {
 	return len(processes) > 0, nil
 }
 
-// ProcessStats holds process statistics
+// ProcessStats holds process statistics for reporting.
 type ProcessStats struct {
 	Total                  int
 	WithKnownWorkingDir    int
@@ -163,7 +186,7 @@ type ProcessStats struct {
 	Processes              []Process
 }
 
-// GetProcessStats returns statistics about detected processes
+// GetProcessStats returns statistics about detected processes.
 func (pd *ProcessDetector) GetProcessStats() (*ProcessStats, error) {
 	processes, err := pd.DetectRunningClaudeProcesses()
 	if err != nil {
