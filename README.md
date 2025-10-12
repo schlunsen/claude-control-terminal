@@ -30,7 +30,18 @@ A high-performance Go port of [claude-code-templates](https://github.com/davila7
 
 ## Installation
 
-### Option 1: Download Binary
+### Option 1: Homebrew (macOS/Linux)
+
+```bash
+# Tap and install
+brew tap schlunsen/cct
+brew install cct
+
+# Or one-line installation
+brew install schlunsen/cct/cct
+```
+
+### Option 2: Download Binary
 
 ```bash
 # Download for your platform from releases
@@ -39,13 +50,13 @@ chmod +x cct
 sudo mv cct /usr/local/bin/
 ```
 
-### Option 2: Install with Go
+### Option 3: Install with Go
 
 ```bash
 go install github.com/schlunsen/claude-templates-go/cmd/cct@latest
 ```
 
-### Option 3: Build from Source
+### Option 4: Build from Source
 
 ```bash
 git clone https://github.com/schlunsen/claude-templates-go

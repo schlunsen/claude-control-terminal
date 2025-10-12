@@ -162,47 +162,47 @@ release version:
 
     cd /Users/schlunsen/projects/homebrew-cct
 
-    cat > Formula/cct.rb << EOF
-    class Cct < Formula
-      desc "High-performance CLI tool for Claude Code component templates and analytics"
-      homepage "https://github.com/schlunsen/claude-templates-go"
-      version "$VERSION_NUM"
+    cat > Formula/cct.rb <<EOF
+class Cct < Formula
+  desc "High-performance CLI tool for Claude Code component templates and analytics"
+  homepage "https://github.com/schlunsen/claude-templates-go"
+  version "$VERSION_NUM"
 
-      # This is a precompiled binary, no build tools required
-      uses_from_macos "unzip" => :build
+  # This is a precompiled binary, no build tools required
+  uses_from_macos "unzip" => :build
 
-      on_macos do
-        if Hardware::CPU.arm?
-          url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64"
-          sha256 "$SHA_DARWIN_ARM64"
-        else
-          url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64"
-          sha256 "$SHA_DARWIN_AMD64"
-        end
-      end
-
-      on_linux do
-        if Hardware::CPU.arm?
-          url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64"
-          sha256 "$SHA_LINUX_ARM64"
-        else
-          url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64"
-          sha256 "$SHA_LINUX_AMD64"
-        end
-      end
-
-      def install
-        # The downloaded file is a precompiled binary
-        downloaded_file = Dir["cct-*"].first
-        bin.install downloaded_file => "cct"
-        chmod 0755, bin/"cct"
-      end
-
-      test do
-        system "#{bin}/cct", "--help"
-      end
+  on_macos do
+    if Hardware::CPU.arm?
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64"
+      sha256 "$SHA_DARWIN_ARM64"
+    else
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64"
+      sha256 "$SHA_DARWIN_AMD64"
     end
-    EOF
+  end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64"
+      sha256 "$SHA_LINUX_ARM64"
+    else
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64"
+      sha256 "$SHA_LINUX_AMD64"
+    end
+  end
+
+  def install
+    # The downloaded file is a precompiled binary
+    downloaded_file = Dir["cct-*"].first
+    bin.install downloaded_file => "cct"
+    chmod 0755, bin/"cct"
+  end
+
+  test do
+    system "#{bin}/cct", "--help"
+  end
+end
+EOF
 
     # Commit and push Homebrew formula
     git add Formula/cct.rb
@@ -216,7 +216,12 @@ release version:
     echo "✅ Release $VERSION complete!"
     echo ""
     echo "📦 GitHub Release: https://github.com/schlunsen/claude-templates-go/releases/tag/$VERSION"
-    echo "🍺 Homebrew: brew upgrade cct"
+    echo ""
+    echo "🍺 Homebrew users can upgrade with:"
+    echo "   brew update && brew upgrade cct"
+    echo ""
+    echo "📝 Or force cache refresh:"
+    echo "   brew untap schlunsen/cct && brew tap schlunsen/cct && brew install cct"
     echo ""
 
 # Update Homebrew formula only (use after manual release)
@@ -256,47 +261,47 @@ update-homebrew version:
 
     cd /Users/schlunsen/projects/homebrew-cct
 
-    cat > Formula/cct.rb << EOF
-    class Cct < Formula
-      desc "High-performance CLI tool for Claude Code component templates and analytics"
-      homepage "https://github.com/schlunsen/claude-templates-go"
-      version "$VERSION_NUM"
+    cat > Formula/cct.rb <<EOF
+class Cct < Formula
+  desc "High-performance CLI tool for Claude Code component templates and analytics"
+  homepage "https://github.com/schlunsen/claude-templates-go"
+  version "$VERSION_NUM"
 
-      # This is a precompiled binary, no build tools required
-      uses_from_macos "unzip" => :build
+  # This is a precompiled binary, no build tools required
+  uses_from_macos "unzip" => :build
 
-      on_macos do
-        if Hardware::CPU.arm?
-          url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64"
-          sha256 "$SHA_DARWIN_ARM64"
-        else
-          url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64"
-          sha256 "$SHA_DARWIN_AMD64"
-        end
-      end
-
-      on_linux do
-        if Hardware::CPU.arm?
-          url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64"
-          sha256 "$SHA_LINUX_ARM64"
-        else
-          url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64"
-          sha256 "$SHA_LINUX_AMD64"
-        end
-      end
-
-      def install
-        # The downloaded file is a precompiled binary
-        downloaded_file = Dir["cct-*"].first
-        bin.install downloaded_file => "cct"
-        chmod 0755, bin/"cct"
-      end
-
-      test do
-        system "#{bin}/cct", "--help"
-      end
+  on_macos do
+    if Hardware::CPU.arm?
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-arm64"
+      sha256 "$SHA_DARWIN_ARM64"
+    else
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-darwin-amd64"
+      sha256 "$SHA_DARWIN_AMD64"
     end
-    EOF
+  end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-arm64"
+      sha256 "$SHA_LINUX_ARM64"
+    else
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/$VERSION/cct-linux-amd64"
+      sha256 "$SHA_LINUX_AMD64"
+    end
+  end
+
+  def install
+    # The downloaded file is a precompiled binary
+    downloaded_file = Dir["cct-*"].first
+    bin.install downloaded_file => "cct"
+    chmod 0755, bin/"cct"
+  end
+
+  test do
+    system "#{bin}/cct", "--help"
+  end
+end
+EOF
 
     # Commit and push
     git add Formula/cct.rb
@@ -308,5 +313,10 @@ update-homebrew version:
 
     echo ""
     echo "✅ Homebrew formula updated to $VERSION!"
-    echo "🍺 Users can upgrade with: brew upgrade cct"
+    echo ""
+    echo "🍺 Users can upgrade with:"
+    echo "   brew update && brew upgrade cct"
+    echo ""
+    echo "📝 Or force cache refresh:"
+    echo "   brew untap schlunsen/cct && brew tap schlunsen/cct && brew install cct"
     echo ""
