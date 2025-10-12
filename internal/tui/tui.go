@@ -9,9 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-var (
-	analyticsServer *server.Server
-)
+// Removed global analyticsServer - now managed in Model
 
 // Launch starts the TUI application with optional analytics server
 func Launch(targetDir string) error {
@@ -23,6 +21,7 @@ func Launch(targetDir string) error {
 
 	// Start analytics server in background (enabled by default)
 	// Use quiet mode to suppress output when running in TUI
+	var analyticsServer *server.Server
 	analyticsServer = server.NewServerWithOptions(claudeDir, 3333, true)
 	if err := analyticsServer.Setup(); err == nil {
 		// Start server in background goroutine
@@ -44,11 +43,11 @@ func Launch(targetDir string) error {
 	}()
 
 	for {
-		// Create the model
-		m := NewModel(targetDir)
+		// Create the model with analytics server reference
+		m := NewModelWithServer(targetDir, claudeDir, analyticsServer)
 
 		// Update analytics enabled state based on server status
-		if analyticsServer == nil {
+		if m.analyticsServer == nil {
 			m.analyticsEnabled = false
 		}
 
@@ -63,24 +62,8 @@ func Launch(targetDir string) error {
 
 		// Check if we should launch Claude
 		if model, ok := finalModel.(Model); ok {
-			// Handle analytics toggle
-			if model.analyticsEnabled && analyticsServer == nil {
-				// Start analytics server with quiet mode
-				analyticsServer = server.NewServerWithOptions(claudeDir, 3333, true)
-				if err := analyticsServer.Setup(); err == nil {
-					go func() {
-						if err := analyticsServer.Start(); err != nil {
-							analyticsServer = nil
-						}
-					}()
-				} else {
-					analyticsServer = nil
-				}
-			} else if !model.analyticsEnabled && analyticsServer != nil {
-				// Stop analytics server
-				analyticsServer.Shutdown()
-				analyticsServer = nil
-			}
+			// Sync analytics server reference from model
+			analyticsServer = model.analyticsServer
 
 			if model.shouldLaunchClaude {
 				// Launch Claude CLI

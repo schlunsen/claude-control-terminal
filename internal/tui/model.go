@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/schlunsen/claude-control-terminal/internal/server"
 )
 
 // Screen represents different views in the TUI
@@ -67,11 +68,18 @@ type Model struct {
 	shouldLaunchClaude bool // Signal to launch Claude after TUI exits
 
 	// Analytics state
-	analyticsEnabled bool // Whether analytics server is running
+	analyticsEnabled bool            // Whether analytics server is running
+	analyticsServer  *server.Server  // Reference to analytics server
+	claudeDir        string          // Claude directory for analytics
 }
 
 // NewModel creates a new TUI model
 func NewModel(targetDir string) Model {
+	return NewModelWithServer(targetDir, "", nil)
+}
+
+// NewModelWithServer creates a new TUI model with analytics server reference
+func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Server) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = SpinnerStyle
@@ -88,6 +96,8 @@ func NewModel(targetDir string) Model {
 		componentTypes = append(componentTypes, "Launch Claude")
 	}
 
+	analyticsEnabled := analyticsServer != nil
+
 	return Model{
 		screen:           ScreenMain,
 		componentTypes:   componentTypes,
@@ -98,7 +108,9 @@ func NewModel(targetDir string) Model {
 		width:            80,
 		height:           24,
 		currentTheme:     GetCurrentThemeIndex(),
-		analyticsEnabled: true, // Analytics enabled by default
+		analyticsEnabled: analyticsEnabled,
+		analyticsServer:  analyticsServer,
+		claudeDir:        claudeDir,
 	}
 }
 
@@ -150,6 +162,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.previewLoading = false
 		m.previewContent = msg.content
 		m.previewError = msg.err
+		return m, nil
+
+	case toggleAnalyticsMsg:
+		// Handle immediate analytics server toggle
+		if msg.enabled && m.analyticsServer == nil {
+			// Start analytics server with quiet mode
+			m.analyticsServer = server.NewServerWithOptions(msg.targetDir, 3333, true)
+			if err := m.analyticsServer.Setup(); err == nil {
+				go func() {
+					if err := m.analyticsServer.Start(); err != nil {
+						// Server failed to start
+						m.analyticsServer = nil
+					}
+				}()
+				m.analyticsEnabled = true
+			} else {
+				m.analyticsServer = nil
+				m.analyticsEnabled = false
+			}
+		} else if !msg.enabled && m.analyticsServer != nil {
+			// Stop analytics server immediately
+			m.analyticsServer.Shutdown()
+			m.analyticsServer = nil
+			m.analyticsEnabled = false
+		}
 		return m, nil
 	}
 
@@ -222,7 +259,7 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "a", "A":
 		// Toggle analytics on/off
 		m.analyticsEnabled = !m.analyticsEnabled
-		return m, toggleAnalyticsCmd(m.analyticsEnabled, m.targetDir)
+		return m, toggleAnalyticsCmd(m.analyticsEnabled, m.claudeDir)
 	}
 	return m, nil
 }
@@ -1071,10 +1108,16 @@ func loadPreviewCmd(component ComponentItem) tea.Cmd {
 	}
 }
 
+type toggleAnalyticsMsg struct {
+	enabled   bool
+	targetDir string
+}
+
 func toggleAnalyticsCmd(enabled bool, targetDir string) tea.Cmd {
 	return func() tea.Msg {
-		// Toggle analytics server
-		// This will be handled by the main TUI launch function
-		return nil
+		return toggleAnalyticsMsg{
+			enabled:   enabled,
+			targetDir: targetDir,
+		}
 	}
 }
