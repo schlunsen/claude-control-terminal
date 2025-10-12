@@ -202,16 +202,10 @@ func (mi *MCPInstallerForTUI) InstallMCP(mcpName, category, targetDir string) er
 	}
 
 Success:
-	// Create .claude/mcp directory
-	mcpDir := filepath.Join(targetDir, ".claude", "mcp")
-	if err := os.MkdirAll(mcpDir, 0755); err != nil {
-		return fmt.Errorf("failed to create MCP directory: %w", err)
-	}
-
-	// Write the MCP file
-	targetFile := filepath.Join(mcpDir, mcpName+".json")
-	if err := os.WriteFile(targetFile, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write MCP file: %w", err)
+	// Use project scope for TUI installations (same as CLI default)
+	_, err = fileops.MergeMCPServersFromJSON(fileops.MCPScopeProject, targetDir, content)
+	if err != nil {
+		return fmt.Errorf("failed to register MCP: %w", err)
 	}
 
 	return nil
