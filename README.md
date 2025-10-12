@@ -301,7 +301,44 @@ cct --analytics
 - `GET /api/processes` - Running Claude Code processes
 - `GET /api/stats` - System statistics and metrics
 - `POST /api/refresh` - Force data refresh
+- `POST /api/reset/soft` - Soft reset with delta tracking (recommended)
+- `POST /api/reset/archive` - Archive all conversations (preserves data)
+- `POST /api/reset/clear` - Permanently delete all conversations (use with caution!)
+- `DELETE /api/reset` - Clear soft reset and restore original counts
+- `GET /api/reset/status` - Get current reset status
 - `GET /ws` - WebSocket connection for real-time updates
+
+### Resetting Analytics Counts
+
+You can reset the analytics counts in three ways:
+
+**Option 1: Soft Reset (Recommended) - Delta-Based** 🔄
+```bash
+# Resets counts to zero without deleting any data (reversible)
+curl -X POST http://localhost:3333/api/reset/soft
+```
+This applies a delta to make counts appear as if you're starting from zero, while preserving all conversation data. Perfect for tracking usage from a specific date. You can undo this anytime:
+```bash
+# Restore original counts
+curl -X DELETE http://localhost:3333/api/reset
+```
+
+**Option 2: Archive** 📦
+```bash
+# Archives all conversations to timestamped folder, preserving data
+curl -X POST http://localhost:3333/api/reset/archive
+```
+This moves all `.jsonl` files to `~/.claude/archive/YYYY-MM-DD_HH-MM-SS/`, allowing you to recover them later.
+
+**Option 3: Clear (Permanent)** ⚠️
+```bash
+# Permanently deletes all conversation files
+curl -X POST http://localhost:3333/api/reset/clear
+```
+This permanently removes all `.jsonl` files (cannot be undone!).
+
+**Using the UI**
+The analytics dashboard includes intuitive reset buttons for all three options. Just click the "🔄 Soft Reset" button (recommended) or choose another option. When a soft reset is active, you'll see a yellow banner with reset details and a "Restore Original Counts" button.
 
 ## Documentation
 
