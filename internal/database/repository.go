@@ -420,3 +420,104 @@ func extractCommandName(command string) string {
 	}
 	return command
 }
+
+// RecordUserMessage saves a user's input message
+func (r *Repository) RecordUserMessage(msg *UserMessage) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := `
+		INSERT INTO user_messages (
+			conversation_id, message, working_directory, git_branch,
+			message_length, submitted_at
+		) VALUES (?, ?, ?, ?, ?, ?)
+	`
+
+	result, err := r.db.db.Exec(
+		query,
+		msg.ConversationID,
+		msg.Message,
+		msg.WorkingDirectory,
+		msg.GitBranch,
+		msg.MessageLength,
+		msg.SubmittedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to record user message: %w", err)
+	}
+
+	id, _ := result.LastInsertId()
+	msg.ID = id
+
+	return nil
+}
+
+// GetUserMessages retrieves user messages with optional filters
+func (r *Repository) GetUserMessages(query *CommandHistoryQuery) ([]*UserMessage, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	sql := `
+		SELECT id, conversation_id, message, working_directory, git_branch,
+		       message_length, submitted_at, created_at
+		FROM user_messages
+		WHERE 1=1
+	`
+
+	args := []interface{}{}
+
+	if query.ConversationID != "" {
+		sql += " AND conversation_id = ?"
+		args = append(args, query.ConversationID)
+	}
+
+	if query.StartDate != nil {
+		sql += " AND submitted_at >= ?"
+		args = append(args, query.StartDate)
+	}
+
+	if query.EndDate != nil {
+		sql += " AND submitted_at <= ?"
+		args = append(args, query.EndDate)
+	}
+
+	sql += " ORDER BY submitted_at DESC"
+
+	if query.Limit > 0 {
+		sql += " LIMIT ?"
+		args = append(args, query.Limit)
+	}
+
+	if query.Offset > 0 {
+		sql += " OFFSET ?"
+		args = append(args, query.Offset)
+	}
+
+	rows, err := r.db.db.Query(sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []*UserMessage
+	for rows.Next() {
+		msg := &UserMessage{}
+		err := rows.Scan(
+			&msg.ID,
+			&msg.ConversationID,
+			&msg.Message,
+			&msg.WorkingDirectory,
+			&msg.GitBranch,
+			&msg.MessageLength,
+			&msg.SubmittedAt,
+			&msg.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user message: %w", err)
+		}
+		messages = append(messages, msg)
+	}
+
+	return messages, nil
+}

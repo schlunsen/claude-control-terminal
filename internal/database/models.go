@@ -72,3 +72,15 @@ type CommandHistoryQuery struct {
 	ToolName       string
 	CommandType    string // 'shell' or 'claude'
 }
+
+// UserMessage represents a user's input message
+type UserMessage struct {
+	ID               int64     `json:"id"`
+	ConversationID   string    `json:"conversation_id,omitempty"`
+	Message          string    `json:"message"`
+	WorkingDirectory string    `json:"working_directory,omitempty"`
+	GitBranch        string    `json:"git_branch,omitempty"`
+	MessageLength    int       `json:"message_length"`
+	SubmittedAt      time.Time `json:"submitted_at"`
+	CreatedAt        time.Time `json:"created_at"`
+}

@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS command_stats (
     UNIQUE(command_type, command_name)
 );
 
+-- Table for user messages (intercepted input)
+CREATE TABLE IF NOT EXISTS user_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT,
+    message TEXT NOT NULL,
+    working_directory TEXT,
+    git_branch TEXT,
+    message_length INTEGER,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_shell_commands_conversation
     ON shell_commands(conversation_id, executed_at DESC);
@@ -82,3 +94,9 @@ CREATE INDEX IF NOT EXISTS idx_conversations_status
 
 CREATE INDEX IF NOT EXISTS idx_command_stats_type_name
     ON command_stats(command_type, command_name);
+
+CREATE INDEX IF NOT EXISTS idx_user_messages_conversation
+    ON user_messages(conversation_id, submitted_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_user_messages_submitted_at
+    ON user_messages(submitted_at DESC);
