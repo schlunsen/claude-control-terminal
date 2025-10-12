@@ -156,3 +156,91 @@ func (mi *MCPInstaller) InstallMultipleMCPs(mcpNames []string, targetDir string,
 
 	return nil
 }
+
+// PreviewMCP previews a specific MCP component without installing
+func (mi *MCPInstaller) PreviewMCP(mcpName string) error {
+	// Try multiple path formats to find the MCP
+	var content string
+	var err error
+	var githubPath string
+
+	// Format 1: Try with category if provided
+	if strings.Contains(mcpName, "/") {
+		githubPath = fmt.Sprintf("components/mcps/%s.json", mcpName)
+		content, err = fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
+		if err == nil {
+			goto Success
+		}
+	}
+
+	// Format 2: Try direct path (most common)
+	githubPath = fmt.Sprintf("components/mcps/%s.json", mcpName)
+	content, err = fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
+	if err == nil {
+		goto Success
+	}
+
+	// Format 3: Search in common categories
+	if !strings.Contains(mcpName, "/") {
+		categories := []string{
+			"browser_automation",
+			"database",
+			"deepgraph",
+			"devtools",
+			"filesystem",
+			"integration",
+			"marketing",
+			"productivity",
+			"web",
+		}
+
+		for _, category := range categories {
+			githubPath = fmt.Sprintf("components/mcps/%s/%s.json", category, mcpName)
+			content, err = fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
+			if err == nil {
+				goto Success
+			}
+		}
+	}
+
+	// All attempts failed
+	return fmt.Errorf("MCP '%s' not found (tried multiple paths)", mcpName)
+
+Success:
+	// Display preview
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("📄 MCP: %s\n", mcpName)
+	fmt.Printf("🔗 Source: %s\n", githubPath)
+
+	scopeName := "project"
+	if mi.scope == fileops.MCPScopeUser {
+		scopeName = "user (global)"
+	}
+	fmt.Printf("📁 Scope: %s\n", scopeName)
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	fmt.Println(content)
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+	return nil
+}
+
+// PreviewMultipleMCPs previews multiple MCPs
+func (mi *MCPInstaller) PreviewMultipleMCPs(mcpNames []string) error {
+	successCount := 0
+	failedCount := 0
+
+	for _, mcpName := range mcpNames {
+		if err := mi.PreviewMCP(mcpName); err != nil {
+			fmt.Printf("❌ Failed to preview MCP '%s': %v\n", mcpName, err)
+			failedCount++
+		} else {
+			successCount++
+		}
+	}
+
+	if successCount == 0 {
+		return fmt.Errorf("all MCP previews failed")
+	}
+
+	return nil
+}
