@@ -280,6 +280,10 @@ cct --analytics
 # Dashboard available at http://localhost:3333
 ```
 
+<p align="center">
+  <img src="docs/images/cct-analytics.png" alt="CCT Analytics Dashboard" width="800">
+</p>
+
 ### Features
 
 - Real-time conversation monitoring with WebSocket updates
