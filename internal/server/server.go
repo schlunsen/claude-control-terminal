@@ -23,23 +23,35 @@ type Server struct {
 	wsHub                *ws.Hub
 	claudeDir            string
 	port                 int
+	quiet                bool // Suppress output when running in TUI
 }
 
 // NewServer creates a new Fiber server instance
 func NewServer(claudeDir string, port int) *Server {
+	return NewServerWithOptions(claudeDir, port, false)
+}
+
+// NewServerWithOptions creates a new Fiber server instance with options
+func NewServerWithOptions(claudeDir string, port int, quiet bool) *Server {
 	app := fiber.New(fiber.Config{
 		AppName: "Claude Code Analytics",
 		ServerHeader: "go-claude-templates",
+		DisableStartupMessage: quiet, // Suppress Fiber startup banner in quiet mode
 	})
 
 	// Middleware
 	app.Use(cors.New())
-	app.Use(logger.New())
+
+	// Only add logger middleware if not in quiet mode
+	if !quiet {
+		app.Use(logger.New())
+	}
 
 	return &Server{
 		app:       app,
 		claudeDir: claudeDir,
 		port:      port,
+		quiet:     quiet,
 	}
 }
 
@@ -206,16 +218,20 @@ func (s *Server) handleRefresh(c *fiber.Ctx) error {
 
 // Start starts the server
 func (s *Server) Start() error {
-	fmt.Printf("🚀 Starting server on http://localhost:%d\n", s.port)
-	fmt.Printf("📊 Analytics dashboard: http://localhost:%d/\n", s.port)
-	fmt.Printf("🔗 API endpoint: http://localhost:%d/api/data\n", s.port)
+	if !s.quiet {
+		fmt.Printf("🚀 Starting server on http://localhost:%d\n", s.port)
+		fmt.Printf("📊 Analytics dashboard: http://localhost:%d/\n", s.port)
+		fmt.Printf("🔗 API endpoint: http://localhost:%d/api/data\n", s.port)
+	}
 
 	return s.app.Listen(fmt.Sprintf(":%d", s.port))
 }
 
 // Shutdown gracefully shuts down the server
 func (s *Server) Shutdown() error {
-	fmt.Println("🛑 Shutting down server...")
+	if !s.quiet {
+		fmt.Println("🛑 Shutting down server...")
+	}
 
 	if s.fileWatcher != nil {
 		s.fileWatcher.Stop()
