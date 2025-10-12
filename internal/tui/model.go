@@ -65,6 +65,9 @@ type Model struct {
 	quitting           bool
 	currentTheme       int  // 0=orange, 1=green, 2=cyan, 3=purple
 	shouldLaunchClaude bool // Signal to launch Claude after TUI exits
+
+	// Analytics state
+	analyticsEnabled bool // Whether analytics server is running
 }
 
 // NewModel creates a new TUI model
@@ -86,15 +89,16 @@ func NewModel(targetDir string) Model {
 	}
 
 	return Model{
-		screen:         ScreenMain,
-		componentTypes: componentTypes,
-		selectedType:   0,
-		targetDir:      targetDir,
-		spinner:        s,
-		searchInput:    ti,
-		width:          80,
-		height:         24,
-		currentTheme:   GetCurrentThemeIndex(),
+		screen:           ScreenMain,
+		componentTypes:   componentTypes,
+		selectedType:     0,
+		targetDir:        targetDir,
+		spinner:          s,
+		searchInput:      ti,
+		width:            80,
+		height:           24,
+		currentTheme:     GetCurrentThemeIndex(),
+		analyticsEnabled: true, // Analytics enabled by default
 	}
 }
 
@@ -215,6 +219,10 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.currentTheme = (m.currentTheme + 1) % 4
 		ApplyThemeByIndex(m.currentTheme)
 		return m, nil
+	case "a", "A":
+		// Toggle analytics on/off
+		m.analyticsEnabled = !m.analyticsEnabled
+		return m, toggleAnalyticsCmd(m.analyticsEnabled, m.targetDir)
 	}
 	return m, nil
 }
@@ -510,12 +518,22 @@ func (m Model) viewMainScreen() string {
 
 	b.WriteString("\n")
 
-	// Show current theme
+	// Show current theme and analytics status
 	themeName := GetThemeName(m.currentTheme)
 	themeInfo := SubtitleStyle.Render(fmt.Sprintf("Theme: %s", themeName))
-	b.WriteString(themeInfo + "\n\n")
+	b.WriteString(themeInfo + "\n")
 
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • Q/Esc: Quit"))
+	// Analytics status
+	analyticsStatus := "OFF"
+	analyticsStyle := StatusErrorStyle
+	if m.analyticsEnabled {
+		analyticsStatus = "ON"
+		analyticsStyle = StatusSuccessStyle
+	}
+	b.WriteString(SubtitleStyle.Render("Analytics: ") + analyticsStyle.Render(analyticsStatus))
+	b.WriteString(SubtitleStyle.Render(" (http://localhost:3333)") + "\n\n")
+
+	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Toggle Analytics • Q/Esc: Quit"))
 
 	return BoxStyle.Render(b.String())
 }
@@ -1050,5 +1068,13 @@ func loadPreviewCmd(component ComponentItem) tea.Cmd {
 			content: content,
 			err:     err,
 		}
+	}
+}
+
+func toggleAnalyticsCmd(enabled bool, targetDir string) tea.Cmd {
+	return func() tea.Msg {
+		// Toggle analytics server
+		// This will be handled by the main TUI launch function
+		return nil
 	}
 }
