@@ -85,9 +85,11 @@ RUN apk add --no-cache \
     git \
     curl
 
-# Copy CCT binary
-COPY cct /usr/local/bin/cct
-RUN chmod +x /usr/local/bin/cct
+# Download latest CCT release from GitHub
+ARG TARGETARCH
+RUN ARCH=$(echo $TARGETARCH | sed 's/amd64/amd64/' | sed 's/arm64/arm64/') && \
+    curl -L "https://github.com/schlunsen/claude-control-terminal/releases/latest/download/cct-linux-${ARCH}" -o /usr/local/bin/cct && \
+    chmod +x /usr/local/bin/cct
 
 WORKDIR /workspace
 
@@ -125,9 +127,11 @@ RUN apk add --no-cache \
 # Install Claude CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Copy CCT binary
-COPY cct /usr/local/bin/cct
-RUN chmod +x /usr/local/bin/cct
+# Download latest CCT release from GitHub
+ARG TARGETARCH
+RUN ARCH=$(echo $TARGETARCH | sed 's/amd64/amd64/' | sed 's/arm64/arm64/') && \
+    curl -L "https://github.com/schlunsen/claude-control-terminal/releases/latest/download/cct-linux-${ARCH}" -o /usr/local/bin/cct && \
+    chmod +x /usr/local/bin/cct
 
 WORKDIR /workspace
 
@@ -174,9 +178,11 @@ RUN apk add --no-cache \
     ca-certificates \
     curl
 
-# Copy CCT binary
-COPY cct /usr/local/bin/cct
-RUN chmod +x /usr/local/bin/cct
+# Download latest CCT release from GitHub
+ARG TARGETARCH
+RUN ARCH=$(echo $TARGETARCH | sed 's/amd64/amd64/' | sed 's/arm64/arm64/') && \
+    curl -L "https://github.com/schlunsen/claude-control-terminal/releases/latest/download/cct-linux-${ARCH}" -o /usr/local/bin/cct && \
+    chmod +x /usr/local/bin/cct
 
 WORKDIR /workspace
 
@@ -225,9 +231,11 @@ RUN apk add --no-cache \
 # Install Claude CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Copy CCT binary
-COPY cct /usr/local/bin/cct
-RUN chmod +x /usr/local/bin/cct
+# Download latest CCT release from GitHub
+ARG TARGETARCH
+RUN ARCH=$(echo $TARGETARCH | sed 's/amd64/amd64/' | sed 's/arm64/arm64/') && \
+    curl -L "https://github.com/schlunsen/claude-control-terminal/releases/latest/download/cct-linux-${ARCH}" -o /usr/local/bin/cct && \
+    chmod +x /usr/local/bin/cct
 
 WORKDIR /workspace
 
