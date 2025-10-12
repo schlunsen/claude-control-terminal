@@ -259,10 +259,14 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.components = nil
 		return m, loadComponentsCmd(m.getComponentType(), true)
 	case "esc":
-		// Go back to main screen
+		// If there's an active filter, clear it first
+		if m.searchInput.Value() != "" {
+			m.searchInput.SetValue("")
+			m.updateFilteredIndices()
+			return m, nil
+		}
+		// Otherwise go back to main screen
 		m.screen = ScreenMain
-		m.searchInput.SetValue("")
-		m.updateFilteredIndices()
 		return m, nil
 	}
 
@@ -380,6 +384,10 @@ func (m Model) viewComponentListScreen() string {
 	// Search bar
 	if m.searchActive {
 		b.WriteString(InputFocusedStyle.Render("Search: "+m.searchInput.View()) + "\n\n")
+	} else if m.searchInput.Value() != "" {
+		// Show active filter even when search is not focused
+		b.WriteString(InputStyle.Render("Filter: "+m.searchInput.Value()) + " " +
+			HelpStyle.Render("(/ to edit, Esc to clear)") + "\n\n")
 	} else {
 		searchHint := InputStyle.Render("Press / to search")
 		b.WriteString(searchHint + "\n\n")
