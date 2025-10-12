@@ -237,39 +237,47 @@
         }
 
         .btn-primary {
-            background: #6366f1;
-            color: white;
+            background: #2d3748;
+            color: #f7fafc;
+            border: 1px solid #4a5568;
         }
 
         .btn-primary:hover {
-            background: #4f46e5;
+            background: #1a202c;
+            border-color: #2d3748;
         }
 
         .btn-warning {
-            background: #f59e0b;
-            color: white;
+            background: #edf2f7;
+            color: #2d3748;
+            border: 1px solid #cbd5e0;
         }
 
         .btn-warning:hover {
-            background: #d97706;
+            background: #e2e8f0;
+            border-color: #a0aec0;
         }
 
         .btn-danger {
-            background: #ef4444;
-            color: white;
+            background: #fff5f5;
+            color: #c53030;
+            border: 1px solid #feb2b2;
         }
 
         .btn-danger:hover {
-            background: #dc2626;
+            background: #fed7d7;
+            border-color: #fc8181;
         }
 
         .btn-secondary {
-            background: #6b7280;
-            color: white;
+            background: #f7fafc;
+            color: #4a5568;
+            border: 1px solid #cbd5e0;
         }
 
         .btn-secondary:hover {
-            background: #4b5563;
+            background: #edf2f7;
+            border-color: #a0aec0;
         }
 
         .reset-info {
@@ -345,15 +353,13 @@
                 </div>
             </div>
 
-            <div id="reset-info" class="reset-info">
-                <strong>Reset Active:</strong> <span id="reset-details"></span>
+            <div class="actions">
+                <button class="btn btn-primary" onclick="softReset()">🔄 Soft Reset</button>
+                <button class="btn btn-secondary" id="clear-reset-btn" onclick="clearReset()" style="display: none;">↩️ Undo Reset</button>
             </div>
 
-            <div class="actions">
-                <button class="btn btn-primary" onclick="softReset()">🔄 Soft Reset (Recommended)</button>
-                <button class="btn btn-secondary" id="clear-reset-btn" onclick="clearReset()" style="display: none;">↩️ Restore Original Counts</button>
-                <button class="btn btn-warning" onclick="archiveReset()">📦 Archive & Reset</button>
-                <button class="btn btn-danger" onclick="hardReset()">⚠️ Delete All (Permanent)</button>
+            <div class="reset-info" id="reset-info">
+                <strong>Soft Reset Active:</strong> <span id="reset-details"></span>
             </div>
         </div>
 
