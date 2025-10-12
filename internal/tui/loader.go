@@ -26,12 +26,12 @@ func NewComponentLoader() *ComponentLoader {
 }
 
 // LoadComponents loads all available components of a specific type from GitHub using the Git Tree API
-func (cl *ComponentLoader) LoadComponents(componentType string) ([]ComponentItem, error) {
-	return cl.LoadComponentsWithCache(componentType, false)
+func (cl *ComponentLoader) LoadComponents(componentType, targetDir string) ([]ComponentItem, error) {
+	return cl.LoadComponentsWithCache(componentType, targetDir, false)
 }
 
 // LoadComponentsWithCache loads components with optional cache bypass
-func (cl *ComponentLoader) LoadComponentsWithCache(componentType string, forceRefresh bool) ([]ComponentItem, error) {
+func (cl *ComponentLoader) LoadComponentsWithCache(componentType, targetDir string, forceRefresh bool) ([]ComponentItem, error) {
 	metadata := GetComponentMetadata()
 	meta, ok := metadata[componentType]
 	if !ok {
@@ -42,6 +42,12 @@ func (cl *ComponentLoader) LoadComponentsWithCache(componentType string, forceRe
 	if !forceRefresh && cl.cache != nil {
 		components, found, err := cl.cache.Get(componentType)
 		if err == nil && found {
+			// Update installation status for cached components
+			for i := range components {
+				installedGlobal, installedProject := CheckInstallationStatus(components[i].Name, componentType, targetDir)
+				components[i].InstalledGlobal = installedGlobal
+				components[i].InstalledProject = installedProject
+			}
 			return components, nil
 		}
 	}
@@ -109,12 +115,17 @@ func (cl *ComponentLoader) LoadComponentsWithCache(componentType string, forceRe
 			continue
 		}
 
+		// Check installation status
+		installedGlobal, installedProject := CheckInstallationStatus(name, componentType, targetDir)
+
 		allComponents = append(allComponents, ComponentItem{
-			Name:        name,
-			Category:    category,
-			Description: fmt.Sprintf("%s from %s", name, category),
-			Type:        componentType,
-			Selected:    false,
+			Name:             name,
+			Category:         category,
+			Description:      fmt.Sprintf("%s from %s", name, category),
+			Type:             componentType,
+			Selected:         false,
+			InstalledGlobal:  installedGlobal,
+			InstalledProject: installedProject,
 		})
 	}
 
