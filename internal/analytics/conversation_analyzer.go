@@ -179,6 +179,89 @@ func (ca *ConversationAnalyzer) estimateTokens(text string) int {
 	return len(text) / 4
 }
 
+// ArchiveConversations moves all conversation files to an archive directory
+func (ca *ConversationAnalyzer) ArchiveConversations() error {
+	// Create archive directory
+	archiveDir := filepath.Join(ca.claudeDir, "archive", time.Now().Format("2006-01-02_15-04-05"))
+	if err := os.MkdirAll(archiveDir, 0755); err != nil {
+		return fmt.Errorf("failed to create archive directory: %w", err)
+	}
+
+	// Move all .jsonl files to archive
+	count := 0
+	err := filepath.WalkDir(ca.claudeDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		// Skip archive directory itself
+		if strings.Contains(path, filepath.Join(ca.claudeDir, "archive")) {
+			return nil
+		}
+
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".jsonl") {
+			// Preserve directory structure in archive
+			relPath, err := filepath.Rel(ca.claudeDir, path)
+			if err != nil {
+				return nil
+			}
+
+			destPath := filepath.Join(archiveDir, relPath)
+			destDir := filepath.Dir(destPath)
+
+			// Create destination directory
+			if err := os.MkdirAll(destDir, 0755); err != nil {
+				return nil
+			}
+
+			// Move file
+			if err := os.Rename(path, destPath); err != nil {
+				return nil
+			}
+
+			count++
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to archive conversations: %w", err)
+	}
+
+	return nil
+}
+
+// ClearConversations removes all conversation files (use with caution!)
+func (ca *ConversationAnalyzer) ClearConversations() error {
+	count := 0
+	err := filepath.WalkDir(ca.claudeDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+
+		// Skip archive directory
+		if strings.Contains(path, filepath.Join(ca.claudeDir, "archive")) {
+			return nil
+		}
+
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".jsonl") {
+			if err := os.Remove(path); err != nil {
+				return nil
+			}
+			count++
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to clear conversations: %w", err)
+	}
+
+	return nil
+}
+
 // FormatBytes formats byte size for display
 func FormatBytes(bytes int64) string {
 	if bytes == 0 {

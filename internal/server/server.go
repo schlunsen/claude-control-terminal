@@ -21,6 +21,7 @@ type Server struct {
 	shellDetector        *analytics.ShellDetector
 	fileWatcher          *analytics.FileWatcher
 	wsHub                *ws.Hub
+	resetTracker         *analytics.ResetTracker
 	claudeDir            string
 	port                 int
 	quiet                bool // Suppress output when running in TUI
@@ -62,6 +63,7 @@ func (s *Server) Setup() error {
 	s.stateCalculator = analytics.NewStateCalculator()
 	s.processDetector = analytics.NewProcessDetector()
 	s.shellDetector = analytics.NewShellDetector()
+	s.resetTracker = analytics.NewResetTracker(s.claudeDir)
 
 	// Initialize WebSocket hub
 	s.wsHub = ws.NewHub()
@@ -92,6 +94,13 @@ func (s *Server) setupRoutes() {
 
 	// Refresh endpoint
 	api.Post("/refresh", s.handleRefresh)
+
+	// Reset endpoints
+	api.Post("/reset/archive", s.handleResetArchive)
+	api.Post("/reset/clear", s.handleResetClear)
+	api.Post("/reset/soft", s.handleResetSoft)
+	api.Delete("/reset", s.handleClearReset)
+	api.Get("/reset/status", s.handleResetStatus)
 
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
@@ -172,18 +181,32 @@ func (s *Server) handleGetStats(c *fiber.Ctx) error {
 		}
 	}
 
+	// Apply soft reset delta if present
+	adjustedTokens, adjustedConversations := s.resetTracker.ApplyDelta(totalTokens, len(conversations))
+
 	avgTokens := 0
-	if len(conversations) > 0 {
-		avgTokens = totalTokens / len(conversations)
+	if adjustedConversations > 0 {
+		avgTokens = adjustedTokens / adjustedConversations
 	}
 
-	return c.JSON(fiber.Map{
-		"totalConversations": len(conversations),
+	response := fiber.Map{
+		"totalConversations":  adjustedConversations,
 		"activeConversations": activeCount,
-		"totalTokens":        totalTokens,
-		"avgTokens":          avgTokens,
-		"timestamp":          time.Now(),
-	})
+		"totalTokens":         adjustedTokens,
+		"avgTokens":           avgTokens,
+		"timestamp":           time.Now(),
+	}
+
+	// Include reset info if present
+	if resetPoint := s.resetTracker.GetResetPoint(); resetPoint != nil {
+		response["resetActive"] = true
+		response["resetTimestamp"] = resetPoint.Timestamp
+		response["resetReason"] = resetPoint.Reason
+	} else {
+		response["resetActive"] = false
+	}
+
+	return c.JSON(response)
 }
 
 // Handler: Get background shells
@@ -213,6 +236,139 @@ func (s *Server) handleRefresh(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status": "refreshed",
 		"time":   time.Now(),
+	})
+}
+
+// Handler: Reset analytics by archiving conversations
+func (s *Server) handleResetArchive(c *fiber.Ctx) error {
+	err := s.conversationAnalyzer.ArchiveConversations()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   err.Error(),
+			"status":  "failed",
+		})
+	}
+
+	// Clear caches after reset
+	s.stateCalculator.ClearCache()
+	s.processDetector.ClearCache()
+	s.shellDetector.ClearCache()
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"archive"}`))
+
+	return c.JSON(fiber.Map{
+		"status":  "archived",
+		"message": "All conversations have been archived",
+		"time":    time.Now(),
+	})
+}
+
+// Handler: Reset analytics by clearing conversations (permanent delete)
+func (s *Server) handleResetClear(c *fiber.Ctx) error {
+	err := s.conversationAnalyzer.ClearConversations()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":   err.Error(),
+			"status":  "failed",
+		})
+	}
+
+	// Clear caches after reset
+	s.stateCalculator.ClearCache()
+	s.processDetector.ClearCache()
+	s.shellDetector.ClearCache()
+
+	// Clear any soft reset
+	s.resetTracker.ClearResetPoint()
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"clear"}`))
+
+	return c.JSON(fiber.Map{
+		"status":  "cleared",
+		"message": "All conversations have been permanently deleted",
+		"time":    time.Now(),
+	})
+}
+
+// Handler: Soft reset (delta-based, doesn't delete data)
+func (s *Server) handleResetSoft(c *fiber.Ctx) error {
+	// Get current totals
+	conversations, err := s.conversationAnalyzer.LoadConversations(s.stateCalculator)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	totalTokens := 0
+	for _, conv := range conversations {
+		totalTokens += conv.Tokens
+	}
+
+	// Set reset point with current totals
+	reason := "Manual soft reset"
+	if err := s.resetTracker.SetResetPoint(totalTokens, len(conversations), reason); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":  err.Error(),
+			"status": "failed",
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"soft"}`))
+
+	return c.JSON(fiber.Map{
+		"status":         "reset",
+		"message":        "Soft reset applied - counts will now start from zero",
+		"previousTokens": totalTokens,
+		"previousConversations": len(conversations),
+		"time":           time.Now(),
+	})
+}
+
+// Handler: Clear soft reset (restore original counts)
+func (s *Server) handleClearReset(c *fiber.Ctx) error {
+	if !s.resetTracker.HasResetPoint() {
+		return c.JSON(fiber.Map{
+			"status":  "no_reset",
+			"message": "No active reset to clear",
+		})
+	}
+
+	if err := s.resetTracker.ClearResetPoint(); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"cleared"}`))
+
+	return c.JSON(fiber.Map{
+		"status":  "cleared",
+		"message": "Reset point cleared - showing original counts",
+		"time":    time.Now(),
+	})
+}
+
+// Handler: Get reset status
+func (s *Server) handleResetStatus(c *fiber.Ctx) error {
+	resetPoint := s.resetTracker.GetResetPoint()
+
+	if resetPoint == nil {
+		return c.JSON(fiber.Map{
+			"active": false,
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"active":              true,
+		"timestamp":           resetPoint.Timestamp,
+		"reason":              resetPoint.Reason,
+		"tokenDelta":          resetPoint.TokenDelta,
+		"conversationDelta":   resetPoint.ConversationDelta,
 	})
 }
 
