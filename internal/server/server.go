@@ -18,6 +18,7 @@ import (
 type Server struct {
 	app                  *fiber.App
 	conversationAnalyzer *analytics.ConversationAnalyzer
+	conversationParser   *analytics.ConversationParser
 	stateCalculator      *analytics.StateCalculator
 	processDetector      *analytics.ProcessDetector
 	shellDetector        *analytics.ShellDetector
@@ -29,6 +30,7 @@ type Server struct {
 	claudeDir            string
 	port                 int
 	quiet                bool // Suppress output when running in TUI
+	lastParsedTime       time.Time
 }
 
 // NewServer creates a new Fiber server instance
@@ -73,6 +75,7 @@ func (s *Server) Setup() error {
 
 	// Initialize analytics components
 	s.conversationAnalyzer = analytics.NewConversationAnalyzer(s.claudeDir)
+	s.conversationParser = analytics.NewConversationParser(s.repo)
 	s.stateCalculator = analytics.NewStateCalculator()
 	s.processDetector = analytics.NewProcessDetector()
 	s.shellDetector = analytics.NewShellDetector()
@@ -81,6 +84,15 @@ func (s *Server) Setup() error {
 	// Initialize WebSocket hub
 	s.wsHub = ws.NewHub()
 	go s.wsHub.Run()
+
+	// Parse existing conversations on startup
+	if !s.quiet {
+		fmt.Println("📝 Parsing conversation history...")
+	}
+	go s.parseConversations()
+
+	// Start periodic conversation parsing
+	go s.periodicConversationParsing()
 
 	// Setup API routes
 	s.setupRoutes()
@@ -496,4 +508,34 @@ func (s *Server) handleGetDBStats(c *fiber.Ctx) error {
 		"db_path":   s.db.Path(),
 		"timestamp": time.Now(),
 	})
+}
+
+// parseConversations parses all conversations and records tool usage
+func (s *Server) parseConversations() {
+	count, err := s.conversationParser.ParseAllConversations(s.claudeDir)
+	if err != nil {
+		if !s.quiet {
+			fmt.Printf("⚠️  Error parsing conversations: %v\n", err)
+		}
+		return
+	}
+
+	if !s.quiet {
+		fmt.Printf("✅ Parsed %d conversation files\n", count)
+	}
+
+	s.lastParsedTime = time.Now()
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"history_updated"}`))
+}
+
+// periodicConversationParsing periodically parses new conversations
+func (s *Server) periodicConversationParsing() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.parseConversations()
+	}
 }
