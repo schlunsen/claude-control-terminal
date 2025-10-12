@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.8] - 2025-10-12
+
+### Fixed
+- TUI MCP installer now properly registers MCP servers in .mcp.json configuration file
+- MCPs installed via TUI now work correctly in Claude Code
+
+### Changed
+- Added .mcp.json to .gitignore to prevent committing local MCP configurations
+
 ## [0.0.7] - 2025-10-12
 
 ### Added
@@ -119,7 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.4...v0.0.5
