@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/davila7/go-claude-templates/internal/fileops"
+	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 )
 
 // AgentInstallerForTUI handles agent installation in TUI mode

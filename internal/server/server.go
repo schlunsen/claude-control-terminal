@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/davila7/go-claude-templates/internal/analytics"
-	ws "github.com/davila7/go-claude-templates/internal/websocket"
+	"github.com/schlunsen/claude-control-terminal/internal/analytics"
+	ws "github.com/schlunsen/claude-control-terminal/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"

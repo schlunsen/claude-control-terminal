@@ -1,4 +1,4 @@
-module github.com/davila7/go-claude-templates
+module github.com/schlunsen/claude-control-terminal
 
 go 1.23.0
 

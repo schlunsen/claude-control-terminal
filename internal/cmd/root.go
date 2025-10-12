@@ -6,15 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/davila7/go-claude-templates/internal/components"
-	"github.com/davila7/go-claude-templates/internal/server"
-	"github.com/davila7/go-claude-templates/internal/tui"
+	"github.com/schlunsen/claude-control-terminal/internal/components"
+	"github.com/schlunsen/claude-control-terminal/internal/docker"
+	"github.com/schlunsen/claude-control-terminal/internal/server"
+	"github.com/schlunsen/claude-control-terminal/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 const (
-	Version = "0.1.0"
-	Name    = "go-claude-templates"
+	Version = "0.2.0"
+	Name    = "claude-control-terminal"
 )
 
 var (
@@ -52,6 +53,19 @@ var (
 	removeAgent string
 	updateAgent string
 
+	// Docker flags
+	dockerCommand string
+	dockerInit    bool
+	dockerBuild   bool
+	dockerRun     bool
+	dockerStop    bool
+	dockerLogs    bool
+	dockerCompose bool
+	dockerType    string
+	dockerMCPs    string
+	dockerPorts   string
+	dockerVolumes string
+
 	// Other flags
 	template   string
 	language   string
@@ -66,10 +80,13 @@ var (
 // rootCmd represents the base command
 var rootCmd = &cobra.Command{
 	Use:   "cct",
-	Short: "Claude Code Templates - Go Edition",
-	Long: `Component templates and tracking system for Claude Code.
+	Short: "Claude Control Terminal - Control center for Claude Code",
+	Long: `Claude Control Terminal (CCT) - A powerful wrapper and control center for Claude Code.
 
-🚀 Setup Claude Code for any project language
+🎮 Manage components, launch Claude, run analytics, and deploy with Docker
+🚀 Component installer: 600+ agents, 200+ commands, MCPs
+📊 Real-time analytics dashboard with WebSocket monitoring
+🐳 Docker support for containerized Claude environments
 🌐 Templates: https://aitmpl.com
 📖 Documentation: https://docs.aitmpl.com`,
 	Version: Version,
@@ -79,7 +96,8 @@ var rootCmd = &cobra.Command{
 			!healthCheck && !commandStats && !hookStats && !mcpStats &&
 			!listAgents && createAgent == "" && removeAgent == "" && updateAgent == "" &&
 			agent == "" && command == "" && mcp == "" && setting == "" && hook == "" &&
-			workflow == "" && !studio && sandbox == ""
+			workflow == "" && !studio && sandbox == "" &&
+			!dockerInit && !dockerBuild && !dockerRun && !dockerStop && !dockerLogs && !dockerCompose
 
 		// If no flags provided, launch TUI
 		if isInteractive {
@@ -142,6 +160,17 @@ func init() {
 	rootCmd.Flags().StringVar(&removeAgent, "remove-agent", "", "remove a global agent")
 	rootCmd.Flags().StringVar(&updateAgent, "update-agent", "", "update a global agent")
 
+	// Docker flags
+	rootCmd.Flags().BoolVar(&dockerInit, "docker-init", false, "initialize Docker files (Dockerfile, .dockerignore)")
+	rootCmd.Flags().BoolVar(&dockerBuild, "docker-build", false, "build Docker image")
+	rootCmd.Flags().BoolVar(&dockerRun, "docker-run", false, "run Docker container")
+	rootCmd.Flags().BoolVar(&dockerStop, "docker-stop", false, "stop Docker container")
+	rootCmd.Flags().BoolVar(&dockerLogs, "docker-logs", false, "view Docker container logs")
+	rootCmd.Flags().BoolVar(&dockerCompose, "docker-compose", false, "generate docker-compose.yml")
+	rootCmd.Flags().StringVar(&dockerType, "docker-type", "claude", "Docker type: base, claude, analytics, full")
+	rootCmd.Flags().StringVar(&dockerMCPs, "docker-mcps", "", "MCPs to include (comma-separated)")
+	rootCmd.Flags().StringVar(&dockerCommand, "docker-command", "", "command to run in container")
+
 	// Other flags
 	rootCmd.Flags().StringVar(&prompt, "prompt", "", "execute prompt after installation")
 	rootCmd.Flags().BoolVar(&studio, "studio", false, "launch Claude Code Studio")
@@ -151,6 +180,12 @@ func init() {
 }
 
 func handleCommand(cmd *cobra.Command, args []string) {
+	// Docker commands
+	if dockerInit || dockerBuild || dockerRun || dockerStop || dockerLogs || dockerCompose {
+		handleDockerCommands(directory)
+		return
+	}
+
 	// Analytics dashboard
 	if analytics {
 		spinner := ShowSpinner("Launching Analytics Dashboard...")
@@ -398,4 +433,167 @@ func createAnalyticsServer(targetDir string) *server.Server {
 	}
 
 	return server.NewServer(claudeDir, 3333)
+}
+
+// handleDockerCommands handles all Docker-related operations
+func handleDockerCommands(targetDir string) {
+	dm := docker.NewDockerManager(targetDir)
+
+	// Check if Docker is available
+	if !dm.IsDockerAvailable() {
+		ShowError("Docker is not installed or not running")
+		ShowInfo("Please install Docker: https://docs.docker.com/get-docker/")
+		return
+	}
+
+	// Parse MCPs list if provided
+	mcpsList := parseComponentList(dockerMCPs)
+
+	// Docker init - generate Dockerfile and .dockerignore
+	if dockerInit {
+		fmt.Println("🐳 Initializing Docker files...")
+
+		generator := docker.NewDockerfileGenerator(targetDir)
+
+		// Parse docker type
+		var dockerfileType docker.DockerfileType
+		switch dockerType {
+		case "base":
+			dockerfileType = docker.DockerfileBase
+		case "claude":
+			dockerfileType = docker.DockerfileClaude
+		case "analytics":
+			dockerfileType = docker.DockerfileAnalytics
+		case "full":
+			dockerfileType = docker.DockerfileFull
+		default:
+			dockerfileType = docker.DockerfileClaude
+		}
+
+		// Generate Dockerfile
+		dockerfilePath := filepath.Join(targetDir, "Dockerfile")
+		if err := generator.GenerateDockerfile(dockerfileType, dockerfilePath, mcpsList); err != nil {
+			ShowError(fmt.Sprintf("Failed to generate Dockerfile: %v", err))
+			return
+		}
+
+		// Generate .dockerignore
+		dockerignorePath := filepath.Join(targetDir, ".dockerignore")
+		if err := generator.GenerateDockerIgnore(dockerignorePath); err != nil {
+			ShowError(fmt.Sprintf("Failed to generate .dockerignore: %v", err))
+			return
+		}
+
+		ShowSuccess("Docker files generated successfully!")
+		ShowInfo(fmt.Sprintf("Dockerfile: %s", dockerfilePath))
+		ShowInfo(fmt.Sprintf(".dockerignore: %s", dockerignorePath))
+		return
+	}
+
+	// Docker compose - generate docker-compose.yml
+	if dockerCompose {
+		fmt.Println("🐳 Generating docker-compose.yml...")
+
+		generator := docker.NewComposeGenerator(targetDir)
+
+		// Parse compose template
+		var composeTemplate docker.ComposeTemplate
+		switch dockerType {
+		case "simple":
+			composeTemplate = docker.ComposeSimple
+		case "analytics":
+			composeTemplate = docker.ComposeAnalytics
+		case "database":
+			composeTemplate = docker.ComposeDatabase
+		case "full":
+			composeTemplate = docker.ComposeFull
+		default:
+			composeTemplate = docker.ComposeSimple
+		}
+
+		// Generate docker-compose.yml
+		composePath := filepath.Join(targetDir, "docker-compose.yml")
+		if err := generator.GenerateCompose(composeTemplate, composePath, mcpsList); err != nil {
+			ShowError(fmt.Sprintf("Failed to generate docker-compose.yml: %v", err))
+			return
+		}
+
+		// Generate .env.example
+		envPath := filepath.Join(targetDir, ".env.example")
+		if err := generator.GenerateEnvFile(envPath); err != nil {
+			ShowError(fmt.Sprintf("Failed to generate .env.example: %v", err))
+			return
+		}
+
+		ShowSuccess("Docker Compose files generated successfully!")
+		ShowInfo(fmt.Sprintf("docker-compose.yml: %s", composePath))
+		ShowInfo(fmt.Sprintf(".env.example: %s", envPath))
+		ShowInfo("Copy .env.example to .env and configure your environment variables")
+		return
+	}
+
+	// Docker build
+	if dockerBuild {
+		dockerfilePath := filepath.Join(targetDir, "Dockerfile")
+		if _, err := os.Stat(dockerfilePath); os.IsNotExist(err) {
+			ShowError("Dockerfile not found. Run with --docker-init first")
+			return
+		}
+
+		if err := dm.BuildImage(dockerfilePath); err != nil {
+			ShowError(fmt.Sprintf("Failed to build Docker image: %v", err))
+			return
+		}
+		return
+	}
+
+	// Docker run
+	if dockerRun {
+		opts := docker.NewRunOptions()
+
+		// Default port mapping for analytics
+		opts.Ports[3333] = 3333
+
+		// Mount current directory
+		absPath, _ := filepath.Abs(targetDir)
+		opts.Volumes[absPath] = "/workspace"
+
+		// Mount .claude directory
+		claudeDir := filepath.Join(os.Getenv("HOME"), ".claude")
+		opts.Volumes[claudeDir] = "/root/.claude"
+
+		// Set command if provided
+		if dockerCommand != "" {
+			opts.Command = dockerCommand
+		}
+
+		if err := dm.RunContainer(opts); err != nil {
+			ShowError(fmt.Sprintf("Failed to run Docker container: %v", err))
+			return
+		}
+
+		ShowInfo("To view logs: cct --docker-logs")
+		ShowInfo("To stop container: cct --docker-stop")
+		return
+	}
+
+	// Docker stop
+	if dockerStop {
+		if err := dm.StopContainer(); err != nil {
+			ShowError(fmt.Sprintf("Failed to stop Docker container: %v", err))
+			return
+		}
+		ShowSuccess("Docker container stopped successfully!")
+		return
+	}
+
+	// Docker logs
+	if dockerLogs {
+		fmt.Println("📋 Docker container logs:")
+		if err := dm.GetContainerLogs(false); err != nil {
+			ShowError(fmt.Sprintf("Failed to get logs: %v", err))
+			return
+		}
+		return
+	}
 }
