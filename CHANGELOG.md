@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-10-12
+
+### Added
+- Component removal functionality - ability to uninstall agents, commands, and MCPs
+- Interactive component removal in TUI with confirmation prompts
+
+### Changed
+- TUI rebranded to "Claude Control Terminal" with updated branding throughout interface
+- Improved component management workflow with removal capabilities
+
 ## [0.2.0] - 2025-10-12
 
 ### Changed - BREAKING
@@ -191,7 +201,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.9...v0.1.0
 [0.0.9]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.8...v0.0.9
