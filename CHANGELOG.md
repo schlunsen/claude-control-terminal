@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] - 2025-10-12
+
+### Fixed
+- Analytics server now loads conversation data synchronously on startup to ensure data is available before server starts
+- Improved initial page load experience with pre-loaded conversation data
+
 ## [0.2.6] - 2025-10-12
 
 ### Added
@@ -255,7 +261,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.3...v0.2.4

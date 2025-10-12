@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	Version = "0.2.6"
+	Version = "0.2.7"
 	Name    = "claude-control-terminal"
 )
 
