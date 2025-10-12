@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-10-12
+
+### Changed - BREAKING
+- **Rebrand to Claude Control Terminal (CCT)**: Project renamed from `go-claude-templates` to better reflect its role as a comprehensive control center for Claude Code
+- **Module path changed**: `github.com/davila7/go-claude-templates` → `github.com/schlunsen/claude-control-terminal`
+- **Repository moved**: `github.com/schlunsen/claude-templates-go` → `github.com/schlunsen/claude-control-terminal`
+- All import paths updated across 25 Go files
+- CLI descriptions updated to position CCT as "control center and wrapper" for Claude Code
+
+### Added - Docker Support
+- **Complete Docker integration** for containerizing Claude Code environments
+- New `internal/docker/` package with 3 core modules (~700 lines):
+  - `docker.go`: Docker operations (build, run, stop, logs, exec)
+  - `dockerfile_generator.go`: Generate 4 types of Dockerfiles
+  - `compose_generator.go`: Generate docker-compose.yml templates
+- **9 new CLI commands**:
+  - `--docker-init`: Generate Dockerfile + .dockerignore
+  - `--docker-build`: Build Docker image
+  - `--docker-run`: Run containerized Claude environment
+  - `--docker-stop`: Stop Docker container
+  - `--docker-logs`: View container logs
+  - `--docker-compose`: Generate docker-compose.yml
+  - `--docker-type`: Select type (base/claude/analytics/full)
+  - `--docker-mcps`: Include MCPs in container (comma-separated)
+  - `--docker-command`: Custom command to run in container
+- **4 Dockerfile templates**:
+  - `base`: Minimal CCT-only image
+  - `claude`: Full environment (Node.js + Claude CLI + CCT + MCPs)
+  - `analytics`: Optimized for analytics dashboard
+  - `full`: Complete dev environment with all tools
+- **4 docker-compose templates**:
+  - `simple`: Claude + CCT
+  - `analytics`: Claude + Analytics dashboard
+  - `database`: Claude + PostgreSQL
+  - `full`: All services (Claude + Analytics + PostgreSQL + Redis)
+- MCP integration in Docker containers
+- Automatic .dockerignore and .env.example generation
+
+### Improved
+- Enhanced TUI with installation status indicators ([G]=Global, [P]=Project)
+- Simplified component selection to single-select on Enter
+- Improved navigation flow (Enter/Esc returns to list from completion)
+- Enhanced "Launch Claude" menu item visibility with special styling
+- Better UX showing installation status before installing
+
+### Documentation
+- Complete README overhaul with Docker section and migration guide
+- Updated CLAUDE.md with new project overview and Docker architecture
+- All documentation files updated with new repository URLs
+- GitHub workflows updated with new repository references
+
 ## [0.1.0] - 2025-10-12
 
 ### Changed
@@ -140,14 +191,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.9...v0.1.0
-[0.0.9]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.8...v0.0.9
-[0.0.8]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.7...v0.0.8
-[0.0.7]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.6...v0.0.7
-[0.0.6]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.5...v0.0.6
-[0.0.5]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.4...v0.0.5
-[0.0.4]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.3...v0.0.4
-[0.0.3]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.2...v0.0.3
-[0.0.2]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.1...v0.0.2
-[0.0.1]: https://github.com/schlunsen/claude-templates-go/releases/tag/v0.0.1
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.9...v0.1.0
+[0.0.9]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.8...v0.0.9
+[0.0.8]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.7...v0.0.8
+[0.0.7]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.6...v0.0.7
+[0.0.6]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.5...v0.0.6
+[0.0.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.4...v0.0.5
+[0.0.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.3...v0.0.4
+[0.0.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.2...v0.0.3
+[0.0.2]: https://github.com/schlunsen/claude-control-terminal/compare/v0.0.1...v0.0.2
+[0.0.1]: https://github.com/schlunsen/claude-control-terminal/releases/tag/v0.0.1

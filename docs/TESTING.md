@@ -1,13 +1,13 @@
-# Testing Guide for go-claude-templates
+# Testing Guide for claude-control-terminal
 
 ## Quick Test Overview
 
-This guide shows you how to test all features of the go-claude-templates CLI.
+This guide shows you how to test all features of the claude-control-terminal CLI.
 
 ## Prerequisites
 
 ```bash
-cd /Users/schlunsen/projects/go-claude-templates
+cd /Users/schlunsen/projects/claude-control-terminal
 ./cct --version  # Should show: cct version 2.0.0-go
 ```
 
@@ -49,7 +49,7 @@ The CLI downloads from: `https://raw.githubusercontent.com/davila7/claude-code-t
 
 Run the comprehensive test suite:
 ```bash
-cd /Users/schlunsen/projects/go-claude-templates
+cd /Users/schlunsen/projects/claude-control-terminal
 ./TEST_CATEGORIES.sh
 # Expected: All 9 tests pass ✅
 ```
@@ -67,7 +67,7 @@ mkdir -p ~/test-cct
 cd ~/test-cct
 
 # Try installing (will create directories even if component not found)
-/Users/schlunsen/projects/go-claude-templates/cct --agent test-agent --directory .
+/Users/schlunsen/projects/claude-control-terminal/cct --agent test-agent --directory .
 
 # Check if directories were created
 ls -la .claude/
@@ -78,7 +78,7 @@ ls -la .claude/
 
 ```bash
 cd ~/test-cct
-/Users/schlunsen/projects/go-claude-templates/cct \
+/Users/schlunsen/projects/claude-control-terminal/cct \
   --agent "api-documenter,prompt-engineer,database-architect" \
   --command "security-audit,setup-linting" \
   --mcp "postgresql-integration,supabase" \
@@ -115,7 +115,7 @@ This is the **most important test** as it demonstrates the full stack!
 ### Start the Analytics Server
 
 ```bash
-cd /Users/schlunsen/projects/go-claude-templates
+cd /Users/schlunsen/projects/claude-control-terminal
 ./cct --analytics
 ```
 
@@ -206,7 +206,7 @@ websocat ws://localhost:3333/ws
 ### Test Make Commands
 
 ```bash
-cd /Users/schlunsen/projects/go-claude-templates
+cd /Users/schlunsen/projects/claude-control-terminal
 
 # Test build
 make build
@@ -400,7 +400,7 @@ Use this checklist to verify all features:
 
 ```bash
 # Full test flow
-cd /Users/schlunsen/projects/go-claude-templates
+cd /Users/schlunsen/projects/claude-control-terminal
 
 # 1. Verify build
 make clean && make build
@@ -443,7 +443,7 @@ Run this to compare with Node.js version:
 
 ```bash
 # Go version
-cd /Users/schlunsen/projects/go-claude-templates
+cd /Users/schlunsen/projects/claude-control-terminal
 time ./cct --version
 
 # Node.js version (if you have it)
@@ -451,7 +451,7 @@ cd /Users/schlunsen/projects/claude-code-templates
 time npx create-claude-config --version
 
 # Compare binary sizes
-ls -lh /Users/schlunsen/projects/go-claude-templates/cct
+ls -lh /Users/schlunsen/projects/claude-control-terminal/cct
 du -sh /Users/schlunsen/projects/claude-code-templates/node_modules
 ```
 

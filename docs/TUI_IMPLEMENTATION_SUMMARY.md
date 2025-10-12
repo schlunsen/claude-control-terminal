@@ -1,7 +1,7 @@
 # TUI Implementation Summary
 
 ## Overview
-Successfully implemented a modern, hip Terminal User Interface (TUI) for the go-claude-templates CLI tool using Bubble Tea framework.
+Successfully implemented a modern, hip Terminal User Interface (TUI) for the claude-control-terminal CLI tool using Bubble Tea framework.
 
 ## Files Created
 
@@ -330,6 +330,6 @@ The TUI is **fully backward compatible**:
 
 ## Conclusion
 
-The TUI implementation successfully transforms the go-claude-templates CLI from a flag-based tool into a modern, interactive application while maintaining full backward compatibility. The interface is intuitive, visually appealing, and provides a superior user experience for browsing and installing components.
+The TUI implementation successfully transforms the claude-control-terminal CLI from a flag-based tool into a modern, interactive application while maintaining full backward compatibility. The interface is intuitive, visually appealing, and provides a superior user experience for browsing and installing components.
 
 The implementation follows Go best practices, leverages industry-standard libraries (Bubble Tea), and integrates seamlessly with the existing codebase architecture.

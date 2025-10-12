@@ -5,8 +5,8 @@
 ### ✅ Completed (Tasks 1-6)
 
 1. **✅ Go Module Structure**
-   - Created project in `/Users/schlunsen/projects/go-claude-templates`
-   - Initialized Go module: `github.com/davila7/go-claude-templates`
+   - Created project in `/Users/schlunsen/projects/claude-control-terminal`
+   - Initialized Go module: `github.com/davila7/claude-control-terminal`
    - Set up directory structure: `cmd/`, `internal/`, `pkg/`
 
 2. **✅ Core Dependencies**
@@ -144,7 +144,7 @@ make build-all   # or: just build-all
 ## 📁 Project Structure
 
 ```
-go-claude-templates/
+claude-control-terminal/
 ├── cmd/
 │   └── cct/
 │       └── main.go              ✅ Main entry point

@@ -1,11 +1,13 @@
-# Go Claude Templates (CCT)
+# Claude Control Terminal (CCT)
 
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://github.com/schlunsen/claude-templates-go/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-templates-go/actions)
-[![Release](https://img.shields.io/github/v/release/schlunsen/claude-templates-go)](https://github.com/schlunsen/claude-templates-go/releases)
+[![Build Status](https://github.com/schlunsen/claude-control-terminal/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions)
+[![Release](https://img.shields.io/github/v/release/schlunsen/claude-control-terminal)](https://github.com/schlunsen/claude-control-terminal/releases)
 
-A high-performance Go port of [claude-code-templates](https://github.com/davila7/claude-code-templates) providing component templates, analytics dashboards, and real-time monitoring for Claude Code projects.
+**A powerful wrapper and control center for Claude Code** - Manage components, launch Claude, run analytics, and deploy with Docker.
+
+Rebranded from `go-claude-templates` to better reflect its role as a comprehensive control terminal for Claude Code environments.
 
 **Performance**: 50x faster startup, 5x lower memory usage, single 15MB binary with no dependencies.
 
@@ -24,6 +26,7 @@ A high-performance Go port of [claude-code-templates](https://github.com/davila7
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Component Installation](#component-installation)
+- [Docker Support](#docker-support)
 - [Analytics Dashboard](#analytics-dashboard)
 - [Documentation](#documentation)
 - [Development](#development)
@@ -31,12 +34,14 @@ A high-performance Go port of [claude-code-templates](https://github.com/davila7
 
 ## Features
 
-- **Interactive TUI**: Modern terminal interface for browsing and installing components with search, multi-select, and real-time loading
-- **Component Management**: Install agents, commands, and MCPs from 600+ templates with automatic category search across 50+ categories
-- **Analytics Dashboard**: Real-time WebSocket-based monitoring of Claude Code conversations with state detection and process correlation
-- **Cross-Platform**: Single binary for Linux, macOS, and Windows (amd64/arm64)
-- **High Performance**: 50-100x faster build time, 50x faster startup, 5x lower memory vs Node.js version
-- **Zero Dependencies**: 15MB self-contained binary vs 50MB+ node_modules
+- 🎮 **Control Center**: Comprehensive wrapper for managing Claude Code environments
+- 🚀 **Interactive TUI**: Modern terminal interface for browsing and installing components
+- 📦 **Component Management**: Install agents, commands, and MCPs from 600+ templates
+- 🐳 **Docker Support**: Containerize Claude environments with one command
+- 📊 **Analytics Dashboard**: Real-time WebSocket-based monitoring with process correlation
+- ⚡ **High Performance**: 50-100x faster than Node.js version, 5x lower memory
+- 🔧 **Zero Dependencies**: Single 15MB self-contained binary
+- 🌐 **Cross-Platform**: Linux, macOS, Windows (amd64/arm64)
 
 ## Installation
 
@@ -55,7 +60,7 @@ brew install schlunsen/cct/cct
 
 ```bash
 # Download for your platform from releases
-curl -L https://github.com/schlunsen/claude-templates-go/releases/latest/download/cct-<platform>-<arch> -o cct
+curl -L https://github.com/schlunsen/claude-control-terminal/releases/latest/download/cct-<platform>-<arch> -o cct
 chmod +x cct
 sudo mv cct /usr/local/bin/
 ```
@@ -63,14 +68,14 @@ sudo mv cct /usr/local/bin/
 ### Option 3: Install with Go
 
 ```bash
-go install github.com/schlunsen/claude-templates-go/cmd/cct@latest
+go install github.com/schlunsen/claude-control-terminal/cmd/cct@latest
 ```
 
 ### Option 4: Build from Source
 
 ```bash
-git clone https://github.com/schlunsen/claude-templates-go
-cd go-claude-templates
+git clone https://github.com/schlunsen/claude-control-terminal
+cd claude-control-terminal
 make build  # or: just build
 ```
 
@@ -88,12 +93,10 @@ cct
 cct -d ~/my-project
 ```
 
-
-
 **Features**:
 - Browse 600+ agents, 200+ commands, and MCPs
 - Real-time search and filtering
-- Multi-select with checkboxes
+- Installation status indicators ([G]=Global, [P]=Project)
 - Modern, hip terminal aesthetic
 - Keyboard-driven interface
 - Launch Claude CLI directly from TUI
@@ -162,6 +165,112 @@ cct --mcp github                  # Found in integration/
 cct --agent api-documenter --directory ~/my-project
 ```
 
+## Docker Support
+
+CCT provides comprehensive Docker support for containerizing Claude Code environments.
+
+### Quick Start with Docker
+
+```bash
+# Generate Dockerfile and .dockerignore
+cct --docker-init --docker-type claude
+
+# Build Docker image
+cct --docker-build
+
+# Run containerized Claude environment
+cct --docker-run
+
+# View logs
+cct --docker-logs
+
+# Stop container
+cct --docker-stop
+```
+
+### Docker Compose
+
+Generate multi-service setups with docker-compose:
+
+```bash
+# Generate docker-compose.yml for Claude + Analytics
+cct --docker-compose --docker-type analytics
+
+# Generate full stack (Claude + Analytics + PostgreSQL + Redis)
+cct --docker-compose --docker-type full
+
+# Start services
+docker-compose up -d
+```
+
+### Dockerfile Types
+
+CCT can generate 4 types of Dockerfiles:
+
+| Type | Description | Use Case |
+|------|-------------|----------|
+| `base` | Minimal CCT-only image | Lightweight component management |
+| `claude` | Full Claude environment (Node.js + Claude CLI + CCT) | Complete development setup |
+| `analytics` | Optimized for analytics dashboard | Monitoring and metrics |
+| `full` | Complete dev environment with all tools | Production-ready setup |
+
+### Docker Compose Templates
+
+| Template | Services | Use Case |
+|----------|----------|----------|
+| `simple` | Claude + CCT | Basic containerized development |
+| `analytics` | Claude + Analytics dashboard | Real-time monitoring |
+| `database` | Claude + PostgreSQL | Database-backed projects |
+| `full` | Claude + Analytics + PostgreSQL + Redis | Complete production stack |
+
+### Include MCPs in Containers
+
+```bash
+# Generate Dockerfile with specific MCPs
+cct --docker-init --docker-type claude --docker-mcps "postgresql,github,supabase"
+
+# Generate docker-compose with MCPs
+cct --docker-compose --docker-type full --docker-mcps "postgresql,github"
+```
+
+### Docker Examples
+
+**Example 1: Simple Development Container**
+```bash
+# Initialize Docker files
+cct --docker-init --docker-type claude
+
+# Build and run
+cct --docker-build
+cct --docker-run --docker-command "claude"
+```
+
+**Example 2: Analytics Dashboard in Docker**
+```bash
+# Generate analytics-optimized setup
+cct --docker-init --docker-type analytics
+cct --docker-build
+cct --docker-run --docker-command "cct --analytics"
+
+# Access dashboard at http://localhost:3333
+```
+
+**Example 3: Full Stack with Docker Compose**
+```bash
+# Generate complete stack
+cct --docker-compose --docker-type full --docker-mcps "postgresql,redis"
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# Start all services
+docker-compose up -d
+
+# Access Claude: docker-compose exec claude claude
+# Access Analytics: http://localhost:3333
+```
+
 ## Analytics Dashboard
 
 Real-time monitoring of Claude Code conversations with WebSocket live updates.
@@ -227,6 +336,7 @@ make clean      # or: just clean
 - **CLI**: Cobra (commands), Pterm (terminal UI)
 - **TUI**: Bubble Tea (interactive interface), Lipgloss (styling), Bubbles (components)
 - **Web**: Fiber v2 (HTTP server), Gorilla WebSocket
+- **Docker**: Native Docker SDK integration
 - **System**: fsnotify (file watching), gopsutil (process detection)
 
 ### Testing
@@ -243,6 +353,26 @@ make clean      # or: just clean
 ```
 
 For detailed development setup, architecture documentation, and contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md) and [CLAUDE.md](CLAUDE.md).
+
+## Migration from go-claude-templates
+
+If you're upgrading from the previous `go-claude-templates`:
+
+**Module Path Changed:**
+- Old: `github.com/davila7/go-claude-templates`
+- New: `github.com/schlunsen/claude-control-terminal`
+
+**What's New in v0.2.0:**
+- Rebranded to Claude Control Terminal (CCT)
+- Full Docker support with 4 Dockerfile types
+- Docker Compose templates for multi-service setups
+- MCP integration in containers
+- Enhanced TUI with installation status indicators
+- Improved positioning as control center for Claude Code
+
+**Breaking Changes:**
+- Import paths must be updated if using CCT as a library
+- Binary name remains `cct` (no change needed for CLI users)
 
 ## License
 
