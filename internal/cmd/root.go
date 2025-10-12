@@ -76,6 +76,9 @@ var (
 	sandbox    string
 	e2bAPIKey  string
 	anthropicAPIKey string
+
+	// Wrapper flags
+	installWrapper bool
 )
 
 // rootCmd represents the base command
@@ -92,6 +95,12 @@ var rootCmd = &cobra.Command{
 📖 Documentation: https://docs.aitmpl.com`,
 	Version: Version,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Handle wrapper commands first (they need to be fast)
+		if installWrapper {
+			handleInstallWrapper()
+			return
+		}
+
 		// Show banner for interactive mode
 		isInteractive := !analytics && !chats && !agents && !chatsMobile && !plugins &&
 			!healthCheck && !commandStats && !hookStats && !mcpStats &&
@@ -178,6 +187,9 @@ func init() {
 	rootCmd.Flags().StringVar(&sandbox, "sandbox", "", "execute in sandbox (e.g., e2b)")
 	rootCmd.Flags().StringVar(&e2bAPIKey, "e2b-api-key", "", "E2B API key")
 	rootCmd.Flags().StringVar(&anthropicAPIKey, "anthropic-api-key", "", "Anthropic API key")
+
+	// Wrapper installation flag
+	rootCmd.Flags().BoolVar(&installWrapper, "install-wrapper", false, "install Claude Code wrapper for message interception")
 }
 
 func handleCommand(cmd *cobra.Command, args []string) {
@@ -617,6 +629,32 @@ func handleDockerCommands(targetDir string) {
 			ShowError(fmt.Sprintf("Failed to get logs: %v", err))
 			return
 		}
+		return
+	}
+}
+
+// handleInstallWrapper installs the Claude Code wrapper
+func handleInstallWrapper() {
+	ShowInfo("Installing Claude Code Wrapper...")
+
+	// Run the install script
+	scriptPath := "scripts/install-wrapper.sh"
+
+	// Check if script exists
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		ShowError("Wrapper installation script not found")
+		ShowInfo("Please ensure scripts/install-wrapper.sh exists")
+		return
+	}
+
+	// Execute the script
+	cmd := exec.Command("bash", scriptPath)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		ShowError(fmt.Sprintf("Failed to install wrapper: %v", err))
 		return
 	}
 }

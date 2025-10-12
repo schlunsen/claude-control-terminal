@@ -2,9 +2,11 @@ package server
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/schlunsen/claude-control-terminal/internal/analytics"
+	"github.com/schlunsen/claude-control-terminal/internal/database"
 	ws "github.com/schlunsen/claude-control-terminal/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -16,15 +18,19 @@ import (
 type Server struct {
 	app                  *fiber.App
 	conversationAnalyzer *analytics.ConversationAnalyzer
+	conversationParser   *analytics.ConversationParser
 	stateCalculator      *analytics.StateCalculator
 	processDetector      *analytics.ProcessDetector
 	shellDetector        *analytics.ShellDetector
 	fileWatcher          *analytics.FileWatcher
 	wsHub                *ws.Hub
 	resetTracker         *analytics.ResetTracker
+	db                   *database.Database
+	repo                 *database.Repository
 	claudeDir            string
 	port                 int
 	quiet                bool // Suppress output when running in TUI
+	lastParsedTime       time.Time
 }
 
 // NewServer creates a new Fiber server instance
@@ -58,8 +64,18 @@ func NewServerWithOptions(claudeDir string, port int, quiet bool) *Server {
 
 // Setup initializes analytics components and routes
 func (s *Server) Setup() error {
+	// Initialize database
+	dataDir := filepath.Join(s.claudeDir, "analytics_data")
+	db, err := database.Initialize(dataDir)
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+	s.db = db
+	s.repo = database.NewRepository(db)
+
 	// Initialize analytics components
 	s.conversationAnalyzer = analytics.NewConversationAnalyzer(s.claudeDir)
+	s.conversationParser = analytics.NewConversationParser(s.repo)
 	s.stateCalculator = analytics.NewStateCalculator()
 	s.processDetector = analytics.NewProcessDetector()
 	s.shellDetector = analytics.NewShellDetector()
@@ -68,6 +84,15 @@ func (s *Server) Setup() error {
 	// Initialize WebSocket hub
 	s.wsHub = ws.NewHub()
 	go s.wsHub.Run()
+
+	// Parse existing conversations on startup
+	if !s.quiet {
+		fmt.Println("📝 Parsing conversation history...")
+	}
+	go s.parseConversations()
+
+	// Start periodic conversation parsing
+	go s.periodicConversationParsing()
 
 	// Setup API routes
 	s.setupRoutes()
@@ -101,6 +126,12 @@ func (s *Server) setupRoutes() {
 	api.Post("/reset/soft", s.handleResetSoft)
 	api.Delete("/reset", s.handleClearReset)
 	api.Get("/reset/status", s.handleResetStatus)
+
+	// Command history endpoints
+	api.Get("/history/shell", s.handleGetShellHistory)
+	api.Get("/history/claude", s.handleGetClaudeHistory)
+	api.Get("/history/stats", s.handleGetCommandStats)
+	api.Get("/db/stats", s.handleGetDBStats)
 
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
@@ -393,5 +424,118 @@ func (s *Server) Shutdown() error {
 		s.fileWatcher.Stop()
 	}
 
+	if s.db != nil {
+		s.db.Close()
+	}
+
 	return s.app.Shutdown()
+}
+
+// Handler: Get shell command history
+func (s *Server) handleGetShellHistory(c *fiber.Ctx) error {
+	query := &database.CommandHistoryQuery{
+		ConversationID: c.Query("conversation_id"),
+		Limit:          c.QueryInt("limit", 100),
+		Offset:         c.QueryInt("offset", 0),
+	}
+
+	commands, err := s.repo.GetShellCommands(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"commands": commands,
+		"count":    len(commands),
+		"query":    query,
+	})
+}
+
+// Handler: Get Claude command history
+func (s *Server) handleGetClaudeHistory(c *fiber.Ctx) error {
+	query := &database.CommandHistoryQuery{
+		ConversationID: c.Query("conversation_id"),
+		ToolName:       c.Query("tool_name"),
+		Limit:          c.QueryInt("limit", 100),
+		Offset:         c.QueryInt("offset", 0),
+	}
+
+	commands, err := s.repo.GetClaudeCommands(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"commands": commands,
+		"count":    len(commands),
+		"query":    query,
+	})
+}
+
+// Handler: Get command statistics
+func (s *Server) handleGetCommandStats(c *fiber.Ctx) error {
+	commandType := c.Query("type") // 'shell', 'claude', or empty for all
+	limit := c.QueryInt("limit", 50)
+
+	stats, err := s.repo.GetCommandStats(commandType, limit)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"stats": stats,
+		"count": len(stats),
+	})
+}
+
+// Handler: Get database statistics
+func (s *Server) handleGetDBStats(c *fiber.Ctx) error {
+	stats, err := s.db.Stats()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"stats":     stats,
+		"db_path":   s.db.Path(),
+		"timestamp": time.Now(),
+	})
+}
+
+// parseConversations parses all conversations and records tool usage
+func (s *Server) parseConversations() {
+	count, err := s.conversationParser.ParseAllConversations(s.claudeDir)
+	if err != nil {
+		if !s.quiet {
+			fmt.Printf("⚠️  Error parsing conversations: %v\n", err)
+		}
+		return
+	}
+
+	if !s.quiet {
+		fmt.Printf("✅ Parsed %d conversation files\n", count)
+	}
+
+	s.lastParsedTime = time.Now()
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"history_updated"}`))
+}
+
+// periodicConversationParsing periodically parses new conversations
+func (s *Server) periodicConversationParsing() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.parseConversations()
+	}
 }
