@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -193,7 +194,7 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.loading = true
 		m.cursor = 0
 		m.components = nil
-		return m, loadComponentsCmd(m.getComponentType())
+		return m, loadComponentsCmd(m.getComponentType(), m.targetDir)
 	case "esc":
 		m.quitting = true
 		return m, tea.Quit
@@ -257,30 +258,20 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.cursor = 0
 			}
 		}
-	case " ": // Space key returns a literal space, not "space"
-		// Toggle selection
-		if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
-			idx := m.filteredIndices[m.cursor]
-			m.components[idx].Selected = !m.components[idx].Selected
-		}
-	case "a":
-		// Select all filtered
-		for _, idx := range m.filteredIndices {
-			m.components[idx].Selected = true
-		}
-	case "A":
-		// Deselect all
-		for i := range m.components {
-			m.components[i].Selected = false
-		}
 	case "/":
 		// Activate search
 		m.searchActive = true
 		m.searchInput.Focus()
 		return m, textinput.Blink
 	case "enter":
-		// Proceed to confirmation
-		if m.getSelectedCount() > 0 {
+		// Proceed to confirmation with current component
+		if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
+			idx := m.filteredIndices[m.cursor]
+			// Mark only this component as selected
+			for i := range m.components {
+				m.components[i].Selected = false
+			}
+			m.components[idx].Selected = true
 			m.screen = ScreenConfirm
 			return m, nil
 		}
@@ -300,7 +291,7 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Refresh components from GitHub
 		m.loading = true
 		m.components = nil
-		return m, loadComponentsCmd(m.getComponentType(), true)
+		return m, loadComponentsCmd(m.getComponentType(), m.targetDir, true)
 	case "esc":
 		// If there's an active filter, clear it first
 		if m.searchInput.Value() != "" {
@@ -381,7 +372,7 @@ func (m Model) handleConfirmScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleCompleteScreen handles input on the complete screen
 func (m Model) handleCompleteScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter", "q":
+	case "q":
 		m.quitting = true
 		return m, tea.Quit
 	case "c":
@@ -400,9 +391,13 @@ func (m Model) handleCompleteScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.installFailed = nil
 		m.installError = nil
 		return m, nil
-	case "esc":
-		m.quitting = true
-		return m, tea.Quit
+	case "esc", "enter":
+		// Return to component list
+		m.screen = ScreenComponentList
+		m.installSuccess = nil
+		m.installFailed = nil
+		m.installError = nil
+		return m, nil
 	}
 	return m, nil
 }
@@ -443,11 +438,25 @@ func (m Model) viewMainScreen() string {
 	for i, componentType := range m.componentTypes {
 		icon := m.getIconForType(componentType)
 		cursor := "  "
+
+		// Special styling for "Launch Claude" option
+		isLaunchClaude := componentType == "Launch Claude"
+
 		if i == m.selectedType {
 			cursor = SelectedItemStyle.Render("> ")
-			b.WriteString(cursor + SelectedItemStyle.Render(icon+" "+componentType) + "\n")
+			if isLaunchClaude {
+				// Make Launch Claude stand out more when selected
+				b.WriteString(cursor + StatusSuccessStyle.Render(icon+" "+componentType) + "\n")
+			} else {
+				b.WriteString(cursor + SelectedItemStyle.Render(icon+" "+componentType) + "\n")
+			}
 		} else {
-			b.WriteString(cursor + UnselectedItemStyle.Render(icon+" "+componentType) + "\n")
+			if isLaunchClaude {
+				// Make Launch Claude stand out even when not selected
+				b.WriteString(cursor + StatusInfoStyle.Render(icon+" "+componentType) + "\n")
+			} else {
+				b.WriteString(cursor + UnselectedItemStyle.Render(icon+" "+componentType) + "\n")
+			}
 		}
 	}
 
@@ -530,46 +539,60 @@ func (m Model) viewComponentListScreen() string {
 			idx := m.filteredIndices[i]
 			component := m.components[idx]
 
-			checkbox := "☐"
-			if component.Selected {
-				checkbox = "☑"
-			}
-
 			cursor := "  "
 			if i == m.cursor {
 				cursor = "> "
 			}
 
-			line := fmt.Sprintf("%s%s %s", cursor, checkbox, component.Name)
+			// Determine style based on installation status
+			// Green for project-installed, Yellow for global-installed
+			var nameStyle lipgloss.Style
+			if component.InstalledProject {
+				nameStyle = StatusSuccessStyle // Green
+			} else if component.InstalledGlobal {
+				nameStyle = StatusWarningStyle // Yellow
+			} else {
+				nameStyle = lipgloss.NewStyle() // Default (no special color)
+			}
+
+			// Build the line with styled name
+			line := cursor + nameStyle.Render(component.Name)
 			if component.Category != "root" && component.Category != "" {
 				line += CategoryStyle.Render(" ("+component.Category+")")
 			}
 
+			// Add installation indicators
+			var indicators string
+			if component.InstalledGlobal {
+				indicators += InstalledIndicatorStyle.Render(" [G]")
+			}
+			if component.InstalledProject {
+				indicators += InstalledIndicatorStyle.Render(" [P]")
+			}
+			line += indicators
+
 			if i == m.cursor {
 				b.WriteString(SelectedItemStyle.Render(line) + "\n")
-			} else if component.Selected {
-				b.WriteString(CheckedItemStyle.Render(line) + "\n")
 			} else {
-				b.WriteString(UnselectedItemStyle.Render(line) + "\n")
+				b.WriteString(line + "\n")
 			}
 		}
 	}
 
-	// Status bar
-	selectedCount := m.getSelectedCount()
 	b.WriteString("\n")
-	statusMsg := fmt.Sprintf("Selected: %d/%d", selectedCount, len(m.components))
-	b.WriteString(StatusBarStyle.Render(statusMsg) + "\n\n")
 
 	// Help - keep compact for small terminals
 	if m.height < 20 {
 		// Compact help for small terminals
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Space: Toggle • P: Preview • Enter: Install • Esc: Back"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • P: Preview • Enter: Install • Esc: Back\n"))
+		b.WriteString(StatusSuccessStyle.Render("[P]=Project  "))
+		b.WriteString(StatusWarningStyle.Render("[G]=Global"))
 	} else {
 		// Full help for larger terminals
-		b.WriteString(HelpStyle.Render(
-			"↑/↓: Navigate • PgUp/PgDn: Page • Space: Toggle • A: Select All • a: Deselect All\n" +
-				"/: Search • P: Preview • R: Refresh • Enter: Install • Esc: Back"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • PgUp/PgDn: Page • /: Search • P: Preview • R: Refresh\n"))
+		b.WriteString(HelpStyle.Render("Enter: Install • Esc: Back • "))
+		b.WriteString(StatusSuccessStyle.Render("[P]=Project  "))
+		b.WriteString(StatusWarningStyle.Render("[G]=Global"))
 	}
 
 	return BoxStyle.Width(m.width - 4).Render(b.String())
@@ -644,23 +667,39 @@ func (m Model) viewPreviewScreen() string {
 func (m Model) viewConfirmScreen() string {
 	var b strings.Builder
 
+	selected := m.getSelectedComponents()
+	if len(selected) == 0 {
+		b.WriteString(StatusErrorStyle.Render("No component selected") + "\n")
+		return BoxStyle.Render(b.String())
+	}
+
+	comp := selected[0] // Single component
+	icon := m.getIconForType(comp.Type + "s")
+
 	b.WriteString(TitleStyle.Render("Confirm Installation") + "\n\n")
 
-	selected := m.getSelectedComponents()
-	b.WriteString(fmt.Sprintf("You are about to install %s:\n\n",
-		StatusInfoStyle.Render(fmt.Sprintf("%d component(s)", len(selected)))))
+	b.WriteString(fmt.Sprintf("Are you sure you want to install:\n\n"))
+	b.WriteString(fmt.Sprintf("  %s %s", icon, StatusInfoStyle.Render(comp.Name)))
+	if comp.Category != "root" && comp.Category != "" {
+		b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
+	}
+	b.WriteString("\n")
 
-	for _, comp := range selected {
-		icon := m.getIconForType(comp.Type + "s")
-		b.WriteString(fmt.Sprintf("  %s %s", icon, comp.Name))
-		if comp.Category != "root" && comp.Category != "" {
-			b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
+	// Show current installation status
+	if comp.InstalledGlobal || comp.InstalledProject {
+		b.WriteString("\n")
+		b.WriteString(StatusWarningStyle.Render("Already installed:"))
+		if comp.InstalledGlobal {
+			b.WriteString(" [Global]")
+		}
+		if comp.InstalledProject {
+			b.WriteString(" [Project]")
 		}
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("Target directory: %s\n\n", StatusInfoStyle.Render(m.targetDir)))
+	b.WriteString(fmt.Sprintf("Target: %s\n\n", SubtitleStyle.Render(m.targetDir)))
 
 	b.WriteString(HelpStyle.Render("Y/Enter: Install • N/Esc: Cancel"))
 
@@ -708,9 +747,9 @@ func (m Model) viewCompleteScreen() string {
 
 	// Add Launch Claude option if available
 	if IsClaudeAvailable() {
-		b.WriteString(HelpStyle.Render("C: Launch Claude • R: Return to Main • Q/Enter: Quit"))
+		b.WriteString(HelpStyle.Render("Enter/Esc: Back to List • C: Launch Claude • R: Main Menu • Q: Quit"))
 	} else {
-		b.WriteString(HelpStyle.Render("R: Return to Main • Q/Enter: Quit"))
+		b.WriteString(HelpStyle.Render("Enter/Esc: Back to List • R: Main Menu • Q: Quit"))
 	}
 
 	return BoxStyle.Render(b.String())
@@ -801,7 +840,7 @@ type previewLoadedMsg struct {
 
 // Commands
 
-func loadComponentsCmd(componentType string, forceRefresh ...bool) tea.Cmd {
+func loadComponentsCmd(componentType, targetDir string, forceRefresh ...bool) tea.Cmd {
 	return func() tea.Msg {
 		loader := NewComponentLoader()
 
@@ -810,7 +849,7 @@ func loadComponentsCmd(componentType string, forceRefresh ...bool) tea.Cmd {
 			refresh = forceRefresh[0]
 		}
 
-		components, err := loader.LoadComponentsWithCache(componentType, refresh)
+		components, err := loader.LoadComponentsWithCache(componentType, targetDir, refresh)
 		return componentsLoadedMsg{
 			components: components,
 			err:        err,
