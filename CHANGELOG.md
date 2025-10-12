@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.5] - 2025-10-12
+
+### Added
+- Active filter display with contextual hints when search is not focused
+- Two-step Esc behavior: first clears filter, second returns to main screen
+
+### Changed
+- Dynamic viewport calculation based on terminal height
+- Component list now adapts to any terminal size (min 5, max 20 items)
+- Compact help text for terminals with height < 20 lines
+- Centered cursor positioning in viewport for better navigation
+
+### Fixed
+- TUI elements being cut off in small terminal windows
+- Search filter state unclear after exiting search mode
+- Help text and component lists truncated in limited height terminals
+
 ## [0.0.4] - 2025-10-12
 
 ### Added
@@ -74,7 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.1...v0.0.2
