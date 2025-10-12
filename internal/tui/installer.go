@@ -59,6 +59,31 @@ Success:
 	return nil
 }
 
+// PreviewAgent previews a specific agent component
+func (ai *AgentInstallerForTUI) PreviewAgent(agentName, category string) (string, error) {
+	var content string
+	var err error
+	var githubPath string
+
+	// Try category path first if provided
+	if category != "" && category != "root" {
+		githubPath = fmt.Sprintf("components/agents/%s/%s.md", category, agentName)
+		content, err = fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
+		if err == nil {
+			return content, nil
+		}
+	}
+
+	// Try direct path
+	githubPath = fmt.Sprintf("components/agents/%s.md", agentName)
+	content, err = fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to download agent: %w", err)
+	}
+
+	return content, nil
+}
+
 // CommandInstallerForTUI handles command installation in TUI mode
 type CommandInstallerForTUI struct {
 	config *fileops.GitHubConfig
@@ -117,6 +142,31 @@ Success:
 	return nil
 }
 
+// PreviewCommand previews a specific command component
+func (ci *CommandInstallerForTUI) PreviewCommand(commandName, category string) (string, error) {
+	var content string
+	var err error
+	var githubPath string
+
+	// Try category path first if provided
+	if category != "" && category != "root" {
+		githubPath = fmt.Sprintf("components/commands/%s/%s.md", category, commandName)
+		content, err = fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
+		if err == nil {
+			return content, nil
+		}
+	}
+
+	// Try direct path
+	githubPath = fmt.Sprintf("components/commands/%s.md", commandName)
+	content, err = fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to download command: %w", err)
+	}
+
+	return content, nil
+}
+
 // MCPInstallerForTUI handles MCP installation in TUI mode
 type MCPInstallerForTUI struct {
 	config *fileops.GitHubConfig
@@ -165,4 +215,29 @@ Success:
 	}
 
 	return nil
+}
+
+// PreviewMCP previews a specific MCP component
+func (mi *MCPInstallerForTUI) PreviewMCP(mcpName, category string) (string, error) {
+	var content string
+	var err error
+	var githubPath string
+
+	// Try category path first if provided
+	if category != "" && category != "root" {
+		githubPath = fmt.Sprintf("components/mcps/%s/%s.json", category, mcpName)
+		content, err = fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
+		if err == nil {
+			return content, nil
+		}
+	}
+
+	// Try direct path
+	githubPath = fmt.Sprintf("components/mcps/%s.json", mcpName)
+	content, err = fileops.DownloadFileFromGitHub(mi.config, githubPath, 0)
+	if err != nil {
+		return "", fmt.Errorf("failed to download MCP: %w", err)
+	}
+
+	return content, nil
 }

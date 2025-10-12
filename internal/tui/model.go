@@ -15,6 +15,7 @@ type Screen int
 const (
 	ScreenMain Screen = iota
 	ScreenComponentList
+	ScreenPreview
 	ScreenConfirm
 	ScreenInstalling
 	ScreenComplete
@@ -46,6 +47,13 @@ type Model struct {
 	installError   error
 	installSuccess []string
 	installFailed  []string
+
+	// Preview
+	previewContent  string
+	previewLoading  bool
+	previewError    error
+	previewScroll   int
+	previewComponent ComponentItem
 
 	// UI state
 	spinner     spinner.Model
@@ -114,6 +122,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.installError = msg.err
 		m.screen = ScreenComplete
 		return m, nil
+
+	case previewLoadedMsg:
+		m.previewLoading = false
+		m.previewContent = msg.content
+		m.previewError = msg.err
+		return m, nil
 	}
 
 	return m, nil
@@ -136,6 +150,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleMainScreen(msg)
 	case ScreenComponentList:
 		return m.handleComponentListScreen(msg)
+	case ScreenPreview:
+		return m.handlePreviewScreen(msg)
 	case ScreenConfirm:
 		return m.handleConfirmScreen(msg)
 	case ScreenComplete:
@@ -253,6 +269,18 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = ScreenConfirm
 			return m, nil
 		}
+	case "p":
+		// Preview selected component
+		if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
+			idx := m.filteredIndices[m.cursor]
+			m.previewComponent = m.components[idx]
+			m.screen = ScreenPreview
+			m.previewLoading = true
+			m.previewScroll = 0
+			m.previewContent = ""
+			m.previewError = nil
+			return m, loadPreviewCmd(m.previewComponent)
+		}
 	case "r":
 		// Refresh components from GitHub
 		m.loading = true
@@ -267,6 +295,52 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Otherwise go back to main screen
 		m.screen = ScreenMain
+		return m, nil
+	}
+
+	return m, nil
+}
+
+// handlePreviewScreen handles input on the preview screen
+func (m Model) handlePreviewScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.previewLoading {
+		if msg.String() == "esc" {
+			m.screen = ScreenComponentList
+			return m, nil
+		}
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "up", "k":
+		if m.previewScroll > 0 {
+			m.previewScroll--
+		}
+	case "down", "j":
+		m.previewScroll++
+	case "pgup":
+		m.previewScroll -= 10
+		if m.previewScroll < 0 {
+			m.previewScroll = 0
+		}
+	case "pgdown":
+		m.previewScroll += 10
+	case "g":
+		// Go to top
+		m.previewScroll = 0
+	case "G":
+		// Go to bottom
+		m.previewScroll = 9999 // Will be clamped in view
+	case "i":
+		// Install this component
+		m.previewComponent.Selected = true
+		idx := m.filteredIndices[m.cursor]
+		m.components[idx].Selected = true
+		m.screen = ScreenConfirm
+		return m, nil
+	case "esc", "q":
+		// Go back to component list
+		m.screen = ScreenComponentList
 		return m, nil
 	}
 
@@ -318,6 +392,8 @@ func (m Model) View() string {
 		return m.viewMainScreen()
 	case ScreenComponentList:
 		return m.viewComponentListScreen()
+	case ScreenPreview:
+		return m.viewPreviewScreen()
 	case ScreenConfirm:
 		return m.viewConfirmScreen()
 	case ScreenInstalling:
@@ -462,13 +538,78 @@ func (m Model) viewComponentListScreen() string {
 	// Help - keep compact for small terminals
 	if m.height < 20 {
 		// Compact help for small terminals
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Space: Toggle • Enter: Install • Esc: Back"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Space: Toggle • P: Preview • Enter: Install • Esc: Back"))
 	} else {
 		// Full help for larger terminals
 		b.WriteString(HelpStyle.Render(
 			"↑/↓: Navigate • PgUp/PgDn: Page • Space: Toggle • A: Select All • a: Deselect All\n" +
-				"/: Search • R: Refresh • Enter: Install • Esc: Back"))
+				"/: Search • P: Preview • R: Refresh • Enter: Install • Esc: Back"))
 	}
+
+	return BoxStyle.Width(m.width - 4).Render(b.String())
+}
+
+// viewPreviewScreen renders the preview screen
+func (m Model) viewPreviewScreen() string {
+	var b strings.Builder
+
+	icon := m.getIconForType(m.previewComponent.Type + "s")
+	b.WriteString(TitleStyle.Render(fmt.Sprintf("%s Preview: %s", icon, m.previewComponent.Name)) + "\n")
+
+	if m.previewComponent.Category != "root" && m.previewComponent.Category != "" {
+		b.WriteString(CategoryStyle.Render("Category: "+m.previewComponent.Category) + "\n")
+	}
+	b.WriteString("\n")
+
+	if m.previewLoading {
+		b.WriteString(m.spinner.View() + " Loading preview...\n")
+		return BoxStyle.Render(b.String())
+	}
+
+	if m.previewError != nil {
+		b.WriteString(StatusErrorStyle.Render("Error loading preview: ") + m.previewError.Error() + "\n\n")
+		b.WriteString(HelpStyle.Render("Esc: Go Back"))
+		return BoxStyle.Render(b.String())
+	}
+
+	// Display content with scrolling
+	lines := strings.Split(m.previewContent, "\n")
+
+	// Calculate viewport
+	reservedLines := 10 // title, category, help, padding
+	availableLines := m.height - reservedLines
+	if availableLines < 10 {
+		availableLines = 10
+	}
+
+	// Clamp scroll
+	maxScroll := len(lines) - availableLines
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if m.previewScroll > maxScroll {
+		m.previewScroll = maxScroll
+	}
+
+	// Display visible lines
+	start := m.previewScroll
+	end := start + availableLines
+	if end > len(lines) {
+		end = len(lines)
+	}
+
+	for i := start; i < end; i++ {
+		b.WriteString(lines[i] + "\n")
+	}
+
+	// Scroll indicator
+	if len(lines) > availableLines {
+		scrollInfo := fmt.Sprintf("\n[Showing lines %d-%d of %d]", start+1, end, len(lines))
+		b.WriteString(SubtitleStyle.Render(scrollInfo) + "\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(HelpStyle.Render("↑/↓: Scroll • PgUp/PgDn: Page • g: Top • G: Bottom • I: Install • Esc/Q: Back"))
 
 	return BoxStyle.Width(m.width - 4).Render(b.String())
 }
@@ -621,6 +762,11 @@ type installCompleteMsg struct {
 	err     error
 }
 
+type previewLoadedMsg struct {
+	content string
+	err     error
+}
+
 // Commands
 
 func loadComponentsCmd(componentType string, forceRefresh ...bool) tea.Cmd {
@@ -670,6 +816,30 @@ func installComponentsCmd(components []ComponentItem, targetDir string) tea.Cmd 
 			success: success,
 			failed:  failed,
 			err:     nil,
+		}
+	}
+}
+
+func loadPreviewCmd(component ComponentItem) tea.Cmd {
+	return func() tea.Msg {
+		var content string
+		var err error
+
+		switch component.Type {
+		case "agent":
+			installer := NewAgentInstallerForTUI()
+			content, err = installer.PreviewAgent(component.Name, component.Category)
+		case "command":
+			installer := NewCommandInstallerForTUI()
+			content, err = installer.PreviewCommand(component.Name, component.Category)
+		case "mcp":
+			installer := NewMCPInstallerForTUI()
+			content, err = installer.PreviewMCP(component.Name, component.Category)
+		}
+
+		return previewLoadedMsg{
+			content: content,
+			err:     err,
 		}
 	}
 }
