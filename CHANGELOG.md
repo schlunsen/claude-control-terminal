@@ -10,26 +10,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.0.4] - 2025-10-12
 
 ### Added
-- LICENSE file with MIT License
-- CONTRIBUTING.md with development guidelines
-- GitHub issue templates (bug report, feature request, question)
-- Pull request template
-- Badges to README.md (Go version, license, build status, release)
-- Table of contents to README.md
+- Page up/down navigation support in component lists
 
 ### Changed
-- Updated repository URLs from placeholders to actual repository
-- Enhanced code blocks with language labels
 - Organized documentation files into docs/ directory
 - Streamlined changelog to follow Keep a Changelog format
 
 ### Removed
 - Old test scripts from project root
 
-## [2.0.0] - 2025-10-12
+## [0.0.3] - 2025-10-12
 
 ### Added
-- Complete Go port of claude-code-templates from Node.js
+- Modern interactive TUI with theme support
+- Bubbles/Bubbletea-based component selection interface
+- Visual theme with gradients and modern styling
+
+### Fixed
+- Homebrew formula generation in release workflow
+- Installation documentation accuracy
+
+## [0.0.2] - 2025-10-12
+
+### Added
+- Homebrew formula generation to release workflow
+- Automated release commands to justfile
+- Professional README improvements
+- LICENSE file with MIT License
+- CONTRIBUTING.md with development guidelines
+- GitHub issue templates (bug report, feature request, question)
+- Pull request template
+- Badges to README (Go version, license, build status, release)
+- Table of contents to README
+
+### Changed
+- Streamlined README for professional appearance
+- Updated repository URLs from placeholders to actual repository
+- Enhanced code blocks with language labels
+
+## [0.0.1] - 2025-10-12
+
+### Added
+- Initial Go port of claude-code-templates from Node.js
 - CLI with Cobra framework and Pterm terminal UI
 - Fiber web server with WebSocket support for real-time updates
 - Analytics dashboard with embedded frontend
@@ -39,12 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RESTful API with 6 endpoints (health, data, conversations, processes, stats, refresh)
 - Comprehensive test suite with automated category search validation
 - Makefile and justfile for build automation
-
-### Changed
-- Build time: 2-5 seconds (50-100x faster than Node.js)
-- Binary size: 15MB (3x smaller than node_modules)
-- Startup time: <10ms (50x faster)
-- Memory usage: 15MB (5x lower)
+- GitHub Actions workflow for multi-platform releases
+- Component management system (agents, commands, MCPs)
+- File operations module for template management
+- ConversationAnalyzer and FileWatcher modules
+- Analytics core modules (StateCalculator, ProcessDetector)
 
 ### Fixed
 - Component installation 404 errors with comprehensive category search
@@ -54,5 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Version Comparison Links
 
 [Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.4...HEAD
-[0.0.4]: https://github.com/schlunsen/claude-templates-go/compare/v2.0.0...v0.0.4
-[2.0.0]: https://github.com/schlunsen/claude-templates-go/releases/tag/v2.0.0
+[0.0.4]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.3...v0.0.4
+[0.0.3]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.2...v0.0.3
+[0.0.2]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.1...v0.0.2
+[0.0.1]: https://github.com/schlunsen/claude-templates-go/releases/tag/v0.0.1
