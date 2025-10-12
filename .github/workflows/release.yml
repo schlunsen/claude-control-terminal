@@ -74,6 +74,29 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R dist
 
+      - name: Generate SHA256 checksums
+        id: checksums
+        run: |
+          cd dist
+          echo "sha256_darwin_amd64=$(shasum -a 256 cct-darwin-amd64 | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "sha256_darwin_arm64=$(shasum -a 256 cct-darwin-arm64 | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "sha256_linux_amd64=$(shasum -a 256 cct-linux-amd64 | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "sha256_linux_arm64=$(shasum -a 256 cct-linux-arm64 | awk '{print $1}')" >> $GITHUB_OUTPUT
+          cd ..
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Generate Homebrew formula
+        run: |
+          sed -e "s/{{VERSION}}/${{ steps.version.outputs.version }}/g" \
+              -e "s/{{SHA256_DARWIN_AMD64}}/${{ steps.checksums.outputs.sha256_darwin_amd64 }}/g" \
+              -e "s/{{SHA256_DARWIN_ARM64}}/${{ steps.checksums.outputs.sha256_darwin_arm64 }}/g" \
+              -e "s/{{SHA256_LINUX_AMD64}}/${{ steps.checksums.outputs.sha256_linux_amd64 }}/g" \
+              -e "s/{{SHA256_LINUX_ARM64}}/${{ steps.checksums.outputs.sha256_linux_arm64 }}/g" \
+              .github/homebrew-formula.rb.template > dist/cct.rb
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -83,6 +106,14 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Homebrew formula to tap
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "📦 Homebrew formula generated at dist/cct.rb"
+          echo "To publish to Homebrew tap, create a repository named 'homebrew-cct'"
+          echo "and commit the formula file as Formula/cct.rb"
+          cat dist/cct.rb
 
   build-on-push:
     name: Build on Push (no release)

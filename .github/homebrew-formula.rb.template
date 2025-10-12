@@ -1,0 +1,33 @@
+class Cct < Formula
+  desc "High-performance CLI tool for Claude Code component templates and analytics"
+  homepage "https://github.com/schlunsen/claude-templates-go"
+  version "{{VERSION}}"
+
+  on_macos do
+    if Hardware::CPU.arm?
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/v{{VERSION}}/cct-darwin-arm64"
+      sha256 "{{SHA256_DARWIN_ARM64}}"
+    else
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/v{{VERSION}}/cct-darwin-amd64"
+      sha256 "{{SHA256_DARWIN_AMD64}}"
+    end
+  end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/v{{VERSION}}/cct-linux-arm64"
+      sha256 "{{SHA256_LINUX_ARM64}}"
+    else
+      url "https://github.com/schlunsen/claude-templates-go/releases/download/v{{VERSION}}/cct-linux-amd64"
+      sha256 "{{SHA256_LINUX_AMD64}}"
+    end
+  end
+
+  def install
+    bin.install Dir["cct-*"].first => "cct"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/cct --version 2>&1", 0)
+  end
+end
