@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	Version = "2.0.0-go"
+	Version = "0.0.4"
 	Name    = "go-claude-templates"
 )
 
