@@ -211,6 +211,21 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.cursor < len(m.filteredIndices)-1 {
 			m.cursor++
 		}
+	case "pgup":
+		// Page up - jump 10 items up
+		m.cursor -= 10
+		if m.cursor < 0 {
+			m.cursor = 0
+		}
+	case "pgdown":
+		// Page down - jump 10 items down
+		m.cursor += 10
+		if m.cursor >= len(m.filteredIndices) {
+			m.cursor = len(m.filteredIndices) - 1
+			if m.cursor < 0 {
+				m.cursor = 0
+			}
+		}
 	case " ": // Space key returns a literal space, not "space"
 		// Toggle selection
 		if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
@@ -421,7 +436,7 @@ func (m Model) viewComponentListScreen() string {
 
 	// Help
 	b.WriteString(HelpStyle.Render(
-		"↑/↓: Navigate • Space: Toggle • A: Select All • a: Deselect All\n" +
+		"↑/↓: Navigate • PgUp/PgDn: Page • Space: Toggle • A: Select All • a: Deselect All\n" +
 			"/: Search • R: Refresh • Enter: Install • Esc: Back"))
 
 	return BoxStyle.Width(m.width - 4).Render(b.String())
