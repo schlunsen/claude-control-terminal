@@ -238,6 +238,10 @@ func updateAllStyles() {
 				Foreground(ColorError).
 				Bold(true)
 
+	StatusWarningStyle = lipgloss.NewStyle().
+				Foreground(ColorWarning).
+				Bold(true)
+
 	StatusInfoStyle = lipgloss.NewStyle().
 			Foreground(ColorInfo)
 
@@ -307,6 +311,11 @@ func updateAllStyles() {
 
 	ProgressEmptyStyle = lipgloss.NewStyle().
 				Foreground(ColorBorderDim)
+
+	// Installation indicator style
+	InstalledIndicatorStyle = lipgloss.NewStyle().
+				Foreground(ColorTextDim).
+				Italic(true)
 }
 
 // Style variables
@@ -321,6 +330,7 @@ var (
 	StatusBarStyle      lipgloss.Style
 	StatusSuccessStyle  lipgloss.Style
 	StatusErrorStyle    lipgloss.Style
+	StatusWarningStyle  lipgloss.Style
 	StatusInfoStyle     lipgloss.Style
 	InputStyle          lipgloss.Style
 	InputFocusedStyle   lipgloss.Style
@@ -329,10 +339,11 @@ var (
 	CategoryStyle       lipgloss.Style
 	BadgeStyle          lipgloss.Style
 	SpinnerStyle        lipgloss.Style
-	ActiveTabStyle      lipgloss.Style
-	InactiveTabStyle    lipgloss.Style
-	ProgressBarStyle    lipgloss.Style
-	ProgressEmptyStyle  lipgloss.Style
+	ActiveTabStyle          lipgloss.Style
+	InactiveTabStyle        lipgloss.Style
+	ProgressBarStyle        lipgloss.Style
+	ProgressEmptyStyle      lipgloss.Style
+	InstalledIndicatorStyle lipgloss.Style
 )
 
 // ASCII Art for banner
