@@ -24,7 +24,7 @@ func ShowBanner() {
 	pterm.Println()
 
 	// Title with gradient effect
-	title := "       🔮 Claude Code Templates"
+	title := "       🎮 Claude Control Terminal 🚀"
 	coloredTitle := ""
 	for i, char := range title {
 		color := colors[i%len(colors)]
@@ -34,7 +34,7 @@ func ShowBanner() {
 	pterm.Println()
 
 	// Subtitle
-	subtitle := pterm.NewStyle(pterm.FgYellow).Sprint("       Your starting point for Claude Code projects")
+	subtitle := pterm.NewStyle(pterm.FgYellow).Sprint("       Your Command Center for Claude Code")
 	pterm.Println(subtitle)
 	pterm.Println()
 
@@ -44,7 +44,7 @@ func ShowBanner() {
 	pterm.Println()
 
 	// Info section
-	setupMsg := pterm.NewStyle(pterm.FgLightYellow, pterm.Bold).Sprint("🚀 Setup Claude Code for any project language 🚀")
+	setupMsg := pterm.NewStyle(pterm.FgLightYellow, pterm.Bold).Sprint("⚡ Supercharge your Claude Code workflow ⚡")
 	pterm.Println(setupMsg)
 
 	version := pterm.NewStyle(pterm.FgWhite).Sprintf("                             v%s (Go Edition)\n", Version)
