@@ -18,6 +18,7 @@ type Server struct {
 	conversationAnalyzer *analytics.ConversationAnalyzer
 	stateCalculator      *analytics.StateCalculator
 	processDetector      *analytics.ProcessDetector
+	shellDetector        *analytics.ShellDetector
 	fileWatcher          *analytics.FileWatcher
 	wsHub                *ws.Hub
 	claudeDir            string
@@ -48,6 +49,7 @@ func (s *Server) Setup() error {
 	s.conversationAnalyzer = analytics.NewConversationAnalyzer(s.claudeDir)
 	s.stateCalculator = analytics.NewStateCalculator()
 	s.processDetector = analytics.NewProcessDetector()
+	s.shellDetector = analytics.NewShellDetector()
 
 	// Initialize WebSocket hub
 	s.wsHub = ws.NewHub()
@@ -73,6 +75,7 @@ func (s *Server) setupRoutes() {
 	api.Get("/data", s.handleGetData)
 	api.Get("/conversations", s.handleGetConversations)
 	api.Get("/processes", s.handleGetProcesses)
+	api.Get("/shells", s.handleGetShells)
 	api.Get("/stats", s.handleGetStats)
 
 	// Refresh endpoint
@@ -171,11 +174,29 @@ func (s *Server) handleGetStats(c *fiber.Ctx) error {
 	})
 }
 
+// Handler: Get background shells
+func (s *Server) handleGetShells(c *fiber.Ctx) error {
+	shells, err := s.shellDetector.DetectBackgroundShells()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	stats, _ := s.shellDetector.GetShellStats()
+
+	return c.JSON(fiber.Map{
+		"shells": shells,
+		"stats":  stats,
+	})
+}
+
 // Handler: Refresh data
 func (s *Server) handleRefresh(c *fiber.Ctx) error {
 	// Clear caches
 	s.stateCalculator.ClearCache()
 	s.processDetector.ClearCache()
+	s.shellDetector.ClearCache()
 
 	return c.JSON(fiber.Map{
 		"status": "refreshed",
