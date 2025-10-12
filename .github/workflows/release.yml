@@ -10,22 +10,50 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build Binaries
+  build-linux:
+    name: Build Linux Binaries
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - os: linux
-            arch: amd64
-          - os: linux
-            arch: arm64
-          - os: darwin
-            arch: amd64
-          - os: darwin
-            arch: arm64
-          - os: windows
-            arch: amd64
+        arch: [amd64, arm64]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install cross-compilation tools
+        if: matrix.arch == 'arm64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build binary
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 1
+          CC: ${{ matrix.arch == 'arm64' && 'aarch64-linux-gnu-gcc' || 'gcc' }}
+        run: |
+          mkdir -p dist
+          go build -ldflags="-s -w" -o "dist/cct-linux-${{ matrix.arch }}" ./cmd/cct
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cct-linux-${{ matrix.arch }}
+          path: dist/*
+
+  build-darwin:
+    name: Build macOS Binaries
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
 
     steps:
       - name: Checkout code
@@ -38,26 +66,50 @@ jobs:
 
       - name: Build binary
         env:
-          GOOS: ${{ matrix.os }}
+          GOOS: darwin
           GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 1
         run: |
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            OUTPUT_NAME="dist/cct-${{ matrix.os }}-${{ matrix.arch }}.exe"
-          else
-            OUTPUT_NAME="dist/cct-${{ matrix.os }}-${{ matrix.arch }}"
-          fi
           mkdir -p dist
-          go build -ldflags="-s -w" -o "$OUTPUT_NAME" ./cmd/cct
+          go build -ldflags="-s -w" -o "dist/cct-darwin-${{ matrix.arch }}" ./cmd/cct
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cct-${{ matrix.os }}-${{ matrix.arch }}
+          name: cct-darwin-${{ matrix.arch }}
+          path: dist/*
+
+  build-windows:
+    name: Build Windows Binary
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build binary
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: 1
+        run: |
+          mkdir -p dist
+          go build -ldflags="-s -w" -o "dist/cct-windows-amd64.exe" ./cmd/cct
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cct-windows-amd64
           path: dist/*
 
   release:
     name: Create Release
-    needs: build
+    needs: [build-linux, build-darwin, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 
@@ -114,49 +166,3 @@ jobs:
           echo "To publish to Homebrew tap, create a repository named 'homebrew-cct'"
           echo "and commit the formula file as Formula/cct.rb"
           cat dist/cct.rb
-
-  build-on-push:
-    name: Build on Push (no release)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            arch: amd64
-          - os: linux
-            arch: arm64
-          - os: darwin
-            arch: amd64
-          - os: darwin
-            arch: arm64
-          - os: windows
-            arch: amd64
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.23'
-
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
-        run: |
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            OUTPUT_NAME="dist/cct-${{ matrix.os }}-${{ matrix.arch }}.exe"
-          else
-            OUTPUT_NAME="dist/cct-${{ matrix.os }}-${{ matrix.arch }}"
-          fi
-          mkdir -p dist
-          go build -ldflags="-s -w" -o "$OUTPUT_NAME" ./cmd/cct
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: cct-${{ matrix.os }}-${{ matrix.arch }}
-          path: dist/*
