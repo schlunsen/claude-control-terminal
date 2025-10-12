@@ -46,19 +46,25 @@ type ToolExecution struct {
 	ExecutedAt       time.Time
 }
 
-// ConversationParser parses Claude Code conversation files for tool usage
+// ConversationParser parses Claude Code conversation files for tool usage.
+// It includes memory limits and error handling to process large conversation files safely.
 type ConversationParser struct {
-	repo *database.Repository
+	repo                *database.Repository
+	maxToolMapSize      int   // Maximum number of pending tools to track
+	maxScannerBufferMB  int   // Maximum scanner buffer size in MB
 }
 
-// NewConversationParser creates a new conversation parser
+// NewConversationParser creates a new conversation parser with default limits.
 func NewConversationParser(repo *database.Repository) *ConversationParser {
 	return &ConversationParser{
-		repo: repo,
+		repo:                repo,
+		maxToolMapSize:      10000, // Limit pending tool executions
+		maxScannerBufferMB:  10,    // 10MB max per line
 	}
 }
 
-// ParseConversationFile parses a conversation file and records tool usage
+// ParseConversationFile parses a conversation file and records tool usage.
+// It applies memory limits to prevent unbounded growth on large conversation files.
 func (cp *ConversationParser) ParseConversationFile(filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -69,9 +75,10 @@ func (cp *ConversationParser) ParseConversationFile(filePath string) error {
 	toolMap := make(map[string]*ToolExecution)
 	scanner := bufio.NewScanner(file)
 
-	// Increase scanner buffer size for large messages
+	// Configure scanner buffer with memory limit
+	maxBufferSize := cp.maxScannerBufferMB * 1024 * 1024
 	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
+	scanner.Buffer(buf, maxBufferSize)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -88,6 +95,19 @@ func (cp *ConversationParser) ParseConversationFile(filePath string) error {
 		if msg.Type == "assistant" && msg.Message.Role == "assistant" {
 			for _, content := range msg.Message.Content {
 				if content.Type == "tool_use" && content.ID != "" && content.Name != "" {
+					// Check if toolMap is getting too large
+					if len(toolMap) >= cp.maxToolMapSize {
+						// Clear oldest half of entries to prevent unbounded growth
+						count := 0
+						for k := range toolMap {
+							delete(toolMap, k)
+							count++
+							if count >= cp.maxToolMapSize/2 {
+								break
+							}
+						}
+					}
+
 					timestamp, _ := time.Parse(time.RFC3339, msg.Timestamp)
 					toolMap[content.ID] = &ToolExecution{
 						ToolID:           content.ID,

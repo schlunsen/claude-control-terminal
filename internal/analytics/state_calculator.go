@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"sort"
 	"strings"
 	"time"
 )
@@ -258,19 +259,16 @@ func (sc *StateCalculator) ClearCache() {
 	sc.processCache = make(map[string]interface{})
 }
 
-// Helper function to sort messages by timestamp
+// sortMessagesByTimestamp sorts messages by timestamp using stdlib sort for O(n log n) performance.
+// It creates a copy to avoid modifying the original slice.
 func sortMessagesByTimestamp(messages []Message) []Message {
 	sorted := make([]Message, len(messages))
 	copy(sorted, messages)
 
-	// Simple bubble sort (good enough for small arrays)
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[i].Timestamp.After(sorted[j].Timestamp) {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
+	// Use stdlib sort.Slice for O(n log n) performance instead of O(n²) bubble sort
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Timestamp.Before(sorted[j].Timestamp)
+	})
 
 	return sorted
 }

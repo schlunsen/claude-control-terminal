@@ -1,6 +1,7 @@
 package fileops
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -38,7 +39,18 @@ type GitHubFile struct {
 // DownloadCache stores downloaded files to avoid repeated downloads
 var downloadCache = make(map[string]string)
 
-// DownloadFileFromGitHub downloads a single file from GitHub with retry logic
+// httpClient is a shared HTTP client with timeout configuration
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        10,
+		IdleConnTimeout:     90 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
+	},
+}
+
+// DownloadFileFromGitHub downloads a single file from GitHub with retry logic and timeout.
+// It uses exponential backoff for retries and caches successful downloads.
 func DownloadFileFromGitHub(config *GitHubConfig, filePath string, retryCount int) (string, error) {
 	// Check cache first
 	if content, exists := downloadCache[filePath]; exists {
@@ -52,7 +64,16 @@ func DownloadFileFromGitHub(config *GitHubConfig, filePath string, retryCount in
 	githubURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s/%s",
 		config.Owner, config.Repo, config.Branch, config.TemplatesPath, filePath)
 
-	resp, err := http.Get(githubURL)
+	// Create request with context and timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", githubURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("error creating request for %s: %w", filePath, err)
+	}
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		// Network errors - retry if possible
 		if retryCount < maxRetries {
@@ -91,7 +112,8 @@ func DownloadFileFromGitHub(config *GitHubConfig, filePath string, retryCount in
 	return content, nil
 }
 
-// DownloadDirectoryFromGitHub downloads all files from a GitHub directory
+// DownloadDirectoryFromGitHub downloads all files from a GitHub directory with timeout.
+// It handles rate limiting and uses exponential backoff for retries.
 func DownloadDirectoryFromGitHub(config *GitHubConfig, dirPath string, retryCount int) (map[string]string, error) {
 	maxRetries := 5
 	baseDelay := 2 * time.Second
@@ -101,7 +123,16 @@ func DownloadDirectoryFromGitHub(config *GitHubConfig, dirPath string, retryCoun
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s/%s?ref=%s",
 		config.Owner, config.Repo, config.TemplatesPath, dirPath, config.Branch)
 
-	resp, err := http.Get(apiURL)
+	// Create request with context and timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error creating request: %w", err)
+	}
+
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		if retryCount < maxRetries {
 			time.Sleep(retryDelay)
@@ -185,7 +216,7 @@ func DownloadDirectoryFromGitHub(config *GitHubConfig, dirPath string, retryCoun
 	return files, nil
 }
 
-// ClearDownloadCache clears the download cache
+// ClearDownloadCache clears the download cache to force fresh downloads.
 func ClearDownloadCache() {
 	downloadCache = make(map[string]string)
 }
