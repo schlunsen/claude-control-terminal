@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2025-10-12
+
 ### Added
 - LICENSE file with MIT License
 - CONTRIBUTING.md with development guidelines
@@ -18,6 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Updated repository URLs from placeholders to actual repository
 - Enhanced code blocks with language labels
+- Organized documentation files into docs/ directory
+- Streamlined changelog to follow Keep a Changelog format
+
+### Removed
+- Old test scripts from project root
 
 ## [2.0.0] - 2025-10-12
 
@@ -46,5 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/schlunsen/claude-templates-go/compare/v2.0.0...v0.0.4
 [2.0.0]: https://github.com/schlunsen/claude-templates-go/releases/tag/v2.0.0
