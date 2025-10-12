@@ -15,10 +15,16 @@ type FileWatcher struct {
 	dataRefreshCallback  func() error
 	isActive             bool
 	stopChan             chan bool
+	quiet                bool // Suppress output when running in TUI
 }
 
 // NewFileWatcher creates a new FileWatcher
 func NewFileWatcher(claudeDir string, refreshCallback func() error) (*FileWatcher, error) {
+	return NewFileWatcherWithOptions(claudeDir, refreshCallback, false)
+}
+
+// NewFileWatcherWithOptions creates a new FileWatcher with options
+func NewFileWatcherWithOptions(claudeDir string, refreshCallback func() error, quiet bool) (*FileWatcher, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
@@ -30,6 +36,7 @@ func NewFileWatcher(claudeDir string, refreshCallback func() error) (*FileWatche
 		dataRefreshCallback: refreshCallback,
 		isActive:            false,
 		stopChan:            make(chan bool),
+		quiet:               quiet,
 	}
 
 	return fw, nil
@@ -44,8 +51,10 @@ func (fw *FileWatcher) Start() error {
 	}
 
 	// Watch subdirectories for .jsonl files
-	pattern := filepath.Join(fw.claudeDir, "**/*.jsonl")
-	fmt.Printf("👀 Watching for changes in: %s\n", pattern)
+	if !fw.quiet {
+		pattern := filepath.Join(fw.claudeDir, "**/*.jsonl")
+		fmt.Printf("👀 Watching for changes in: %s\n", pattern)
+	}
 
 	fw.isActive = true
 
@@ -81,7 +90,9 @@ func (fw *FileWatcher) watchLoop() {
 			if !ok {
 				return
 			}
-			fmt.Printf("⚠️  File watcher error: %v\n", err)
+			if !fw.quiet {
+				fmt.Printf("⚠️  File watcher error: %v\n", err)
+			}
 
 		case <-fw.stopChan:
 			return
@@ -108,14 +119,18 @@ func (fw *FileWatcher) periodicRefresh() {
 func (fw *FileWatcher) triggerRefresh() {
 	if fw.dataRefreshCallback != nil && fw.isActive {
 		if err := fw.dataRefreshCallback(); err != nil {
-			fmt.Printf("⚠️  Error during refresh: %v\n", err)
+			if !fw.quiet {
+				fmt.Printf("⚠️  Error during refresh: %v\n", err)
+			}
 		}
 	}
 }
 
 // Stop stops the file watcher
 func (fw *FileWatcher) Stop() error {
-	fmt.Println("🛑 Stopping file watcher...")
+	if !fw.quiet {
+		fmt.Println("🛑 Stopping file watcher...")
+	}
 
 	fw.isActive = false
 	close(fw.stopChan)

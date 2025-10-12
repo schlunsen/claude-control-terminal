@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/schlunsen/claude-control-terminal/internal/server"
 )
 
 // Screen represents different views in the TUI
@@ -65,10 +66,20 @@ type Model struct {
 	quitting           bool
 	currentTheme       int  // 0=orange, 1=green, 2=cyan, 3=purple
 	shouldLaunchClaude bool // Signal to launch Claude after TUI exits
+
+	// Analytics state
+	analyticsEnabled bool            // Whether analytics server is running
+	analyticsServer  *server.Server  // Reference to analytics server
+	claudeDir        string          // Claude directory for analytics
 }
 
 // NewModel creates a new TUI model
 func NewModel(targetDir string) Model {
+	return NewModelWithServer(targetDir, "", nil)
+}
+
+// NewModelWithServer creates a new TUI model with analytics server reference
+func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Server) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = SpinnerStyle
@@ -85,16 +96,21 @@ func NewModel(targetDir string) Model {
 		componentTypes = append(componentTypes, "Launch Claude")
 	}
 
+	analyticsEnabled := analyticsServer != nil
+
 	return Model{
-		screen:         ScreenMain,
-		componentTypes: componentTypes,
-		selectedType:   0,
-		targetDir:      targetDir,
-		spinner:        s,
-		searchInput:    ti,
-		width:          80,
-		height:         24,
-		currentTheme:   GetCurrentThemeIndex(),
+		screen:           ScreenMain,
+		componentTypes:   componentTypes,
+		selectedType:     0,
+		targetDir:        targetDir,
+		spinner:          s,
+		searchInput:      ti,
+		width:            80,
+		height:           24,
+		currentTheme:     GetCurrentThemeIndex(),
+		analyticsEnabled: analyticsEnabled,
+		analyticsServer:  analyticsServer,
+		claudeDir:        claudeDir,
 	}
 }
 
@@ -146,6 +162,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.previewLoading = false
 		m.previewContent = msg.content
 		m.previewError = msg.err
+		return m, nil
+
+	case toggleAnalyticsMsg:
+		// Handle immediate analytics server toggle
+		if msg.enabled && m.analyticsServer == nil {
+			// Start analytics server with quiet mode
+			m.analyticsServer = server.NewServerWithOptions(msg.targetDir, 3333, true)
+			if err := m.analyticsServer.Setup(); err == nil {
+				go func() {
+					if err := m.analyticsServer.Start(); err != nil {
+						// Server failed to start
+						m.analyticsServer = nil
+					}
+				}()
+				m.analyticsEnabled = true
+			} else {
+				m.analyticsServer = nil
+				m.analyticsEnabled = false
+			}
+		} else if !msg.enabled && m.analyticsServer != nil {
+			// Stop analytics server immediately
+			m.analyticsServer.Shutdown()
+			m.analyticsServer = nil
+			m.analyticsEnabled = false
+		}
 		return m, nil
 	}
 
@@ -215,6 +256,10 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.currentTheme = (m.currentTheme + 1) % 4
 		ApplyThemeByIndex(m.currentTheme)
 		return m, nil
+	case "a", "A":
+		// Toggle analytics on/off
+		m.analyticsEnabled = !m.analyticsEnabled
+		return m, toggleAnalyticsCmd(m.analyticsEnabled, m.claudeDir)
 	}
 	return m, nil
 }
@@ -510,12 +555,22 @@ func (m Model) viewMainScreen() string {
 
 	b.WriteString("\n")
 
-	// Show current theme
+	// Show current theme and analytics status
 	themeName := GetThemeName(m.currentTheme)
 	themeInfo := SubtitleStyle.Render(fmt.Sprintf("Theme: %s", themeName))
-	b.WriteString(themeInfo + "\n\n")
+	b.WriteString(themeInfo + "\n")
 
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • Q/Esc: Quit"))
+	// Analytics status
+	analyticsStatus := "OFF"
+	analyticsStyle := StatusErrorStyle
+	if m.analyticsEnabled {
+		analyticsStatus = "ON"
+		analyticsStyle = StatusSuccessStyle
+	}
+	b.WriteString(SubtitleStyle.Render("Analytics: ") + analyticsStyle.Render(analyticsStatus))
+	b.WriteString(SubtitleStyle.Render(" (http://localhost:3333)") + "\n\n")
+
+	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Toggle Analytics • Q/Esc: Quit"))
 
 	return BoxStyle.Render(b.String())
 }
@@ -1049,6 +1104,20 @@ func loadPreviewCmd(component ComponentItem) tea.Cmd {
 		return previewLoadedMsg{
 			content: content,
 			err:     err,
+		}
+	}
+}
+
+type toggleAnalyticsMsg struct {
+	enabled   bool
+	targetDir string
+}
+
+func toggleAnalyticsCmd(enabled bool, targetDir string) tea.Cmd {
+	return func() tea.Msg {
+		return toggleAnalyticsMsg{
+			enabled:   enabled,
+			targetDir: targetDir,
 		}
 	}
 }
