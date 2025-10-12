@@ -164,3 +164,44 @@ func MergeMCPServersFromJSON(scope MCPScope, projectDir string, mcpJSONContent s
 
 	return addedServers, nil
 }
+
+// RemoveMCPServers removes MCP servers that match the given MCP name pattern
+// It returns a list of removed server names
+func RemoveMCPServers(scope MCPScope, projectDir string, mcpName string) ([]string, error) {
+	configPath := GetMCPConfigPath(scope, projectDir)
+
+	// Load current config
+	config, err := LoadMCPConfig(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Track removed server names
+	removed := []string{}
+
+	// Remove servers that contain the MCP name
+	// This handles cases where MCP name might be part of the server name
+	for serverName := range config.MCPServers {
+		// Simple matching: if server name contains the MCP name, remove it
+		// This works for most cases where MCP name is "github" and server name is "github" or "github-mcp"
+		if serverName == mcpName || contains(serverName, mcpName) {
+			delete(config.MCPServers, serverName)
+			removed = append(removed, serverName)
+		}
+	}
+
+	// Save updated config if any servers were removed
+	if len(removed) > 0 {
+		if err := SaveMCPConfig(configPath, config); err != nil {
+			return removed, fmt.Errorf("failed to save config: %w", err)
+		}
+	}
+
+	return removed, nil
+}
+
+// contains checks if s contains substr (case-insensitive)
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr ||
+		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr)))
+}
