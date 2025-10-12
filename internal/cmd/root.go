@@ -23,6 +23,7 @@ var (
 	directory string
 	yesFlag   bool
 	dryRun    bool
+	preview   bool
 
 	// Component flags
 	agent    string
@@ -105,6 +106,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&directory, "directory", "d", ".", "target directory")
 	rootCmd.PersistentFlags().BoolVarP(&yesFlag, "yes", "y", false, "skip prompts and use defaults")
 	rootCmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would be copied without copying")
+	rootCmd.Flags().BoolVarP(&preview, "preview", "p", false, "preview component content without installing")
 
 	// Template selection flags
 	rootCmd.Flags().StringVarP(&template, "template", "t", "", "specify template (e.g., common, javascript-typescript, python)")
@@ -250,6 +252,12 @@ func handleCommand(cmd *cobra.Command, args []string) {
 
 // handleComponentInstallation handles installation of individual components
 func handleComponentInstallation(targetDir string) {
+	if preview {
+		fmt.Println("👁️  Previewing Components...")
+		handleComponentPreview(targetDir)
+		return
+	}
+
 	fmt.Println("📦 Installing Components...")
 
 	hasErrors := false
@@ -308,6 +316,55 @@ func handleComponentInstallation(targetDir string) {
 
 	if !hasErrors {
 		fmt.Println("\n✅ All components installed successfully!")
+	}
+}
+
+// handleComponentPreview displays component content without installing
+func handleComponentPreview(targetDir string) {
+	hasErrors := false
+
+	// Preview agents
+	if agent != "" {
+		agents := parseComponentList(agent)
+		if len(agents) > 0 {
+			fmt.Printf("\n🤖 Previewing %d agent(s)...\n", len(agents))
+			installer := components.NewAgentInstaller()
+			if err := installer.PreviewMultipleAgents(agents); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				hasErrors = true
+			}
+		}
+	}
+
+	// Preview commands
+	if command != "" {
+		commands := parseComponentList(command)
+		if len(commands) > 0 {
+			fmt.Printf("\n⚡ Previewing %d command(s)...\n", len(commands))
+			installer := components.NewCommandInstaller()
+			if err := installer.PreviewMultipleCommands(commands); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				hasErrors = true
+			}
+		}
+	}
+
+	// Preview MCPs
+	if mcp != "" {
+		mcps := parseComponentList(mcp)
+		if len(mcps) > 0 {
+			fmt.Printf("\n🔌 Previewing %d MCP(s)...\n", len(mcps))
+			mcpScope := components.ParseMCPScope(scope)
+			installer := components.NewMCPInstaller(mcpScope)
+			if err := installer.PreviewMultipleMCPs(mcps); err != nil {
+				fmt.Printf("❌ Error: %v\n", err)
+				hasErrors = true
+			}
+		}
+	}
+
+	if !hasErrors {
+		fmt.Println("\n✅ Preview completed successfully!")
 	}
 }
 

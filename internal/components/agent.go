@@ -163,3 +163,101 @@ func (ai *AgentInstaller) InstallMultipleAgents(agentNames []string, targetDir s
 
 	return nil
 }
+
+// PreviewAgent previews a specific agent component without installing
+func (ai *AgentInstaller) PreviewAgent(agentName string) error {
+	// Try multiple path formats to find the agent
+	var content string
+	var err error
+	var githubPath string
+
+	// Format 1: Try with category (e.g., ai-specialists/data-scientist)
+	if strings.Contains(agentName, "/") {
+		githubPath = fmt.Sprintf("components/agents/%s.md", agentName)
+		content, err = fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
+		if err == nil {
+			goto Success
+		}
+	}
+
+	// Format 2: Try direct path (e.g., api-security-audit)
+	githubPath = fmt.Sprintf("components/agents/%s.md", agentName)
+	content, err = fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
+	if err == nil {
+		goto Success
+	}
+
+	// Format 3: Search in common categories if simple name provided
+	if !strings.Contains(agentName, "/") {
+		categories := []string{
+			"ai-specialists",
+			"api-graphql",
+			"blockchain-web3",
+			"business-marketing",
+			"data-ai",
+			"database",
+			"deep-research-team",
+			"development-team",
+			"development-tools",
+			"devops-infrastructure",
+			"documentation",
+			"expert-advisors",
+			"ffmpeg-clip-team",
+			"game-development",
+			"git",
+			"mcp-dev-team",
+			"modernization",
+			"obsidian-ops-team",
+			"ocr-extraction-team",
+			"performance-testing",
+			"podcast-creator-team",
+			"programming-languages",
+			"realtime",
+			"security",
+			"web-tools",
+		}
+
+		for _, category := range categories {
+			githubPath = fmt.Sprintf("components/agents/%s/%s.md", category, agentName)
+			content, err = fileops.DownloadFileFromGitHub(ai.config, githubPath, 0)
+			if err == nil {
+				goto Success
+			}
+		}
+	}
+
+	// All attempts failed
+	return fmt.Errorf("agent '%s' not found (tried multiple paths)", agentName)
+
+Success:
+	// Display preview
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("📄 Agent: %s\n", agentName)
+	fmt.Printf("🔗 Source: %s\n", githubPath)
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	fmt.Println(content)
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+	return nil
+}
+
+// PreviewMultipleAgents previews multiple agents
+func (ai *AgentInstaller) PreviewMultipleAgents(agentNames []string) error {
+	successCount := 0
+	failedCount := 0
+
+	for _, agentName := range agentNames {
+		if err := ai.PreviewAgent(agentName); err != nil {
+			fmt.Printf("❌ Failed to preview agent '%s': %v\n", agentName, err)
+			failedCount++
+		} else {
+			successCount++
+		}
+	}
+
+	if successCount == 0 {
+		return fmt.Errorf("all agent previews failed")
+	}
+
+	return nil
+}
