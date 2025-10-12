@@ -155,3 +155,95 @@ func (ci *CommandInstaller) InstallMultipleCommands(commandNames []string, targe
 
 	return nil
 }
+
+// PreviewCommand previews a specific command component without installing
+func (ci *CommandInstaller) PreviewCommand(commandName string) error {
+	// Try multiple path formats to find the command
+	var content string
+	var err error
+	var githubPath string
+
+	// Format 1: Try with category (e.g., security/vulnerability-scan)
+	if strings.Contains(commandName, "/") {
+		githubPath = fmt.Sprintf("components/commands/%s.md", commandName)
+		content, err = fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
+		if err == nil {
+			goto Success
+		}
+	}
+
+	// Format 2: Try direct path
+	githubPath = fmt.Sprintf("components/commands/%s.md", commandName)
+	content, err = fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
+	if err == nil {
+		goto Success
+	}
+
+	// Format 3: Search in common categories
+	if !strings.Contains(commandName, "/") {
+		categories := []string{
+			"automation",
+			"database",
+			"deployment",
+			"documentation",
+			"game-development",
+			"git",
+			"git-workflow",
+			"nextjs-vercel",
+			"orchestration",
+			"performance",
+			"project-management",
+			"security",
+			"setup",
+			"simulation",
+			"svelte",
+			"sync",
+			"team",
+			"testing",
+			"utilities",
+		}
+
+		for _, category := range categories {
+			githubPath = fmt.Sprintf("components/commands/%s/%s.md", category, commandName)
+			content, err = fileops.DownloadFileFromGitHub(ci.config, githubPath, 0)
+			if err == nil {
+				goto Success
+			}
+		}
+	}
+
+	// All attempts failed
+	return fmt.Errorf("command '%s' not found (tried multiple paths)", commandName)
+
+Success:
+	// Display preview
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("📄 Command: %s\n", commandName)
+	fmt.Printf("🔗 Source: %s\n", githubPath)
+	fmt.Printf("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n")
+	fmt.Println(content)
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+	return nil
+}
+
+// PreviewMultipleCommands previews multiple commands
+func (ci *CommandInstaller) PreviewMultipleCommands(commandNames []string) error {
+	successCount := 0
+	failedCount := 0
+
+	for _, commandName := range commandNames {
+		if err := ci.PreviewCommand(commandName); err != nil {
+			fmt.Printf("❌ Failed to preview command '%s': %v\n", commandName, err)
+			failedCount++
+		} else {
+			successCount++
+		}
+	}
+
+	if successCount == 0 {
+		return fmt.Errorf("all command previews failed")
+	}
+
+	return nil
+}
