@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/davila7/go-claude-templates/internal/cmd"
+	"github.com/schlunsen/claude-control-terminal/internal/cmd"
 )
 
 func main() {

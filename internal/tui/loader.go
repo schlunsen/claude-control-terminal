@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/davila7/go-claude-templates/internal/fileops"
+	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 )
 
 // ComponentLoader handles loading component lists from GitHub
