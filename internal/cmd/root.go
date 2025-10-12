@@ -8,6 +8,7 @@ import (
 
 	"github.com/davila7/go-claude-templates/internal/components"
 	"github.com/davila7/go-claude-templates/internal/server"
+	"github.com/davila7/go-claude-templates/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -78,13 +79,12 @@ var rootCmd = &cobra.Command{
 			agent == "" && command == "" && mcp == "" && setting == "" && hook == "" &&
 			workflow == "" && !studio && sandbox == ""
 
-		if isInteractive && !yesFlag {
-			ShowBanner()
-		}
-
-		// If no flags provided, show help
+		// If no flags provided, launch TUI
 		if isInteractive {
-			cmd.Help()
+			if err := tui.Launch(directory); err != nil {
+				ShowError(fmt.Sprintf("Failed to launch TUI: %v", err))
+				os.Exit(1)
+			}
 			return
 		}
 
