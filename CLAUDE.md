@@ -27,7 +27,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ### Project Structure
 
-```
+```text
 go-claude-templates/
 ├── cmd/cct/                    # CLI entry point
 │   └── main.go                 # Application bootstrap
@@ -413,7 +413,7 @@ go clean -cache -modcache -i -r
 
 ### Commit Message Format
 
-```
+```text
 <type>: <subject>
 
 <body>
@@ -451,18 +451,18 @@ go build -ldflags="-s -w" -o cct ./cmd/cct
 make build-all
 
 # Outputs:
-# dist/cct-linux-amd64
-# dist/cct-linux-arm64
-# dist/cct-darwin-amd64
-# dist/cct-darwin-arm64
-# dist/cct-windows-amd64.exe
+# - dist/cct-linux-amd64
+# - dist/cct-linux-arm64
+# - dist/cct-darwin-amd64
+# - dist/cct-darwin-arm64
+# - dist/cct-windows-amd64.exe
 ```
 
 ### Installation Methods
 
 ```bash
 # Direct binary
-curl -L https://github.com/.../cct-<platform> -o cct
+curl -L https://github.com/schlunsen/claude-templates-go/releases/latest/download/cct-<platform> -o cct
 chmod +x cct
 sudo mv cct /usr/local/bin/
 
@@ -470,7 +470,7 @@ sudo mv cct /usr/local/bin/
 go install github.com/davila7/go-claude-templates/cmd/cct@latest
 
 # From source
-git clone https://github.com/davila7/go-claude-templates
+git clone https://github.com/schlunsen/claude-templates-go
 cd go-claude-templates
 make install
 ```
