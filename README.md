@@ -9,6 +9,15 @@ A high-performance Go port of [claude-code-templates](https://github.com/davila7
 
 **Performance**: 50x faster startup, 5x lower memory usage, single 15MB binary with no dependencies.
 
+<p align="center">
+  <img src="docs/images/cct-tui-main.png" alt="CCT TUI Main Screen" width="600">
+</p>
+
+<p align="center">
+  <img src="docs/images/cct-tui-agents.png" alt="Browse Agents" width="600">
+  <img src="docs/images/cct-tui-mcps.png" alt="Browse MCPs" width="600">
+</p>
+
 ## Table of Contents
 
 - [Features](#features)
@@ -79,12 +88,15 @@ cct
 cct -d ~/my-project
 ```
 
+
+
 **Features**:
 - Browse 600+ agents, 200+ commands, and MCPs
 - Real-time search and filtering
 - Multi-select with checkboxes
 - Modern, hip terminal aesthetic
 - Keyboard-driven interface
+- Launch Claude CLI directly from TUI
 
 [View TUI Guide](docs/TUI_GUIDE.md) | [View Screenshots](docs/TUI_SCREENS.md)
 
