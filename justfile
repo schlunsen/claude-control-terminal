@@ -119,8 +119,10 @@ release version:
     \
     if [[ "{{version}}" != v* ]]; then \
         VERSION="v{{version}}"; \
+        VERSION_NUM="{{version}}"; \
     else \
         VERSION="{{version}}"; \
+        VERSION_NUM="${VERSION#v}"; \
     fi; \
     \
     if [[ -n $(git status -s) ]]; then \
@@ -128,9 +130,11 @@ release version:
         exit 1; \
     fi; \
     \
-    echo "📝 Creating tag $VERSION..."; \
-    git tag -a "$VERSION" -m "Release $VERSION"; \
-    git push origin "$VERSION"; \
+    TODAY=$(date +%Y-%m-%d); \
+    echo "🤖 Starting Claude agent to update version and create git commit..."; \
+    claude --auto-edit "Please perform the following release tasks for version $VERSION_NUM: 1) Update the version constant in internal/cmd/root.go to $VERSION_NUM. 2) Update CHANGELOG.md by moving content from [Unreleased] section to a new [$VERSION_NUM] section with today's date ($TODAY), and ensure the version comparison links at the bottom are updated. 3) Create a git commit with message 'chore: bump version to $VERSION_NUM'. 4) Create a git tag $VERSION. 5) Push both the commit and tag to origin."; \
+    \
+    echo "✅ Version updated and tagged by Claude agent"; \
     \
     echo "⏳ Waiting 60 seconds for GitHub Actions to build binaries..."; \
     sleep 60; \
