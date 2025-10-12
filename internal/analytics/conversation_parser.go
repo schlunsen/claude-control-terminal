@@ -102,9 +102,10 @@ func (cp *ConversationParser) ParseConversationFile(filePath string) error {
 			}
 		}
 
-		// Process user messages for tool_result
+		// Process user messages for tool_result AND text messages
 		if msg.Type == "user" && msg.Message.Role == "user" {
 			for _, content := range msg.Message.Content {
+				// Handle tool results
 				if content.Type == "tool_result" && content.ToolUseID != "" {
 					if tool, exists := toolMap[content.ToolUseID]; exists {
 						// Convert result content to string
@@ -130,6 +131,24 @@ func (cp *ConversationParser) ParseConversationFile(filePath string) error {
 
 						// Remove from map to free memory
 						delete(toolMap, content.ToolUseID)
+					}
+				}
+
+				// Handle user text messages
+				if content.Type == "text" && content.Text != "" {
+					timestamp, _ := time.Parse(time.RFC3339, msg.Timestamp)
+					userMsg := &database.UserMessage{
+						ConversationID:   msg.SessionID,
+						Message:          content.Text,
+						WorkingDirectory: msg.CWD,
+						GitBranch:        msg.GitBranch,
+						MessageLength:    len(content.Text),
+						SubmittedAt:      timestamp,
+					}
+
+					if err := cp.repo.RecordUserMessage(userMsg); err != nil {
+						// Log error but continue processing
+						fmt.Printf("Warning: failed to record user message: %v\n", err)
 					}
 				}
 			}
