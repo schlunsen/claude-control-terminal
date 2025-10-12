@@ -214,6 +214,12 @@ Success:
 		return fmt.Errorf("failed to write MCP file: %w", err)
 	}
 
+	// Register the MCP servers in .mcp.json
+	_, err = fileops.MergeMCPServersFromJSON(fileops.MCPScopeProject, targetDir, content)
+	if err != nil {
+		return fmt.Errorf("failed to register MCP in .mcp.json: %w", err)
+	}
+
 	return nil
 }
 
