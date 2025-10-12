@@ -85,13 +85,13 @@ func (s *Server) Setup() error {
 	s.wsHub = ws.NewHub()
 	go s.wsHub.Run()
 
-	// Parse existing conversations on startup
+	// Parse existing conversations on startup (synchronously to ensure data loads before server starts)
 	if !s.quiet {
 		fmt.Println("📝 Parsing conversation history...")
 	}
-	go s.parseConversations()
+	s.parseConversations()
 
-	// Start periodic conversation parsing
+	// Start periodic conversation parsing (asynchronously)
 	go s.periodicConversationParsing()
 
 	// Setup API routes
