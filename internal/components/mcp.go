@@ -2,22 +2,36 @@ package components
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/davila7/go-claude-templates/internal/fileops"
 )
 
+// ParseMCPScope converts a string scope to an MCPScope type
+func ParseMCPScope(scopeStr string) fileops.MCPScope {
+	switch strings.ToLower(strings.TrimSpace(scopeStr)) {
+	case "user", "global":
+		return fileops.MCPScopeUser
+	case "project", "local", "":
+		return fileops.MCPScopeProject
+	default:
+		// Default to project scope
+		return fileops.MCPScopeProject
+	}
+}
+
 // MCPInstaller handles MCP component installation
 type MCPInstaller struct {
 	config *fileops.GitHubConfig
+	scope  fileops.MCPScope
 }
 
 // NewMCPInstaller creates a new MCP installer
-func NewMCPInstaller() *MCPInstaller {
+func NewMCPInstaller(scope fileops.MCPScope) *MCPInstaller {
 	return &MCPInstaller{
 		config: fileops.DefaultGitHubConfig(),
+		scope:  scope,
 	}
 }
 
@@ -88,21 +102,27 @@ Success:
 		fmt.Printf("✅ Found MCP at: %s\n", githubPath)
 	}
 
-	// MCP files go to .claude/mcp/ directory
-	mcpDir := filepath.Join(targetDir, ".claude", "mcp")
-	if err := os.MkdirAll(mcpDir, 0755); err != nil {
-		return fmt.Errorf("failed to create MCP directory: %w", err)
-	}
-
-	targetFile := filepath.Join(mcpDir, mcpName+".json")
-	if err := os.WriteFile(targetFile, []byte(content), 0644); err != nil {
-		return fmt.Errorf("failed to write MCP file: %w", err)
+	// Parse the MCP JSON and merge into the appropriate config file
+	serverNames, err := fileops.MergeMCPServersFromJSON(mi.scope, targetDir, content)
+	if err != nil {
+		return fmt.Errorf("failed to register MCP: %w", err)
 	}
 
 	if !silent {
-		relPath, _ := filepath.Rel(targetDir, targetFile)
+		configPath := fileops.GetMCPConfigPath(mi.scope, targetDir)
+		relPath, _ := filepath.Rel(targetDir, configPath)
+
 		fmt.Printf("✅ MCP '%s' installed successfully!\n", mcpName)
-		fmt.Printf("📁 Installed to: %s\n", relPath)
+		for _, serverName := range serverNames {
+			fmt.Printf("   🔌 Registered server: %s\n", serverName)
+		}
+
+		scopeName := "project"
+		if mi.scope == fileops.MCPScopeUser {
+			scopeName = "user (global)"
+		}
+		fmt.Printf("📁 Scope: %s\n", scopeName)
+		fmt.Printf("📄 Config: %s\n", relPath)
 	}
 
 	return nil
