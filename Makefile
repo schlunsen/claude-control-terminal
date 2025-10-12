@@ -15,6 +15,10 @@ build:
 run:
 	@go run $(BUILD_DIR)/main.go
 
+# Run TUI (interactive mode - default)
+run-tui:
+	@go run $(BUILD_DIR)/main.go
+
 # Run with specific flags
 run-analytics:
 	@go run $(BUILD_DIR)/main.go --analytics
@@ -87,7 +91,8 @@ deps:
 help:
 	@echo "Available commands:"
 	@echo "  make build          - Build the binary"
-	@echo "  make run            - Run the application"
+	@echo "  make run            - Run the application (launches TUI)"
+	@echo "  make run-tui        - Run the interactive TUI"
 	@echo "  make run-analytics  - Run with --analytics flag"
 	@echo "  make run-agents     - Run with --agents flag"
 	@echo "  make run-chats      - Run with --chats flag"
