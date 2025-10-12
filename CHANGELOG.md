@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.9] - 2025-10-13
+
+### Added
+- Memory limits to conversation parser to prevent excessive memory usage
+- HTTP timeout protection to GitHub downloads for improved reliability
+- Graceful shutdown support to analytics server
+
+### Fixed
+- WebSocket hub deadlock issue with proper graceful shutdown
+- File watcher resource leaks and race conditions
+- Command injection vulnerability in process detector
+- Performance issue by replacing bubble sort with stdlib sort.Slice
+
+### Security
+- Enhanced process detector security to prevent command injection attacks
+
 ## [0.2.8] - 2025-10-12
 
 ### Fixed
@@ -267,7 +283,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.8...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.9...HEAD
+[0.2.9]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.5...v0.2.6
