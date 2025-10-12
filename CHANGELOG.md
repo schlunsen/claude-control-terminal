@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] - 2025-10-12
+
+### Added
+- SQLite database for command history tracking
+- Automatic command history recording via conversation parsing
+- Command history UI with search and filtering capabilities
+- User message interception with wrapper script
+- User message recording in database
+
+### Security
+- Added strict file permissions for database files
+
+### Changed
+- Simplified wrapper script implementation
+- Enhanced command history tracking with persistent storage
+
 ## [0.2.5] - 2025-10-12
 
 ### Added
@@ -239,7 +255,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.2...v0.2.3
