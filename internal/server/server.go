@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -14,7 +15,8 @@ import (
 	"github.com/gofiber/websocket/v2"
 )
 
-// Server wraps the Fiber app and analytics components
+// Server wraps the Fiber app and analytics components.
+// It provides a complete analytics backend with WebSocket support for real-time updates.
 type Server struct {
 	app                  *fiber.App
 	conversationAnalyzer *analytics.ConversationAnalyzer
@@ -31,6 +33,8 @@ type Server struct {
 	port                 int
 	quiet                bool // Suppress output when running in TUI
 	lastParsedTime       time.Time
+	parsingCancel        context.CancelFunc
+	parsingDone          chan struct{}
 }
 
 // NewServer creates a new Fiber server instance
@@ -92,7 +96,10 @@ func (s *Server) Setup() error {
 	s.parseConversations()
 
 	// Start periodic conversation parsing (asynchronously)
-	go s.periodicConversationParsing()
+	ctx, cancel := context.WithCancel(context.Background())
+	s.parsingCancel = cancel
+	s.parsingDone = make(chan struct{})
+	go s.periodicConversationParsing(ctx)
 
 	// Setup API routes
 	s.setupRoutes()
@@ -414,20 +421,50 @@ func (s *Server) Start() error {
 	return s.app.Listen(fmt.Sprintf(":%d", s.port))
 }
 
-// Shutdown gracefully shuts down the server
+// Shutdown gracefully shuts down the server and all its components.
+// It stops the file watcher, parsing goroutine, WebSocket hub, and closes the database.
 func (s *Server) Shutdown() error {
 	if !s.quiet {
 		fmt.Println("🛑 Shutting down server...")
 	}
 
+	// Stop periodic conversation parsing
+	if s.parsingCancel != nil {
+		s.parsingCancel()
+	}
+	if s.parsingDone != nil {
+		select {
+		case <-s.parsingDone:
+			// Parsing goroutine exited cleanly
+		case <-time.After(3 * time.Second):
+			if !s.quiet {
+				fmt.Println("⚠️  Warning: parsing goroutine did not exit cleanly")
+			}
+		}
+	}
+
+	// Stop file watcher
 	if s.fileWatcher != nil {
-		s.fileWatcher.Stop()
+		if err := s.fileWatcher.Stop(); err != nil && !s.quiet {
+			fmt.Printf("⚠️  Error stopping file watcher: %v\n", err)
+		}
 	}
 
+	// Shutdown WebSocket hub
+	if s.wsHub != nil {
+		if err := s.wsHub.Shutdown(); err != nil && !s.quiet {
+			fmt.Printf("⚠️  Error shutting down WebSocket hub: %v\n", err)
+		}
+	}
+
+	// Close database
 	if s.db != nil {
-		s.db.Close()
+		if err := s.db.Close(); err != nil && !s.quiet {
+			fmt.Printf("⚠️  Error closing database: %v\n", err)
+		}
 	}
 
+	// Shutdown Fiber app
 	return s.app.Shutdown()
 }
 
@@ -530,12 +567,20 @@ func (s *Server) parseConversations() {
 	s.wsHub.Broadcast([]byte(`{"event":"history_updated"}`))
 }
 
-// periodicConversationParsing periodically parses new conversations
-func (s *Server) periodicConversationParsing() {
+// periodicConversationParsing periodically parses new conversations every 5 minutes.
+// It runs until the context is cancelled via Shutdown().
+func (s *Server) periodicConversationParsing(ctx context.Context) {
+	defer close(s.parsingDone)
+
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		s.parseConversations()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.parseConversations()
+		}
 	}
 }
