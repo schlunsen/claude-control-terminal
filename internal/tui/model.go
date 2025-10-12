@@ -389,14 +389,31 @@ func (m Model) viewComponentListScreen() string {
 	if len(m.filteredIndices) == 0 {
 		b.WriteString(StatusInfoStyle.Render("No components found") + "\n")
 	} else {
-		// Show a window of items
-		start := m.cursor - 5
+		// Calculate how many items we can show based on terminal height
+		// Reserve space for: title (2 lines), search (2 lines), status (2 lines), help (3 lines), padding (3 lines)
+		reservedLines := 12
+		availableLines := m.height - reservedLines
+		if availableLines < 5 {
+			availableLines = 5 // Minimum 5 items
+		}
+		if availableLines > 20 {
+			availableLines = 20 // Maximum 20 items for performance
+		}
+
+		// Center the cursor in the viewport
+		halfView := availableLines / 2
+		start := m.cursor - halfView
 		if start < 0 {
 			start = 0
 		}
-		end := start + 15
+		end := start + availableLines
 		if end > len(m.filteredIndices) {
 			end = len(m.filteredIndices)
+			// Adjust start to show full viewport if possible
+			start = end - availableLines
+			if start < 0 {
+				start = 0
+			}
 		}
 
 		for i := start; i < end; i++ {
@@ -434,10 +451,16 @@ func (m Model) viewComponentListScreen() string {
 	statusMsg := fmt.Sprintf("Selected: %d/%d", selectedCount, len(m.components))
 	b.WriteString(StatusBarStyle.Render(statusMsg) + "\n\n")
 
-	// Help
-	b.WriteString(HelpStyle.Render(
-		"↑/↓: Navigate • PgUp/PgDn: Page • Space: Toggle • A: Select All • a: Deselect All\n" +
-			"/: Search • R: Refresh • Enter: Install • Esc: Back"))
+	// Help - keep compact for small terminals
+	if m.height < 20 {
+		// Compact help for small terminals
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Space: Toggle • Enter: Install • Esc: Back"))
+	} else {
+		// Full help for larger terminals
+		b.WriteString(HelpStyle.Render(
+			"↑/↓: Navigate • PgUp/PgDn: Page • Space: Toggle • A: Select All • a: Deselect All\n" +
+				"/: Search • R: Refresh • Enter: Install • Esc: Back"))
+	}
 
 	return BoxStyle.Width(m.width - 4).Render(b.String())
 }
