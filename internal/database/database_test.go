@@ -32,8 +32,18 @@ func TestDatabaseInitialization(t *testing.T) {
 
 	// Verify database file exists
 	dbPath := filepath.Join(tempDir, "cct_history.db")
-	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+	fileInfo, err := os.Stat(dbPath)
+	if os.IsNotExist(err) {
 		t.Errorf("Database file was not created")
+	}
+
+	// Verify strict permissions (0600 - user read/write only)
+	if fileInfo != nil {
+		mode := fileInfo.Mode()
+		expectedMode := os.FileMode(0600)
+		if mode.Perm() != expectedMode {
+			t.Errorf("Expected file permissions %v, got %v", expectedMode, mode.Perm())
+		}
 	}
 
 	// Get stats

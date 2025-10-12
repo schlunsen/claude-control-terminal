@@ -46,9 +46,30 @@ func Initialize(dataDir string) (*Database, error) {
 
 	dbPath := filepath.Join(dataDir, "cct_history.db")
 
+	// Check if database file exists before opening
+	dbExists := false
+	if _, err := os.Stat(dbPath); err == nil {
+		dbExists = true
+	}
+
 	db, err := sql.Open("sqlite3", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Ping to force database file creation
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// Set strict permissions on database file (0600 - user read/write only)
+	// This ensures sensitive command history is only readable by the user
+	if !dbExists {
+		if err := os.Chmod(dbPath, 0600); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("failed to set database file permissions: %w", err)
+		}
 	}
 
 	// Enable foreign keys and set pragmas for performance
@@ -73,6 +94,18 @@ func Initialize(dataDir string) (*Database, error) {
 		initErr = fmt.Errorf("failed to execute schema: %w", err)
 		db.Close()
 		return nil, initErr
+	}
+
+	// Set permissions on WAL and SHM files created by SQLite (WAL mode)
+	// These files may be created after opening the database
+	walPath := dbPath + "-wal"
+	shmPath := dbPath + "-shm"
+
+	if _, err := os.Stat(walPath); err == nil {
+		os.Chmod(walPath, 0600)
+	}
+	if _, err := os.Stat(shmPath); err == nil {
+		os.Chmod(shmPath, 0600)
 	}
 
 	instance = &Database{
