@@ -319,6 +319,164 @@
                 grid-template-columns: repeat(2, 1fr);
             }
         }
+
+        /* Command History Styles */
+        .search-box {
+            margin-bottom: 24px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #666;
+        }
+
+        .filter-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #e0e0e0;
+            padding-bottom: 0;
+        }
+
+        .filter-tab {
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #666;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .filter-tab:hover {
+            color: #1a1a1a;
+        }
+
+        .filter-tab.active {
+            color: #1a1a1a;
+            border-bottom-color: #1a1a1a;
+        }
+
+        .command-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .command-item {
+            padding: 16px;
+            background: #fafafa;
+            border: 1px solid #e8e8e8;
+            border-radius: 6px;
+            transition: border-color 0.2s;
+        }
+
+        .command-item:hover {
+            border-color: #d0d0d0;
+        }
+
+        .command-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+            gap: 12px;
+        }
+
+        .command-tool {
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            font-size: 0.875rem;
+            color: #1a1a1a;
+            font-weight: 500;
+        }
+
+        .command-time {
+            font-size: 0.8125rem;
+            color: #999;
+            white-space: nowrap;
+        }
+
+        .command-text {
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            font-size: 0.8125rem;
+            color: #1a1a1a;
+            padding: 8px 12px;
+            background: #fff;
+            border: 1px solid #e8e8e8;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            word-break: break-all;
+            white-space: pre-wrap;
+        }
+
+        .command-meta {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            font-size: 0.8125rem;
+            color: #666;
+        }
+
+        .command-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .command-meta-label {
+            color: #999;
+        }
+
+        .command-branch {
+            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+            color: #0066cc;
+        }
+
+        .command-success {
+            color: #2e7d32;
+        }
+
+        .command-error {
+            color: #c53030;
+        }
+
+        .load-more {
+            text-align: center;
+            padding: 16px;
+        }
+
+        .load-more-btn {
+            padding: 10px 20px;
+            background: #f7fafc;
+            color: #4a5568;
+            border: 1px solid #cbd5e0;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .load-more-btn:hover {
+            background: #edf2f7;
+            border-color: #a0aec0;
+        }
     </style>
 </head>
 <body>
@@ -380,6 +538,28 @@
         </div>
 
         <div class="section">
+            <h2 class="section-title">Command History</h2>
+
+            <div class="search-box">
+                <input type="text" id="search-input" class="search-input" placeholder="Search commands..." oninput="searchCommands()">
+            </div>
+
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-type="all" onclick="filterCommands('all')">All</button>
+                <button class="filter-tab" data-type="shell" onclick="filterCommands('shell')">Shell</button>
+                <button class="filter-tab" data-type="claude" onclick="filterCommands('claude')">Claude</button>
+            </div>
+
+            <div class="command-list" id="command-history">
+                <div class="empty-state">No commands in history</div>
+            </div>
+
+            <div class="load-more" id="load-more" style="display: none;">
+                <button class="load-more-btn" onclick="loadMoreCommands()">Load More</button>
+            </div>
+        </div>
+
+        <div class="section">
             <h2 class="section-title">API Endpoints</h2>
             <div class="endpoints">
                 <div class="endpoint">GET <code>/api/data</code> — Complete analytics data</div>
@@ -387,6 +567,9 @@
                 <div class="endpoint">GET <code>/api/processes</code> — Running Claude processes</div>
                 <div class="endpoint">GET <code>/api/shells</code> — Background bash shells</div>
                 <div class="endpoint">GET <code>/api/stats</code> — Statistics summary</div>
+                <div class="endpoint">GET <code>/api/history/shell</code> — Shell command history</div>
+                <div class="endpoint">GET <code>/api/history/claude</code> — Claude command history</div>
+                <div class="endpoint">GET <code>/api/history/stats</code> — Command statistics</div>
                 <div class="endpoint">GET <code>/ws</code> — WebSocket real-time updates</div>
             </div>
         </div>
@@ -624,15 +807,213 @@
             };
         }
 
+        // Command History State
+        let allCommands = [];
+        let filteredCommands = [];
+        let currentFilter = 'all';
+        let currentOffset = 0;
+        const COMMANDS_PER_PAGE = 50;
+
+        // Load command history
+        async function loadCommandHistory() {
+            try {
+                const [shellResponse, claudeResponse] = await Promise.all([
+                    fetch(`/api/history/shell?limit=${COMMANDS_PER_PAGE}&offset=0`),
+                    fetch(`/api/history/claude?limit=${COMMANDS_PER_PAGE}&offset=0`)
+                ]);
+
+                const shellData = await shellResponse.json();
+                const claudeData = await claudeResponse.json();
+
+                const shellCommands = (shellData.commands || []).map(cmd => ({
+                    ...cmd,
+                    type: 'shell',
+                    displayCommand: cmd.command,
+                    tool_name: 'Bash'
+                }));
+
+                const claudeCommands = (claudeData.commands || []).map(cmd => ({
+                    ...cmd,
+                    type: 'claude',
+                    displayCommand: cmd.tool_name
+                }));
+
+                allCommands = [...shellCommands, ...claudeCommands]
+                    .sort((a, b) => new Date(b.executed_at) - new Date(a.executed_at));
+
+                currentOffset = 0;
+                applyFiltersAndSearch();
+            } catch (error) {
+                console.error('Error loading command history:', error);
+                document.getElementById('command-history').innerHTML =
+                    '<div class="empty-state">Error loading command history</div>';
+            }
+        }
+
+        // Load more commands
+        async function loadMoreCommands() {
+            currentOffset += COMMANDS_PER_PAGE;
+
+            try {
+                const [shellResponse, claudeResponse] = await Promise.all([
+                    fetch(`/api/history/shell?limit=${COMMANDS_PER_PAGE}&offset=${currentOffset}`),
+                    fetch(`/api/history/claude?limit=${COMMANDS_PER_PAGE}&offset=${currentOffset}`)
+                ]);
+
+                const shellData = await shellResponse.json();
+                const claudeData = await claudeResponse.json();
+
+                const shellCommands = (shellData.commands || []).map(cmd => ({
+                    ...cmd,
+                    type: 'shell',
+                    displayCommand: cmd.command,
+                    tool_name: 'Bash'
+                }));
+
+                const claudeCommands = (claudeData.commands || []).map(cmd => ({
+                    ...cmd,
+                    type: 'claude',
+                    displayCommand: cmd.tool_name
+                }));
+
+                const newCommands = [...shellCommands, ...claudeCommands]
+                    .sort((a, b) => new Date(b.executed_at) - new Date(a.executed_at));
+
+                allCommands = [...allCommands, ...newCommands];
+                applyFiltersAndSearch();
+            } catch (error) {
+                console.error('Error loading more commands:', error);
+            }
+        }
+
+        // Filter commands by type
+        function filterCommands(type) {
+            currentFilter = type;
+
+            // Update active tab
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`[data-type="${type}"]`).classList.add('active');
+
+            applyFiltersAndSearch();
+        }
+
+        // Search commands
+        function searchCommands() {
+            applyFiltersAndSearch();
+        }
+
+        // Apply filters and search
+        function applyFiltersAndSearch() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+
+            filteredCommands = allCommands.filter(cmd => {
+                // Apply type filter
+                if (currentFilter !== 'all' && cmd.type !== currentFilter) {
+                    return false;
+                }
+
+                // Apply search filter
+                if (searchTerm) {
+                    const searchableText = [
+                        cmd.displayCommand,
+                        cmd.command || '',
+                        cmd.tool_name || '',
+                        cmd.git_branch || '',
+                        cmd.working_directory || ''
+                    ].join(' ').toLowerCase();
+
+                    return searchableText.includes(searchTerm);
+                }
+
+                return true;
+            });
+
+            displayCommands();
+        }
+
+        // Display commands
+        function displayCommands() {
+            const container = document.getElementById('command-history');
+            const loadMore = document.getElementById('load-more');
+
+            if (filteredCommands.length === 0) {
+                container.innerHTML = '<div class="empty-state">No commands found</div>';
+                loadMore.style.display = 'none';
+                return;
+            }
+
+            container.innerHTML = filteredCommands.map(cmd => {
+                const time = new Date(cmd.executed_at).toLocaleString();
+                const isShell = cmd.type === 'shell';
+
+                let metaItems = [];
+
+                if (cmd.git_branch) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Branch:</span>
+                        <span class="command-branch">${escapeHtml(cmd.git_branch)}</span>
+                    </div>`);
+                }
+
+                if (cmd.working_directory) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Dir:</span>
+                        <span>${escapeHtml(cmd.working_directory)}</span>
+                    </div>`);
+                }
+
+                if (isShell && cmd.exit_code !== null && cmd.exit_code !== undefined) {
+                    const exitClass = cmd.exit_code === 0 ? 'command-success' : 'command-error';
+                    metaItems.push(`<div class="command-meta-item ${exitClass}">
+                        Exit: ${cmd.exit_code}
+                    </div>`);
+                }
+
+                if (!isShell) {
+                    const statusClass = cmd.success ? 'command-success' : 'command-error';
+                    const statusText = cmd.success ? 'Success' : 'Error';
+                    metaItems.push(`<div class="command-meta-item ${statusClass}">
+                        ${statusText}
+                    </div>`);
+                }
+
+                if (cmd.duration_ms) {
+                    metaItems.push(`<div class="command-meta-item">
+                        ${cmd.duration_ms}ms
+                    </div>`);
+                }
+
+                return `
+                    <div class="command-item">
+                        <div class="command-header">
+                            <div class="command-tool">${escapeHtml(cmd.tool_name || cmd.displayCommand)}</div>
+                            <div class="command-time">${time}</div>
+                        </div>
+                        <div class="command-text">${escapeHtml(isShell ? cmd.command : cmd.displayCommand)}</div>
+                        <div class="command-meta">
+                            ${metaItems.join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Show load more button if there might be more commands
+            loadMore.style.display = allCommands.length >= COMMANDS_PER_PAGE ? 'block' : 'none';
+        }
+
         // Initialize
         loadData();
         loadBackgroundShells();
+        loadCommandHistory();
         connectWebSocket();
 
         // Refresh every 30 seconds
         setInterval(() => {
             loadData();
             loadBackgroundShells();
+            loadCommandHistory();
         }, 30000);
     </script>
 </body>
