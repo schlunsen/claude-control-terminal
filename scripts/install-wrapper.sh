@@ -52,52 +52,9 @@ WRAPPER_SCRIPT="$WRAPPER_DIR/claude"
 cat > "$WRAPPER_SCRIPT" << 'WRAPPER_EOF'
 #!/bin/bash
 # CCT Wrapper for Claude Code
-# Intercepts claude commands to record user input
-
-# Get the directory of this script
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Path to original claude
 CLAUDE_ORIGINAL="$HOME/.cct/claude.original"
-
-# Path to cct (for recording)
-CCT_BIN=$(which cct 2>/dev/null || echo "cct")
-
-# Get current directory and git branch
-CURRENT_DIR=$(pwd)
-GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-
-# Record user input if provided
-if [ $# -gt 0 ]; then
-    # Extract message from arguments
-    MESSAGE=""
-
-    # Check for message flag
-    for i in "${!@}"; do
-        arg="${!i}"
-        if [ "$arg" = "-m" ] || [ "$arg" = "--message" ]; then
-            next_i=$((i+1))
-            MESSAGE="${!next_i}"
-            break
-        fi
-    done
-
-    # If no flag, assume first non-flag argument is the message
-    if [ -z "$MESSAGE" ]; then
-        for arg in "$@"; do
-            if [[ ! "$arg" =~ ^- ]]; then
-                MESSAGE="$arg"
-                break
-            fi
-        done
-    fi
-
-    # Record message if found
-    if [ -n "$MESSAGE" ] && [ -x "$CCT_BIN" ]; then
-        # Record asynchronously to not block
-        ("$CCT_BIN" --record-message "$MESSAGE" --cwd "$CURRENT_DIR" --branch "$GIT_BRANCH" &>/dev/null &)
-    fi
-fi
 
 # Execute original claude with all arguments
 exec "$CLAUDE_ORIGINAL" "$@"
@@ -119,9 +76,6 @@ echo -e "  ${GREEN}source ~/.bashrc${NC}  # or source ~/.zshrc"
 echo ""
 echo -e "To verify:"
 echo -e "  ${GREEN}which claude${NC} should show: $WRAPPER_SCRIPT"
-echo ""
-echo -e "${YELLOW}Note:${NC} User messages will be recorded to the CCT database"
-echo -e "Run ${GREEN}cct --analytics${NC} to view the analytics dashboard"
 echo ""
 
 # Offer to update shell config automatically
