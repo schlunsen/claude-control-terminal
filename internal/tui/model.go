@@ -56,11 +56,12 @@ type Model struct {
 	previewComponent ComponentItem
 
 	// UI state
-	spinner     spinner.Model
-	width       int
-	height      int
-	quitting    bool
-	currentTheme int // 0=orange, 1=green, 2=cyan, 3=purple
+	spinner            spinner.Model
+	width              int
+	height             int
+	quitting           bool
+	currentTheme       int  // 0=orange, 1=green, 2=cyan, 3=purple
+	shouldLaunchClaude bool // Signal to launch Claude after TUI exits
 }
 
 // NewModel creates a new TUI model
@@ -74,9 +75,16 @@ func NewModel(targetDir string) Model {
 	ti.CharLimit = 50
 	ti.Width = 40
 
+	componentTypes := []string{"Agents", "Commands", "MCPs"}
+
+	// Add "Launch Claude" option if Claude is available
+	if IsClaudeAvailable() {
+		componentTypes = append(componentTypes, "Launch Claude")
+	}
+
 	return Model{
 		screen:         ScreenMain,
-		componentTypes: []string{"Agents", "Commands", "MCPs"},
+		componentTypes: componentTypes,
 		selectedType:   0,
 		targetDir:      targetDir,
 		spinner:        s,
@@ -173,6 +181,13 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedType++
 		}
 	case "enter":
+		// Check if "Launch Claude" was selected
+		if m.componentTypes[m.selectedType] == "Launch Claude" {
+			m.shouldLaunchClaude = true
+			m.quitting = true
+			return m, tea.Quit
+		}
+
 		// Load components for selected type
 		m.screen = ScreenComponentList
 		m.loading = true
@@ -366,7 +381,15 @@ func (m Model) handleConfirmScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleCompleteScreen handles input on the complete screen
 func (m Model) handleCompleteScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "enter", "q", "esc":
+	case "enter", "q":
+		m.quitting = true
+		return m, tea.Quit
+	case "c":
+		// Launch Claude
+		if !IsClaudeAvailable() {
+			return m, nil
+		}
+		m.shouldLaunchClaude = true
 		m.quitting = true
 		return m, tea.Quit
 	case "r":
@@ -377,6 +400,9 @@ func (m Model) handleCompleteScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.installFailed = nil
 		m.installError = nil
 		return m, nil
+	case "esc":
+		m.quitting = true
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -680,7 +706,12 @@ func (m Model) viewCompleteScreen() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(HelpStyle.Render("R: Return to Main • Q/Enter: Quit"))
+	// Add Launch Claude option if available
+	if IsClaudeAvailable() {
+		b.WriteString(HelpStyle.Render("C: Launch Claude • R: Return to Main • Q/Enter: Quit"))
+	} else {
+		b.WriteString(HelpStyle.Render("R: Return to Main • Q/Enter: Quit"))
+	}
 
 	return BoxStyle.Render(b.String())
 }
@@ -698,9 +729,10 @@ func (m Model) getComponentType() string {
 
 func (m Model) getIconForType(typeName string) string {
 	icons := map[string]string{
-		"Agents":   "🤖",
-		"Commands": "⚡",
-		"MCPs":     "🔌",
+		"Agents":        "🤖",
+		"Commands":      "⚡",
+		"MCPs":          "🔌",
+		"Launch Claude": "🚀",
 	}
 	if icon, ok := icons[typeName]; ok {
 		return icon
