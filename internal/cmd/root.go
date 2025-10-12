@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -541,27 +540,7 @@ func handleDockerCommands(targetDir string) {
 			return
 		}
 
-		// Build the cct binary first
-		ShowInfo("Building cct binary for Docker image...")
-		buildCmd := exec.Command("make", "build")
-		buildCmd.Dir = targetDir
-		buildCmd.Stdout = os.Stdout
-		buildCmd.Stderr = os.Stderr
-
-		if err := buildCmd.Run(); err != nil {
-			ShowError(fmt.Sprintf("Failed to build cct binary: %v", err))
-			ShowInfo("Please ensure you have Go installed and run 'make build' manually")
-			return
-		}
-
-		// Check if binary exists in target directory
-		binaryPath := filepath.Join(targetDir, "cct")
-		if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
-			ShowError("cct binary not found after build. Please run 'make build' manually")
-			return
-		}
-
-		ShowSuccess("cct binary built successfully!")
+		ShowInfo("Building Docker image (will download latest CCT release from GitHub)...")
 
 		if err := dm.BuildImage(dockerfilePath); err != nil {
 			ShowError(fmt.Sprintf("Failed to build Docker image: %v", err))
