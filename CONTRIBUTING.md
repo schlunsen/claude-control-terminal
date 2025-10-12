@@ -73,7 +73,7 @@ We welcome pull requests for:
 
 ```bash
 # Fork the repository on GitHub first, then:
-git clone https://github.com/YOUR_USERNAME/claude-templates-go
+git clone https://github.com/YOUR_USERNAME/claude-control-terminal
 cd go-claude-templates
 
 # Install dependencies

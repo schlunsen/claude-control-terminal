@@ -4,10 +4,12 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Project Overview
 
-**go-claude-templates** is a high-performance Go port of the Node.js claude-code-templates CLI tool. It provides component templates, analytics dashboards, and real-time monitoring for Claude Code projects with superior performance and easy deployment.
+**claude-control-terminal** is a high-performance Go port of the Node.js claude-code-templates CLI tool. It provides component templates, analytics dashboards, and real-time monitoring for Claude Code projects with superior performance and easy deployment.
 
 ### Key Features
+- 🎮 **Control Center**: Comprehensive wrapper for Claude Code environments
 - 🚀 **CLI Tool**: Component installation (agents, commands, MCPs, settings, hooks)
+- 🐳 **Docker Support**: Containerize Claude environments with one command
 - 📊 **Analytics Dashboard**: Real-time conversation monitoring with WebSocket support
 - 🔧 **Component Management**: 600+ agents, 200+ commands, MCPs from GitHub
 - ⚡ **Performance**: 10-50x faster startup, 3-5x lower memory vs Node.js
@@ -28,7 +30,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 ### Project Structure
 
 ```text
-go-claude-templates/
+claude-control-terminal/
 ├── cmd/cct/                    # CLI entry point
 │   └── main.go                 # Application bootstrap
 ├── internal/                   # Private application code
@@ -44,6 +46,10 @@ go-claude-templates/
 │   │   ├── agent.go           # Agent installation
 │   │   ├── command.go         # Command installation
 │   │   └── mcp.go             # MCP installation
+│   ├── docker/                 # Docker support (NEW in v0.2.0)
+│   │   ├── docker.go          # Docker operations
+│   │   ├── dockerfile_generator.go  # Dockerfile generation
+│   │   └── compose_generator.go     # docker-compose generation
 │   ├── fileops/                # File operations
 │   │   ├── github.go          # GitHub API downloads
 │   │   ├── template.go        # Template processing
@@ -462,16 +468,16 @@ make build-all
 
 ```bash
 # Direct binary
-curl -L https://github.com/schlunsen/claude-templates-go/releases/latest/download/cct-<platform> -o cct
+curl -L https://github.com/schlunsen/claude-control-terminal/releases/latest/download/cct-<platform> -o cct
 chmod +x cct
 sudo mv cct /usr/local/bin/
 
 # Go install
-go install github.com/davila7/go-claude-templates/cmd/cct@latest
+go install github.com/davila7/claude-control-terminal/cmd/cct@latest
 
 # From source
-git clone https://github.com/schlunsen/claude-templates-go
-cd go-claude-templates
+git clone https://github.com/schlunsen/claude-control-terminal
+cd claude-control-terminal
 make install
 ```
 

@@ -1,6 +1,6 @@
 # Interactive TUI Guide
 
-The go-claude-templates CLI now includes a modern, interactive Terminal User Interface (TUI) that makes it easy to browse and install components.
+The claude-control-terminal CLI now includes a modern, interactive Terminal User Interface (TUI) that makes it easy to browse and install components.
 
 ## Quick Start
 

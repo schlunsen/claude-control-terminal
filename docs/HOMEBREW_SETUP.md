@@ -31,7 +31,7 @@ After creating a release (e.g., `v0.0.1`), the GitHub Actions workflow generates
 Or download it from the release artifacts:
 ```bash
 # Download from release
-curl -L https://github.com/schlunsen/claude-templates-go/releases/download/v0.0.1/cct.rb -o Formula/cct.rb
+curl -L https://github.com/schlunsen/claude-control-terminal/releases/download/v0.0.1/cct.rb -o Formula/cct.rb
 ```
 
 ### 3. Commit the Formula to Your Tap
