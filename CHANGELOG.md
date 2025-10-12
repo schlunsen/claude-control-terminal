@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.7] - 2025-10-12
+
+### Added
+- Preview functionality for agents, commands, and MCPs via --preview/-p flag
+- Interactive preview screen in TUI with scrollable content viewing
+- Preview methods for all component installers
+- Ability to view component content before installation in both CLI and TUI modes
+- Keyboard navigation in TUI preview: arrow keys, PgUp/PgDn, g/G for top/bottom
+- Direct install from preview screen with I key in TUI
+- P key to preview selected component from list in TUI
+
+### Fixed
+- MCP registration in TUI now uses proper project scope
+
 ## [0.0.6] - 2025-10-12
 
 ### Added
@@ -105,7 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/schlunsen/claude-templates-go/compare/v0.0.3...v0.0.4
