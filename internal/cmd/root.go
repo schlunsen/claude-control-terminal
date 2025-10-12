@@ -31,6 +31,7 @@ var (
 	setting  string
 	hook     string
 	workflow string
+	scope    string // MCP installation scope: "project" or "user"
 
 	// Service flags
 	analytics    bool
@@ -117,6 +118,7 @@ func init() {
 	rootCmd.Flags().StringVar(&setting, "setting", "", "install specific setting component")
 	rootCmd.Flags().StringVar(&hook, "hook", "", "install specific hook component")
 	rootCmd.Flags().StringVar(&workflow, "workflow", "", "install workflow from hash or YAML")
+	rootCmd.Flags().StringVar(&scope, "scope", "project", "MCP installation scope: 'project' (default) or 'user' (global)")
 
 	// Service flags
 	rootCmd.Flags().BoolVar(&analytics, "analytics", false, "launch analytics dashboard")
@@ -283,7 +285,11 @@ func handleComponentInstallation(targetDir string) {
 		mcps := parseComponentList(mcp)
 		if len(mcps) > 0 {
 			fmt.Printf("\n🔌 Installing %d MCP(s)...\n", len(mcps))
-			installer := components.NewMCPInstaller()
+
+			// Parse scope
+			mcpScope := components.ParseMCPScope(scope)
+			installer := components.NewMCPInstaller(mcpScope)
+
 			if err := installer.InstallMultipleMCPs(mcps, targetDir, false); err != nil {
 				fmt.Printf("❌ Error: %v\n", err)
 				hasErrors = true
