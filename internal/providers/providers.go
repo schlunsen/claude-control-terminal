@@ -3,69 +3,43 @@
 package providers
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
+
+	"github.com/schlunsen/claude-control-terminal/internal/database"
 )
+
+//go:embed providers.json
+var providersJSON []byte
 
 // Provider represents an AI provider with its configuration
 type Provider struct {
-	Name    string // Display name (e.g., "DeepSeek", "GLM")
-	ID      string // Internal identifier (e.g., "deepseek", "glm")
-	BaseURL string // API base URL for Anthropic-compatible endpoint
-	Icon    string // Emoji icon for display
+	Name         string   `json:"name"`          // Display name (e.g., "DeepSeek", "GLM")
+	ID           string   `json:"id"`            // Internal identifier (e.g., "deepseek", "glm")
+	BaseURL      string   `json:"base_url"`      // API base URL for Anthropic-compatible endpoint
+	Icon         string   `json:"icon"`          // Emoji icon for display
+	Models       []string `json:"models"`        // Available models for this provider
+	DefaultModel string   `json:"default_model"` // Default model to use
+	Description  string   `json:"description"`   // Description of the provider
 }
 
-// ProviderConfig represents the saved provider configuration
-type ProviderConfig struct {
-	ProviderID string    `json:"provider_id"`
-	APIKey     string    `json:"api_key"`
-	CustomURL  string    `json:"custom_url,omitempty"`
-	UpdatedAt  time.Time `json:"updated_at"`
+// ProvidersConfig represents the structure of the providers.json file
+type ProvidersConfig struct {
+	Providers []Provider `json:"providers"`
 }
 
-// GetAvailableProviders returns the list of supported providers
+// GetAvailableProviders returns the list of supported providers loaded from JSON
 func GetAvailableProviders() []Provider {
-	return []Provider{
-		{
-			Name:    "Claude (Default)",
-			ID:      "claude",
-			BaseURL: "", // Default - no base URL override
-			Icon:    "🟠",
-		},
-		{
-			Name:    "DeepSeek",
-			ID:      "deepseek",
-			BaseURL: "https://api.deepseek.com/anthropic",
-			Icon:    "🔮",
-		},
-		{
-			Name:    "GLM",
-			ID:      "glm",
-			BaseURL: "https://open.bigmodel.cn/api/paas/v4/anthropic",
-			Icon:    "🌟",
-		},
-		{
-			Name:    "Kimi",
-			ID:      "kimi",
-			BaseURL: "https://api.moonshot.cn/v1/anthropic",
-			Icon:    "🌙",
-		},
-		{
-			Name:    "ChatGPT",
-			ID:      "chatgpt",
-			BaseURL: "https://api.openai.com/v1/anthropic",
-			Icon:    "🤖",
-		},
-		{
-			Name:    "Custom",
-			ID:      "custom",
-			BaseURL: "", // User will provide custom URL
-			Icon:    "⚙️",
-		},
+	var config ProvidersConfig
+	if err := json.Unmarshal(providersJSON, &config); err != nil {
+		// Fallback to empty list on error (should never happen with embedded JSON)
+		fmt.Fprintf(os.Stderr, "Error loading providers config: %v\n", err)
+		return []Provider{}
 	}
+	return config.Providers
 }
 
 // GetProviderByID returns a provider by its ID
@@ -79,62 +53,6 @@ func GetProviderByID(id string) *Provider {
 	return nil
 }
 
-// GetConfigPath returns the path to the providers configuration file
-func GetConfigPath() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".claude", "providers.json")
-	}
-	return filepath.Join(homeDir, ".claude", "providers.json")
-}
-
-// LoadProviderConfig loads the provider configuration from disk
-func LoadProviderConfig() (*ProviderConfig, error) {
-	configPath := GetConfigPath()
-
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// No configuration exists yet
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read provider config: %w", err)
-	}
-
-	var config ProviderConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse provider config: %w", err)
-	}
-
-	return &config, nil
-}
-
-// SaveProviderConfig saves the provider configuration to disk
-func SaveProviderConfig(config *ProviderConfig) error {
-	configPath := GetConfigPath()
-
-	// Ensure the directory exists
-	configDir := filepath.Dir(configPath)
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	// Set updated timestamp
-	config.UpdatedAt = time.Now()
-
-	// Marshal with indentation for readability
-	data, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(configPath, data, 0600); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	return nil
-}
-
 // GetEnvScriptPath returns the path to the environment export script
 func GetEnvScriptPath() string {
 	homeDir, err := os.UserHomeDir()
@@ -144,8 +62,23 @@ func GetEnvScriptPath() string {
 	return filepath.Join(homeDir, ".claude", "provider-env.sh")
 }
 
+// LoadProviderConfig loads the current provider configuration from database
+func LoadProviderConfig(repo *database.Repository) (*database.ProviderConfig, error) {
+	return repo.GetCurrentProvider()
+}
+
+// GetProviderConfig retrieves the configuration for a specific provider from database
+func GetProviderConfig(repo *database.Repository, providerID string) (*database.ProviderConfig, error) {
+	return repo.GetProvider(providerID)
+}
+
+// SaveProviderConfig saves the provider configuration to database
+func SaveProviderConfig(repo *database.Repository, config *database.ProviderConfig) error {
+	return repo.SaveProvider(config)
+}
+
 // GenerateEnvScript generates a shell script to export environment variables
-func GenerateEnvScript(config *ProviderConfig) error {
+func GenerateEnvScript(config *database.ProviderConfig) error {
 	if config == nil {
 		return fmt.Errorf("no provider configuration provided")
 	}
@@ -198,8 +131,39 @@ echo "  Using default Claude API configuration"
 		return fmt.Errorf("no base URL configured for provider")
 	}
 
+	// Use the model from config only if explicitly set
+	// Don't fall back to provider default - user may have chosen "No model"
+	model := config.ModelName
+
 	// Generate script content for custom providers
-	script := fmt.Sprintf(`#!/bin/bash
+	var script string
+	if model != "" {
+		script = fmt.Sprintf(`#!/bin/bash
+# Generated by Claude Control Terminal
+# Provider: %s
+# Updated: %s
+
+export ANTHROPIC_AUTH_TOKEN="%s"
+export ANTHROPIC_BASE_URL="%s"
+export ANTHROPIC_MODEL="%s"
+
+echo "✓ Environment configured for %s"
+echo "  ANTHROPIC_AUTH_TOKEN=***%s"
+echo "  ANTHROPIC_BASE_URL=%s"
+echo "  ANTHROPIC_MODEL=%s"
+`,
+			provider.Name,
+			config.UpdatedAt.Format("2006-01-02 15:04:05"),
+			config.APIKey,
+			baseURL,
+			model,
+			provider.Name,
+			maskAPIKey(config.APIKey),
+			baseURL,
+			model,
+		)
+	} else {
+		script = fmt.Sprintf(`#!/bin/bash
 # Generated by Claude Control Terminal
 # Provider: %s
 # Updated: %s
@@ -211,14 +175,15 @@ echo "✓ Environment configured for %s"
 echo "  ANTHROPIC_AUTH_TOKEN=***%s"
 echo "  ANTHROPIC_BASE_URL=%s"
 `,
-		provider.Name,
-		config.UpdatedAt.Format("2006-01-02 15:04:05"),
-		config.APIKey,
-		baseURL,
-		provider.Name,
-		maskAPIKey(config.APIKey),
-		baseURL,
-	)
+			provider.Name,
+			config.UpdatedAt.Format("2006-01-02 15:04:05"),
+			config.APIKey,
+			baseURL,
+			provider.Name,
+			maskAPIKey(config.APIKey),
+			baseURL,
+		)
+	}
 
 	scriptPath = GetEnvScriptPath()
 
@@ -245,8 +210,8 @@ func maskAPIKey(apiKey string) string {
 }
 
 // GetCurrentProviderInfo returns display information about the current provider
-func GetCurrentProviderInfo() (providerName string, isConfigured bool, err error) {
-	config, err := LoadProviderConfig()
+func GetCurrentProviderInfo(repo *database.Repository) (providerName string, isConfigured bool, err error) {
+	config, err := repo.GetCurrentProvider()
 	if err != nil {
 		return "", false, err
 	}
@@ -264,13 +229,12 @@ func GetCurrentProviderInfo() (providerName string, isConfigured bool, err error
 }
 
 // DeleteProviderConfig removes the provider configuration
-func DeleteProviderConfig() error {
-	configPath := GetConfigPath()
+func DeleteProviderConfig(repo *database.Repository) error {
 	scriptPath := GetEnvScriptPath()
 
-	// Remove config file
-	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove config: %w", err)
+	// Remove all providers from database
+	if err := repo.DeleteAllProviders(); err != nil {
+		return fmt.Errorf("failed to delete providers: %w", err)
 	}
 
 	// Remove env script

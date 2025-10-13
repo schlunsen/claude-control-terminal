@@ -73,6 +73,17 @@ CREATE TABLE IF NOT EXISTS user_messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Table for AI provider configurations
+CREATE TABLE IF NOT EXISTS providers (
+    provider_id TEXT PRIMARY KEY,
+    api_key TEXT NOT NULL,
+    custom_url TEXT,
+    model_name TEXT,
+    is_current BOOLEAN DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_shell_commands_conversation
     ON shell_commands(conversation_id, executed_at DESC);
@@ -100,3 +111,6 @@ CREATE INDEX IF NOT EXISTS idx_user_messages_conversation
 
 CREATE INDEX IF NOT EXISTS idx_user_messages_submitted_at
     ON user_messages(submitted_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_providers_is_current
+    ON providers(is_current) WHERE is_current = 1;
