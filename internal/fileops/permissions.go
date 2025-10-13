@@ -162,6 +162,19 @@ func SaveClaudeSettings(settings *ClaudeSettings) error {
 		return fmt.Errorf("failed to create settings directory: %w", err)
 	}
 
+	// Clean up empty permissions object
+	if settings.Permissions != nil {
+		// Check if permissions object is effectively empty
+		isEmpty := len(settings.Permissions.Allow) == 0 &&
+			len(settings.Permissions.Ask) == 0 &&
+			len(settings.Permissions.Deny) == 0 &&
+			(settings.Permissions.DefaultMode == "" || settings.Permissions.DefaultMode == PermissionModeDefault)
+
+		if isEmpty {
+			settings.Permissions = nil
+		}
+	}
+
 	// Marshal with indentation for readability
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
