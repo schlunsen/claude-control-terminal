@@ -1,3 +1,6 @@
+// Package websocket provides real-time communication for the analytics dashboard.
+// It implements a WebSocket hub that manages client connections and broadcasts
+// updates when conversation data changes.
 package websocket
 
 import (

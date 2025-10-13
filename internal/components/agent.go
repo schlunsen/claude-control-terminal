@@ -1,3 +1,6 @@
+// Package components provides installation and management of Claude Code components.
+// This file handles agent component installation, downloading agents from GitHub
+// and installing them to the .claude/agents directory.
 package components
 
 import (

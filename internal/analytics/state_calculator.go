@@ -1,3 +1,6 @@
+// Package analytics provides real-time monitoring and analysis of Claude Code conversations.
+// It includes components for conversation state calculation, process detection, file watching,
+// and conversation parsing from JSONL files.
 package analytics
 
 import (

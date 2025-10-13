@@ -1,3 +1,6 @@
+// Package docker provides docker-compose.yml generation for multi-container setups.
+// This file generates compose configurations for simple, analytics, database, and full deployments
+// with services like PostgreSQL, Redis, and the CCT analytics dashboard.
 package docker
 
 import (
