@@ -569,14 +569,14 @@ make coverage-badge
 ```
 
 **Automated Testing:**
-- Unit tests for core functionality (cmd, tui packages)
+- Comprehensive unit tests for analytics, components, docker, fileops, providers, server, cmd, and tui packages
 - Daily scheduled test runs at 8:00 AM UTC via GitHub Actions
 - Multi-platform testing (Linux, macOS, Windows)
 - Multi-version Go testing (1.23, 1.24)
 - Coverage reports with Codecov integration
-- Coverage threshold enforcement (70% minimum)
+- Coverage threshold enforcement (20% minimum)
 
-**Current Coverage:** 11.6% (growing with each release)
+**Current Coverage:** 27.8% (2,300+ lines of test code across 8 packages)
 
 For detailed testing guide, see [TESTING.md](TESTING.md).
 
