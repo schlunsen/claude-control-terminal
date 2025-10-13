@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.13] - 2025-10-13
+
+### Added
+- Multi-source permissions management with tabbed UI for better control over Claude Code permissions
+- GitHub CLI (gh) commands now included in Git Commands permission category
+
+### Improved
+- Enhanced permissions management interface with tabbed navigation between different permission sources
+
 ## [0.2.12] - 2025-10-13
 
 ### Fixed
@@ -303,7 +312,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.12...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.13...HEAD
+[0.2.13]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.10...v0.2.11
 [0.2.10]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.9...v0.2.10
