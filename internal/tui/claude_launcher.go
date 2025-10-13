@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+
+	"github.com/schlunsen/claude-control-terminal/internal/providers"
 )
 
 // LaunchClaudeInteractive suspends the TUI and launches Claude CLI interactively.
@@ -15,7 +17,25 @@ func LaunchClaudeInteractive(workingDir string) error {
 		return fmt.Errorf("claude CLI not found in PATH: %w", err)
 	}
 
-	// Create command with full terminal control
+	// Check if provider is configured
+	providerScriptPath := providers.GetEnvScriptPath()
+	if _, err := os.Stat(providerScriptPath); err == nil {
+		// Provider script exists, source it before launching Claude
+		// Use bash to source the script and then run Claude
+		shellCommand := fmt.Sprintf("source %s && %s", providerScriptPath, claudePath)
+		cmd := exec.Command("bash", "-c", shellCommand)
+		cmd.Dir = workingDir
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("error running Claude CLI: %w", err)
+		}
+		return nil
+	}
+
+	// No provider configured, launch Claude directly
 	cmd := exec.Command(claudePath)
 	cmd.Dir = workingDir
 	cmd.Stdin = os.Stdin
@@ -39,7 +59,25 @@ func LaunchClaudeWithLastSession(workingDir string) error {
 		return fmt.Errorf("claude CLI not found in PATH: %w", err)
 	}
 
-	// Create command with -c flag to continue last conversation
+	// Check if provider is configured
+	providerScriptPath := providers.GetEnvScriptPath()
+	if _, err := os.Stat(providerScriptPath); err == nil {
+		// Provider script exists, source it before launching Claude
+		// Use bash to source the script and then run Claude with -c
+		shellCommand := fmt.Sprintf("source %s && %s -c", providerScriptPath, claudePath)
+		cmd := exec.Command("bash", "-c", shellCommand)
+		cmd.Dir = workingDir
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("error running Claude CLI with -c: %w", err)
+		}
+		return nil
+	}
+
+	// No provider configured, launch Claude directly
 	cmd := exec.Command(claudePath, "-c")
 	cmd.Dir = workingDir
 	cmd.Stdin = os.Stdin
