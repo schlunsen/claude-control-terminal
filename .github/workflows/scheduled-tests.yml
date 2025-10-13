@@ -5,13 +5,6 @@ on:
   schedule:
     - cron: '0 8 * * *'
 
-  # Also run on push and pull requests for immediate feedback
-push:
-    branches: [ main ]
-
-  pull_request:
-    branches: [ main ]
-
   # Allow manual trigger
   workflow_dispatch:
 
