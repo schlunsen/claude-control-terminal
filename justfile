@@ -64,9 +64,15 @@ test:
 # Run tests with coverage
 test-coverage:
     @echo "Running tests with coverage..."
-    @go test -v -coverprofile=coverage.out ./...
+    @go test -v -coverprofile=coverage.out -covermode=atomic ./...
     @go tool cover -html=coverage.out -o coverage.html
-    @echo "✅ Coverage report: coverage.html"
+    @echo ""
+    @echo "📊 Coverage Summary:"
+    @echo "   Total Coverage: $(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+%')"
+    @echo ""
+    @echo "✅ Coverage report generated:"
+    @echo "   HTML: coverage.html"
+    @echo "   Data: coverage.out"
 
 # Build for all platforms
 build-all:

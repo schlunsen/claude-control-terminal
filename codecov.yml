@@ -1,0 +1,49 @@
+# Codecov configuration
+# Documentation: https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 5%
+        if_ci_failed: error
+        informational: false
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+        if_ci_failed: error
+
+  ignore:
+    - "**/*_test.go"
+    - "**/testdata/**"
+    - "**/vendor/**"
+    - "**/*.pb.go"
+
+comment:
+  layout: "header, diff, files, footer"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
+
+github_checks:
+  annotations: true
+
+parsers:
+  gcov:
+    branch_detection:
+      conditional: yes
+      loop: yes
+      method: no
+      macro: no
+
+ignore:
+  - "cmd/cct/main.go"  # Main entry point, hard to test
+  - "**/*_mock.go"     # Mock files
+  - "**/mocks/**"      # Mock directories
