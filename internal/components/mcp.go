@@ -1,3 +1,6 @@
+// Package components provides MCP (Model Context Protocol) server installation.
+// This file handles MCP component installation, downloading MCP configurations from GitHub
+// and registering them in claude_desktop_config.json for both project and user scopes.
 package components
 
 import (

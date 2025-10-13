@@ -1,3 +1,5 @@
+// Package database provides git utility functions for extracting repository metadata.
+// This file contains helpers for getting the current git branch from a working directory.
 package database
 
 import (

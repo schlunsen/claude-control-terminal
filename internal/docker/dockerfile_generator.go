@@ -1,3 +1,6 @@
+// Package docker provides Dockerfile generation for various Claude Code deployment scenarios.
+// This file generates Dockerfiles for base images, Claude CLI environments, analytics dashboards,
+// and full-featured development containers.
 package docker
 
 import (
