@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.14] - 2025-10-13
+
+### Added
+- AI provider configuration and management system for flexible model selection
+- Support for multiple AI providers (Anthropic, OpenAI, Google, Mistral, etc.)
+- Provider configuration UI in TUI for easy setup
+- Model selection and API key management per provider
+
 ## [0.2.13] - 2025-10-13
 
 ### Added
@@ -312,7 +320,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.13...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.14...HEAD
+[0.2.14]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.10...v0.2.11
