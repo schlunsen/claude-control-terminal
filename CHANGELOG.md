@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.15] - 2025-10-14
+
+### Added
+- Persistent provider token storage with SQLite database for secure credential management
+- Custom model input support for AI providers allowing users to specify any model name
+- Responsive compact UI for provider configuration that adapts to terminal size
+- Enhanced provider configuration screen with improved layout and usability
+
+### Changed
+- Provider tokens and configurations now persist across sessions in ~/.claude/cct_history.db
+- Provider UI now displays in compact mode on smaller terminals for better accessibility
+- Improved provider model selection with custom input option
+
 ## [0.2.14] - 2025-10-13
 
 ### Added
@@ -320,7 +333,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.14...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.15...HEAD
+[0.2.15]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.11...v0.2.12
