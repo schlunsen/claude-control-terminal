@@ -2,12 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/schlunsen/claude-control-terminal/internal/database"
 	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 	"github.com/schlunsen/claude-control-terminal/internal/providers"
 	"github.com/schlunsen/claude-control-terminal/internal/server"
@@ -99,12 +102,14 @@ type Model struct {
 	providersCursor      int              // Current selection in provider list
 	providerAPIKeyInput  textinput.Model  // API key input field
 	providerCustomURL    textinput.Model  // Custom URL input field (for Custom provider)
+	providerModelCursor  int              // Current selection in model list
 	selectedProviderID   string           // ID of selected provider
 	providerSaving       bool             // Whether we're saving provider config
 	providerError        error            // Error during provider operations
 	providerSuccessMsg   string           // Success message to display
 	currentProviderName  string           // Name of currently configured provider
 	hasProviderConfig    bool             // Whether a provider is configured
+	dbRepo               *database.Repository // Database repository for provider storage
 }
 
 // NewModel creates a new TUI model
@@ -153,8 +158,21 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 
 	analyticsEnabled := analyticsServer != nil
 
+	// Initialize database for provider storage
+	homeDir, _ := os.UserHomeDir()
+	dataDir := filepath.Join(homeDir, ".claude")
+	db, err := database.Initialize(dataDir)
+	var repo *database.Repository
+	if err == nil {
+		repo = database.NewRepository(db)
+	}
+
 	// Load current provider info if available
-	currentProviderName, hasProviderConfig, _ := providers.GetCurrentProviderInfo()
+	var currentProviderName string
+	var hasProviderConfig bool
+	if repo != nil {
+		currentProviderName, hasProviderConfig, _ = providers.GetCurrentProviderInfo(repo)
+	}
 
 	return Model{
 		screen:                 ScreenMain,
@@ -175,6 +193,7 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 		providerCustomURL:      customURLInput,
 		currentProviderName:    currentProviderName,
 		hasProviderConfig:      hasProviderConfig,
+		dbRepo:                 repo,
 	}
 }
 

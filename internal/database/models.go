@@ -87,3 +87,14 @@ type UserMessage struct {
 	SubmittedAt      time.Time `json:"submitted_at"`
 	CreatedAt        time.Time `json:"created_at"`
 }
+
+// ProviderConfig represents an AI provider configuration
+type ProviderConfig struct {
+	ProviderID string    `json:"provider_id"`
+	APIKey     string    `json:"api_key"`
+	CustomURL  string    `json:"custom_url,omitempty"`
+	ModelName  string    `json:"model_name,omitempty"`
+	IsCurrent  bool      `json:"is_current"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}

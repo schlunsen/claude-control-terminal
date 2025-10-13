@@ -99,6 +99,13 @@ func Initialize(dataDir string) (*Database, error) {
 		return nil, initErr
 	}
 
+	// Run additional migrations for existing databases
+	if err := runMigrations(db); err != nil {
+		initErr = fmt.Errorf("failed to run migrations: %w", err)
+		db.Close()
+		return nil, initErr
+	}
+
 	// Set permissions on WAL and SHM files created by SQLite (WAL mode)
 	// These files may be created after opening the database
 	walPath := dbPath + "-wal"
@@ -193,4 +200,29 @@ func (d *Database) Stats() (map[string]interface{}, error) {
 	}
 
 	return stats, nil
+}
+
+// runMigrations runs database migrations for existing databases
+func runMigrations(db *sql.DB) error {
+	// Migration 1: Add model_name column to providers table if it doesn't exist
+	var columnExists bool
+	query := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('providers')
+		WHERE name='model_name'
+	`
+	if err := db.QueryRow(query).Scan(&columnExists); err != nil {
+		// If the providers table doesn't exist yet, that's fine - it will be created by schema.sql
+		return nil
+	}
+
+	if !columnExists {
+		// Add the model_name column
+		_, err := db.Exec("ALTER TABLE providers ADD COLUMN model_name TEXT")
+		if err != nil {
+			return fmt.Errorf("failed to add model_name column: %w", err)
+		}
+	}
+
+	return nil
 }

@@ -1,0 +1,66 @@
+{
+  "providers": [
+    {
+      "name": "Claude (Default)",
+      "id": "claude",
+      "base_url": "",
+      "icon": "🟠",
+      "models": [
+        "claude-sonnet-4.5-20250514",
+        "claude-opus-4.1-20250805",
+        "claude-sonnet-4-20250522",
+        "claude-3-5-sonnet-20241022",
+        "claude-3-opus-20240229",
+        "claude-3-sonnet-20240229",
+        "claude-3-haiku-20240307"
+      ],
+      "default_model": "claude-sonnet-4.5-20250514",
+      "description": "Official Anthropic Claude models"
+    },
+    {
+      "name": "DeepSeek",
+      "id": "deepseek",
+      "base_url": "https://api.deepseek.com/anthropic",
+      "icon": "🔮",
+      "models": [
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ],
+      "default_model": "deepseek-chat",
+      "description": "DeepSeek AI models with Anthropic API compatibility"
+    },
+    {
+      "name": "GLM (Z.ai)",
+      "id": "glm",
+      "base_url": "https://api.z.ai/api/anthropic",
+      "icon": "🌟",
+      "models": [
+        "GLM-4.6",
+        "GLM-4.5-Air"
+      ],
+      "default_model": "GLM-4.6",
+      "description": "Zhipu AI GLM models via Z.ai"
+    },
+    {
+      "name": "Kimi",
+      "id": "kimi",
+      "base_url": "https://api.moonshot.ai/anthropic",
+      "icon": "🌙",
+      "models": [
+        "kimi-k2",
+        "moonshot-v1-128k"
+      ],
+      "default_model": "kimi-k2",
+      "description": "Moonshot AI Kimi models"
+    },
+    {
+      "name": "Custom",
+      "id": "custom",
+      "base_url": "",
+      "icon": "⚙️",
+      "models": [],
+      "default_model": "",
+      "description": "Custom provider with user-defined configuration"
+    }
+  ]
+}
