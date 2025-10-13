@@ -1,3 +1,6 @@
+// Package database provides data access methods for querying and persisting command history.
+// This file implements the Repository pattern for database operations including
+// recording commands, retrieving history, and updating statistics.
 package database
 
 import (

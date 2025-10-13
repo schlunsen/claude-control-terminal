@@ -1,3 +1,6 @@
+// Package components provides slash command installation and management.
+// This file handles command component installation, downloading slash commands from GitHub
+// and installing them to the .claude/commands directory.
 package components
 
 import (
