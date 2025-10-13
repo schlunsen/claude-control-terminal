@@ -286,7 +286,7 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.permissionsLoading = true
 			m.permissionsCursor = 0
 			m.permissionsError = nil
-			return m, loadPermissionsCmd()
+			return m, loadPermissionsCmd(m.targetDir)
 		}
 
 		// Load components for selected type

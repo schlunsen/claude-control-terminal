@@ -43,7 +43,7 @@ func (m Model) handlePermissionsScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		// Save permissions and return to main
 		m.permissionsSaving = true
-		return m, savePermissionsCmd(m.permissionItems, m.permissionStates)
+		return m, savePermissionsCmd(m.permissionItems, m.permissionStates, m.targetDir)
 	case "r":
 		// Reset all permissions to safe defaults
 		for i := range m.permissionStates {
@@ -143,7 +143,7 @@ func (m Model) viewPermissionsScreen() string {
 	}
 
 	// Show settings file location
-	settingsPath := fileops.GetClaudeSettingsPath()
+	settingsPath := fileops.GetClaudeSettingsPath(m.targetDir)
 	b.WriteString(SubtitleStyle.Render(fmt.Sprintf("Settings: %s", settingsPath)) + "\n")
 
 	// Show summary
@@ -175,9 +175,9 @@ type permissionsSavedMsg struct {
 
 // Commands
 
-func loadPermissionsCmd() tea.Cmd {
+func loadPermissionsCmd(targetDir string) tea.Cmd {
 	return func() tea.Msg {
-		settings, err := fileops.LoadClaudeSettings()
+		settings, err := fileops.LoadClaudeSettings(targetDir)
 		if err != nil {
 			return permissionsLoadedMsg{err: err}
 		}
@@ -197,9 +197,9 @@ func loadPermissionsCmd() tea.Cmd {
 	}
 }
 
-func savePermissionsCmd(items []fileops.PermissionItem, states []bool) tea.Cmd {
+func savePermissionsCmd(items []fileops.PermissionItem, states []bool, targetDir string) tea.Cmd {
 	return func() tea.Msg {
-		settings, err := fileops.LoadClaudeSettings()
+		settings, err := fileops.LoadClaudeSettings(targetDir)
 		if err != nil {
 			return permissionsSavedMsg{err: err}
 		}
@@ -209,7 +209,7 @@ func savePermissionsCmd(items []fileops.PermissionItem, states []bool) tea.Cmd {
 			fileops.TogglePermission(settings, item, states[i])
 		}
 
-		if err := fileops.SaveClaudeSettings(settings); err != nil {
+		if err := fileops.SaveClaudeSettings(settings, targetDir); err != nil {
 			return permissionsSavedMsg{err: err}
 		}
 
