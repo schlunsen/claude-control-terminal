@@ -6,8 +6,8 @@ on:
     - cron: '0 8 * * *'
 
   # Also run on push and pull requests for immediate feedback
-  push:
-    branches: [ main, feat/* ]
+push:
+    branches: [ main ]
 
   pull_request:
     branches: [ main ]
