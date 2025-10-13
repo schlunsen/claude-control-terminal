@@ -1,3 +1,6 @@
+// Package database defines data models for command history and conversation tracking.
+// This file contains struct definitions for shell commands, Claude tool invocations,
+// conversations, command statistics, and user messages.
 package database
 
 import "time"

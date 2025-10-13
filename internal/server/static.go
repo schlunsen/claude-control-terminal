@@ -1,3 +1,5 @@
+// Package server provides static file serving for the analytics dashboard.
+// This file embeds the HTML dashboard and serves it via Fiber.
 package server
 
 import (

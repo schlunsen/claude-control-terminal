@@ -1,3 +1,6 @@
+// Package server provides the Fiber-based HTTP server and REST API for CCT analytics.
+// It serves the analytics dashboard, WebSocket connections, and API endpoints
+// for conversation data, process monitoring, and command history.
 package server
 
 import (

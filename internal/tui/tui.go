@@ -1,3 +1,5 @@
+// Package tui provides the terminal user interface for CCT using Bubble Tea.
+// This file handles launching the TUI application and managing the analytics server lifecycle.
 package tui
 
 import (

@@ -1,3 +1,6 @@
+// Package docker provides Docker containerization support for Claude Code environments.
+// It handles Docker image building, container management, and provides utilities
+// for running Claude Code in containerized environments.
 package docker
 
 import (

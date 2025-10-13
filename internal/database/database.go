@@ -1,3 +1,6 @@
+// Package database provides SQLite database management for command history and conversation tracking.
+// It implements a singleton pattern for database access and handles schema migrations,
+// connection pooling, and WAL mode for concurrent access.
 package database
 
 import (

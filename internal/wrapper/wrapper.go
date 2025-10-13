@@ -1,3 +1,6 @@
+// Package wrapper provides transparent wrapping of the Claude CLI for user input tracking.
+// It intercepts Claude CLI invocations to record user messages and command history
+// to the database for analytics purposes.
 package wrapper
 
 import (
