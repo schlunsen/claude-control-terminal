@@ -30,6 +30,30 @@ func LaunchClaudeInteractive(workingDir string) error {
 	return nil
 }
 
+// LaunchClaudeWithLastSession suspends the TUI and launches Claude CLI with the -c parameter
+// to continue the last conversation. When Claude exits, control returns to the caller.
+func LaunchClaudeWithLastSession(workingDir string) error {
+	// Find Claude binary in PATH
+	claudePath, err := exec.LookPath("claude")
+	if err != nil {
+		return fmt.Errorf("claude CLI not found in PATH: %w", err)
+	}
+
+	// Create command with -c flag to continue last conversation
+	cmd := exec.Command(claudePath, "-c")
+	cmd.Dir = workingDir
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Run Claude and wait for it to exit
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("error running Claude CLI with -c: %w", err)
+	}
+
+	return nil
+}
+
 // IsClaudeAvailable checks if Claude CLI is available in PATH
 func IsClaudeAvailable() bool {
 	_, err := exec.LookPath("claude")

@@ -66,6 +66,7 @@ type Model struct {
 	quitting           bool
 	currentTheme       int  // 0=orange, 1=green, 2=cyan, 3=purple
 	shouldLaunchClaude bool // Signal to launch Claude after TUI exits
+	launchLastSession  bool // Signal to launch Claude with -c parameter
 
 	// Analytics state
 	analyticsEnabled bool            // Whether analytics server is running
@@ -91,8 +92,9 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 
 	componentTypes := []string{"Agents", "Commands", "MCPs"}
 
-	// Add "Launch Claude" option if Claude is available
+	// Add "Launch Claude" options if Claude is available
 	if IsClaudeAvailable() {
+		componentTypes = append(componentTypes, "Launch last Claude session")
 		componentTypes = append(componentTypes, "Launch Claude")
 	}
 
@@ -235,9 +237,17 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.selectedType++
 		}
 	case "enter":
+		// Check if "Launch last Claude session" was selected
+		if m.componentTypes[m.selectedType] == "Launch last Claude session" {
+			m.shouldLaunchClaude = true
+			m.launchLastSession = true
+			m.quitting = true
+			return m, tea.Quit
+		}
 		// Check if "Launch Claude" was selected
 		if m.componentTypes[m.selectedType] == "Launch Claude" {
 			m.shouldLaunchClaude = true
+			m.launchLastSession = false
 			m.quitting = true
 			return m, tea.Quit
 		}
@@ -532,20 +542,20 @@ func (m Model) viewMainScreen() string {
 		icon := m.getIconForType(componentType)
 		cursor := "  "
 
-		// Special styling for "Launch Claude" option
-		isLaunchClaude := componentType == "Launch Claude"
+		// Special styling for "Launch Claude" options
+		isLaunchClaude := componentType == "Launch Claude" || componentType == "Launch last Claude session"
 
 		if i == m.selectedType {
 			cursor = SelectedItemStyle.Render("> ")
 			if isLaunchClaude {
-				// Make Launch Claude stand out more when selected
+				// Make Launch Claude options stand out more when selected
 				b.WriteString(cursor + StatusSuccessStyle.Render(icon+" "+componentType) + "\n")
 			} else {
 				b.WriteString(cursor + SelectedItemStyle.Render(icon+" "+componentType) + "\n")
 			}
 		} else {
 			if isLaunchClaude {
-				// Make Launch Claude stand out even when not selected
+				// Make Launch Claude options stand out even when not selected
 				b.WriteString(cursor + StatusInfoStyle.Render(icon+" "+componentType) + "\n")
 			} else {
 				b.WriteString(cursor + UnselectedItemStyle.Render(icon+" "+componentType) + "\n")
@@ -921,10 +931,11 @@ func (m Model) getComponentType() string {
 
 func (m Model) getIconForType(typeName string) string {
 	icons := map[string]string{
-		"Agents":        "🤖",
-		"Commands":      "⚡",
-		"MCPs":          "🔌",
-		"Launch Claude": "🚀",
+		"Agents":                     "🤖",
+		"Commands":                   "⚡",
+		"MCPs":                       "🔌",
+		"Launch last Claude session": "🔄",
+		"Launch Claude":              "🚀",
 	}
 	if icon, ok := icons[typeName]; ok {
 		return icon

@@ -68,8 +68,17 @@ func Launch(targetDir string) error {
 			analyticsServer = model.analyticsServer
 
 			if model.shouldLaunchClaude {
-				// Launch Claude CLI
-				if err := LaunchClaudeInteractive(targetDir); err != nil {
+				// Launch Claude CLI with appropriate flags
+				var err error
+				if model.launchLastSession {
+					// Launch with -c flag to continue last session
+					err = LaunchClaudeWithLastSession(targetDir)
+				} else {
+					// Launch normally
+					err = LaunchClaudeInteractive(targetDir)
+				}
+
+				if err != nil {
 					// Show error but continue back to TUI
 					fmt.Printf("Error launching Claude: %v\n", err)
 					fmt.Println("Press Enter to continue...")
