@@ -52,8 +52,8 @@ func GetDefaultPermissionItems() []PermissionItem {
 	return []PermissionItem{
 		{
 			Name:        "Git Commands",
-			Description: "Allow all git commands",
-			Patterns:    []string{"Bash(git:*)"},
+			Description: "Allow all git and gh (GitHub CLI) commands",
+			Patterns:    []string{"Bash(git:*)", "Bash(gh:*)"},
 			Category:    "bash",
 		},
 		{
