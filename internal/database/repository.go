@@ -524,3 +524,174 @@ func (r *Repository) GetUserMessages(query *CommandHistoryQuery) ([]*UserMessage
 
 	return messages, nil
 }
+
+// SaveProvider saves or updates a provider configuration
+// It sets the provider as current and unsets all other providers
+func (r *Repository) SaveProvider(provider *ProviderConfig) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	tx, err := r.db.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Unset all other providers as current
+	if _, err := tx.Exec("UPDATE providers SET is_current = 0"); err != nil {
+		return fmt.Errorf("failed to update current providers: %w", err)
+	}
+
+	// Insert or update the provider
+	query := `
+		INSERT INTO providers (provider_id, api_key, custom_url, model_name, is_current)
+		VALUES (?, ?, ?, ?, 1)
+		ON CONFLICT(provider_id) DO UPDATE SET
+			api_key = excluded.api_key,
+			custom_url = excluded.custom_url,
+			model_name = excluded.model_name,
+			is_current = 1,
+			updated_at = CURRENT_TIMESTAMP
+	`
+
+	if _, err := tx.Exec(query, provider.ProviderID, provider.APIKey, provider.CustomURL, provider.ModelName); err != nil {
+		return fmt.Errorf("failed to save provider: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// GetProvider retrieves a specific provider configuration
+func (r *Repository) GetProvider(providerID string) (*ProviderConfig, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT provider_id, api_key, custom_url, model_name, is_current, created_at, updated_at
+		FROM providers
+		WHERE provider_id = ?
+	`
+
+	provider := &ProviderConfig{}
+	err := r.db.db.QueryRow(query, providerID).Scan(
+		&provider.ProviderID,
+		&provider.APIKey,
+		&provider.CustomURL,
+		&provider.ModelName,
+		&provider.IsCurrent,
+		&provider.CreatedAt,
+		&provider.UpdatedAt,
+	)
+
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get provider: %w", err)
+	}
+
+	return provider, nil
+}
+
+// GetCurrentProvider retrieves the currently active provider configuration
+func (r *Repository) GetCurrentProvider() (*ProviderConfig, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT provider_id, api_key, custom_url, model_name, is_current, created_at, updated_at
+		FROM providers
+		WHERE is_current = 1
+		LIMIT 1
+	`
+
+	provider := &ProviderConfig{}
+	err := r.db.db.QueryRow(query).Scan(
+		&provider.ProviderID,
+		&provider.APIKey,
+		&provider.CustomURL,
+		&provider.ModelName,
+		&provider.IsCurrent,
+		&provider.CreatedAt,
+		&provider.UpdatedAt,
+	)
+
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get current provider: %w", err)
+	}
+
+	return provider, nil
+}
+
+// GetAllProviders retrieves all saved provider configurations
+func (r *Repository) GetAllProviders() ([]*ProviderConfig, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT provider_id, api_key, custom_url, model_name, is_current, created_at, updated_at
+		FROM providers
+		ORDER BY updated_at DESC
+	`
+
+	rows, err := r.db.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query providers: %w", err)
+	}
+	defer rows.Close()
+
+	var providers []*ProviderConfig
+	for rows.Next() {
+		provider := &ProviderConfig{}
+		err := rows.Scan(
+			&provider.ProviderID,
+			&provider.APIKey,
+			&provider.CustomURL,
+			&provider.ModelName,
+			&provider.IsCurrent,
+			&provider.CreatedAt,
+			&provider.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan provider: %w", err)
+		}
+		providers = append(providers, provider)
+	}
+
+	return providers, nil
+}
+
+// DeleteProvider removes a provider configuration
+func (r *Repository) DeleteProvider(providerID string) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM providers WHERE provider_id = ?"
+	_, err := r.db.db.Exec(query, providerID)
+	if err != nil {
+		return fmt.Errorf("failed to delete provider: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllProviders removes all provider configurations
+func (r *Repository) DeleteAllProviders() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM providers"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all providers: %w", err)
+	}
+
+	return nil
+}

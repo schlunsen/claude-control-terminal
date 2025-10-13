@@ -5,7 +5,7 @@
 [![Build Status](https://github.com/schlunsen/claude-control-terminal/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions)
 [![Release](https://img.shields.io/github/v/release/schlunsen/claude-control-terminal)](https://github.com/schlunsen/claude-control-terminal/releases)
 
-**A powerful wrapper and control center for Claude Code** - Manage components, launch Claude, run analytics, and deploy with Docker.
+**A powerful wrapper and control center for Claude Code** - Manage components, configure AI providers, control permissions, launch Claude, run analytics, and deploy with Docker.
 
 ## 🎬 Watch the Demo
 
@@ -36,6 +36,8 @@ Rebranded from `go-claude-templates` to better reflect its role as a comprehensi
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Component Installation](#component-installation)
+- [AI Provider Configuration](#ai-provider-configuration)
+- [Permissions Management](#permissions-management)
 - [Docker Support](#docker-support)
 - [Analytics Dashboard](#analytics-dashboard)
 - [Documentation](#documentation)
@@ -47,6 +49,8 @@ Rebranded from `go-claude-templates` to better reflect its role as a comprehensi
 - 🎮 **Control Center**: Comprehensive wrapper for managing Claude Code environments
 - 🚀 **Interactive TUI**: Modern terminal interface for browsing and installing components
 - 📦 **Component Management**: Install agents, commands, and MCPs from 600+ templates
+- 🤖 **AI Provider Configuration**: Switch between Claude, DeepSeek, GLM, Kimi, and custom providers
+- ⚙️ **Permissions Management**: Granular control over Claude Code tool permissions (global/project/local)
 - 🐳 **Docker Support**: Containerize Claude environments with one command
 - 📊 **Analytics Dashboard**: Real-time WebSocket-based monitoring with process correlation
 - ⚡ **High Performance**: 50-100x faster than Node.js version, 5x lower memory
@@ -105,6 +109,8 @@ cct -d ~/my-project
 
 **Features**:
 - Browse 600+ agents, 200+ commands, and MCPs
+- Configure AI providers (Claude, DeepSeek, GLM, Kimi, Custom)
+- Manage Claude Code permissions (Global/Project/Local)
 - Real-time search and filtering
 - Installation status indicators ([G]=Global, [P]=Project)
 - Modern, hip terminal aesthetic
@@ -174,6 +180,151 @@ cct --mcp github                  # Found in integration/
 ```bash
 cct --agent api-documenter --directory ~/my-project
 ```
+
+## AI Provider Configuration
+
+CCT allows you to configure and switch between different AI providers that support Anthropic-compatible APIs. This enables you to use Claude Code with alternative AI services.
+
+### Supported Providers
+
+| Provider | Models | Description |
+|----------|--------|-------------|
+| **Claude (Default)** | claude-sonnet-4.5, claude-opus-4.1, claude-3-5-sonnet, etc. | Official Anthropic Claude models |
+| **DeepSeek** | deepseek-chat, deepseek-reasoner | DeepSeek AI with Anthropic compatibility |
+| **GLM (Z.ai)** | GLM-4.6, GLM-4.5-Air | Zhipu AI GLM models via Z.ai |
+| **Kimi** | kimi-k2, moonshot-v1-128k | Moonshot AI Kimi models |
+| **Custom** | Your custom model | Any Anthropic-compatible API endpoint |
+
+### Configuration via TUI
+
+Launch the interactive TUI and navigate to "Providers":
+
+```bash
+cct
+# Select "Providers" from main menu
+```
+
+**Features**:
+- 🔄 **Persistent Storage**: API keys and configurations saved in SQLite database
+- 🎯 **Model Selection**: Choose specific models for each provider
+- 📝 **Custom Providers**: Add any Anthropic-compatible API endpoint
+- 💾 **Multi-Provider Support**: Store configurations for all providers, switch anytime
+- 📱 **Compact Mode**: Responsive UI works even in small terminal windows
+
+### How It Works
+
+When you configure a provider, CCT:
+
+1. **Saves Configuration**: Stores API key, base URL, and model in `~/.claude/cct_history.db`
+2. **Generates Script**: Creates `~/.claude/provider-env.sh` with environment variables
+3. **Sets Variables**: Exports `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL`
+
+### Using the Configuration
+
+After configuring a provider, source the generated script:
+
+```bash
+# Load provider configuration
+source ~/.claude/provider-env.sh
+
+# Now launch Claude Code with the configured provider
+claude
+```
+
+**Optional**: Add to your shell profile for automatic loading:
+
+```bash
+# For bash
+echo 'source ~/.claude/provider-env.sh' >> ~/.bashrc
+
+# For zsh
+echo 'source ~/.claude/provider-env.sh' >> ~/.zshrc
+```
+
+### Custom Provider Example
+
+For custom Anthropic-compatible APIs:
+
+1. Select "Custom" provider in TUI
+2. Enter your API key
+3. Enter base URL (e.g., `https://api.example.com/v1/anthropic`)
+4. Optionally specify model name (e.g., `claude-3-5-sonnet-20241022`)
+5. Save configuration
+
+### Switching Providers
+
+Simply return to the Providers screen and select a different provider. Your previous configurations are preserved, so you can switch back anytime without re-entering credentials.
+
+## Permissions Management
+
+CCT provides a powerful interface for managing Claude Code tool permissions across three levels: Global, Project, and Local settings.
+
+### Permission Levels
+
+| Level | Scope | Location | Priority |
+|-------|-------|----------|----------|
+| **Global** | All projects system-wide | `~/.config/claude/settings.json` | Lowest |
+| **Project** | Current project directory | `.claude/settings.json` (gitignored) | Medium |
+| **Local** | Current project (committed) | `.claude/settings.local.json` | Highest |
+
+### Configuration via TUI
+
+Launch the interactive TUI and navigate to "Permissions":
+
+```bash
+cct
+# Select "Permissions" from main menu
+```
+
+**Features**:
+- 📑 **Tabbed Interface**: Switch between Global, Project, and Local settings
+- ✅ **Visual Status**: See which permissions are enabled at each level
+- 🔍 **Permission Categories**: Organized by tool type (Bash, Read, Write, etc.)
+- ➕ **Add Custom Permissions**: Define your own permission rules
+- 💾 **Multi-Source View**: See combined permission state across all levels
+
+### Permission Categories
+
+The TUI organizes permissions by tool type:
+
+- **Bash Commands**: `git`, `npm`, `docker`, etc.
+- **File Operations**: Read, Write, Edit permissions with glob patterns
+- **Web Access**: WebFetch, WebSearch domains
+- **Custom Patterns**: Define your own permission rules
+
+### How Permissions Work
+
+1. **Priority System**: Local > Project > Global (higher priority wins)
+2. **Additive**: Permissions from all levels are combined
+3. **Pattern Matching**: Supports glob patterns (`*.js`, `/path/**`)
+4. **Automatic Approval**: Tools matching approved patterns don't require manual approval
+
+### Example: Configuring Git Permissions
+
+1. Navigate to Permissions → Global tab
+2. Find "Git Commands" category
+3. Enable `Bash(git:*)` for all git commands
+4. Save configuration
+5. Claude Code will now auto-approve all git operations
+
+### Example: Custom Permission Rules
+
+Add custom permissions for your workflow:
+
+```
+Bash(npm:*)           # Auto-approve all npm commands
+Read(/src/**)         # Allow reading all files in src/
+Write(/docs/*.md)     # Allow writing markdown in docs/
+WebFetch(domain:*.github.com)  # Allow fetching from GitHub
+```
+
+### Best Practices
+
+- ✅ **Use Global** for universal tools (git, npm)
+- ✅ **Use Project** for project-specific needs (gitignored, not committed)
+- ✅ **Use Local** for team-shared permissions (committed to repo)
+- ⚠️ **Be Specific** with Write permissions to prevent accidental file modifications
+- 🔒 **Review Regularly** to ensure security and appropriate access levels
 
 ## Docker Support
 
