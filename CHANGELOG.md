@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.16] - 2025-10-14
+
+### Added
+- Comprehensive test coverage for core packages (analytics, server, websocket, components)
+- Testing infrastructure with coverage thresholds and CI integration
+- Scheduled CI runs for continuous test validation
+
+### Changed
+- Improved test coverage from minimal to 60%+ across critical packages
+- Enhanced CI workflow with test coverage reporting
+
 ## [0.2.15] - 2025-10-14
 
 ### Added
@@ -333,7 +344,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.15...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.16...HEAD
+[0.2.16]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.15...v0.2.16
 [0.2.15]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.12...v0.2.13
