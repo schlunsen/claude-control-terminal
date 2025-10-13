@@ -120,18 +120,22 @@ func GetDefaultPermissionItems() []PermissionItem {
 	}
 }
 
-// GetClaudeSettingsPath returns the path to Claude Code settings file
-func GetClaudeSettingsPath() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return filepath.Join(".claude", "settings.json")
+// GetClaudeSettingsPath returns the path to Claude Code local settings file
+// Always uses the project's .claude/settings.local.json relative to the project directory
+func GetClaudeSettingsPath(projectDir ...string) string {
+	// Use provided project directory, or default to current directory
+	dir := "."
+	if len(projectDir) > 0 && projectDir[0] != "" {
+		dir = projectDir[0]
 	}
-	return filepath.Join(homeDir, ".claude", "settings.json")
+
+	return filepath.Join(dir, ".claude", "settings.local.json")
 }
 
-// LoadClaudeSettings loads the Claude Code settings file
-func LoadClaudeSettings() (*ClaudeSettings, error) {
-	settingsPath := GetClaudeSettingsPath()
+// LoadClaudeSettings loads the Claude Code local settings file
+// If projectDir is provided, it loads from the project's .claude/settings.local.json
+func LoadClaudeSettings(projectDir ...string) (*ClaudeSettings, error) {
+	settingsPath := GetClaudeSettingsPath(projectDir...)
 
 	data, err := os.ReadFile(settingsPath)
 	if err != nil {
@@ -152,9 +156,10 @@ func LoadClaudeSettings() (*ClaudeSettings, error) {
 	return &settings, nil
 }
 
-// SaveClaudeSettings saves the Claude Code settings file
-func SaveClaudeSettings(settings *ClaudeSettings) error {
-	settingsPath := GetClaudeSettingsPath()
+// SaveClaudeSettings saves the Claude Code local settings file
+// If projectDir is provided, it saves to the project's .claude/settings.local.json
+func SaveClaudeSettings(settings *ClaudeSettings, projectDir ...string) error {
+	settingsPath := GetClaudeSettingsPath(projectDir...)
 
 	// Ensure the directory exists
 	settingsDir := filepath.Dir(settingsPath)
