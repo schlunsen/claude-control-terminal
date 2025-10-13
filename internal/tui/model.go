@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 	"github.com/schlunsen/claude-control-terminal/internal/server"
 )
 
@@ -23,6 +24,7 @@ const (
 	ScreenInstalling
 	ScreenRemoving
 	ScreenComplete
+	ScreenPermissions
 )
 
 // Model represents the application state
@@ -72,6 +74,14 @@ type Model struct {
 	analyticsEnabled bool            // Whether analytics server is running
 	analyticsServer  *server.Server  // Reference to analytics server
 	claudeDir        string          // Claude directory for analytics
+
+	// Permissions state
+	permissionItems    []fileops.PermissionItem
+	permissionsCursor  int
+	permissionStates   []bool
+	permissionsLoading bool
+	permissionsSaving  bool
+	permissionsError   error
 }
 
 // NewModel creates a new TUI model
@@ -90,7 +100,7 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 	ti.CharLimit = 50
 	ti.Width = 40
 
-	componentTypes := []string{"Agents", "Commands", "MCPs"}
+	componentTypes := []string{"Agents", "Commands", "MCPs", "Permissions"}
 
 	// Add "Launch Claude" options if Claude is available
 	if IsClaudeAvailable() {
@@ -190,6 +200,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.analyticsEnabled = false
 		}
 		return m, nil
+
+	case permissionsLoadedMsg:
+		m.permissionsLoading = false
+		m.permissionItems = msg.items
+		m.permissionStates = msg.states
+		m.permissionsError = msg.err
+		return m, nil
+
+	case permissionsSavedMsg:
+		m.permissionsSaving = false
+		if msg.err != nil {
+			m.permissionsError = msg.err
+			return m, nil
+		}
+		// Return to main screen after successful save
+		m.screen = ScreenMain
+		return m, nil
 	}
 
 	return m, nil
@@ -220,6 +247,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfirmRemoveScreen(msg)
 	case ScreenComplete:
 		return m.handleCompleteScreen(msg)
+	case ScreenPermissions:
+		return m.handlePermissionsScreen(msg)
 	}
 
 	return m, nil
@@ -250,6 +279,14 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.launchLastSession = false
 			m.quitting = true
 			return m, tea.Quit
+		}
+		// Check if "Permissions" was selected
+		if m.componentTypes[m.selectedType] == "Permissions" {
+			m.screen = ScreenPermissions
+			m.permissionsLoading = true
+			m.permissionsCursor = 0
+			m.permissionsError = nil
+			return m, loadPermissionsCmd()
 		}
 
 		// Load components for selected type
@@ -529,6 +566,8 @@ func (m Model) View() string {
 		return m.viewRemovingScreen()
 	case ScreenComplete:
 		return m.viewCompleteScreen()
+	case ScreenPermissions:
+		return m.viewPermissionsScreen()
 	}
 
 	return ""
@@ -939,6 +978,7 @@ func (m Model) getIconForType(typeName string) string {
 		"Agents":                     "🤖",
 		"Commands":                   "⚡",
 		"MCPs":                       "🔌",
+		"Permissions":                "⚙️",
 		"Launch last Claude session": "🔄",
 		"Launch Claude":              "🚀",
 	}
