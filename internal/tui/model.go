@@ -257,6 +257,10 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.loading = true
 		m.cursor = 0
 		m.components = nil
+		// Clear search state when entering component list
+		m.searchInput.SetValue("")
+		m.searchActive = false
+		m.searchInput.Blur()
 		return m, loadComponentsCmd(m.getComponentType(), m.targetDir)
 	case "esc":
 		m.quitting = true
@@ -376,14 +380,15 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.components = nil
 		return m, loadComponentsCmd(m.getComponentType(), m.targetDir, true)
 	case "esc":
-		// If there's an active filter, clear it first
-		if m.searchInput.Value() != "" {
-			m.searchInput.SetValue("")
-			m.updateFilteredIndices()
-			return m, nil
-		}
-		// Otherwise go back to main screen
+		// Clear search input and go back to main screen
+		m.searchInput.SetValue("")
+		m.searchActive = false
+		m.searchInput.Blur()
 		m.screen = ScreenMain
+		// Clear components to force clean transition
+		m.components = nil
+		m.filteredIndices = nil
+		m.cursor = 0
 		return m, nil
 	}
 
