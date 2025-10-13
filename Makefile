@@ -1,4 +1,4 @@
-.PHONY: build run clean install test help
+.PHONY: build run clean install test help test-verbose test-coverage-html coverage-badge test-race
 
 # Binary name
 BINARY_NAME=cct
@@ -37,6 +37,7 @@ clean:
 	@echo "Cleaning..."
 	@rm -f $(OUTPUT_DIR)/$(BINARY_NAME)
 	@rm -rf dist/
+	@rm -f coverage.out coverage.html
 	@echo "✅ Clean complete"
 
 # Install the binary to GOPATH
@@ -50,12 +51,52 @@ test:
 	@echo "Running tests..."
 	@go test -v ./...
 
+# Run tests with verbose output
+test-verbose:
+	@echo "Running tests with verbose output..."
+	@go test -v -race ./...
+
+# Run tests with race detector
+test-race:
+	@echo "Running tests with race detector..."
+	@go test -race ./...
+
 # Run tests with coverage
 test-coverage:
 	@echo "Running tests with coverage..."
-	@go test -v -coverprofile=coverage.out ./...
+	@go test -v -coverprofile=coverage.out -covermode=atomic ./...
 	@go tool cover -html=coverage.out -o coverage.html
-	@echo "✅ Coverage report: coverage.html"
+	@echo ""
+	@echo "📊 Coverage Summary:"
+	@go tool cover -func=coverage.out | grep total | awk '{print "   Total Coverage: " $$3}'
+	@echo ""
+	@echo "✅ Coverage report generated:"
+	@echo "   HTML: coverage.html"
+	@echo "   Data: coverage.out"
+
+# Open coverage report in browser
+test-coverage-html: test-coverage
+	@echo "Opening coverage report in browser..."
+	@if [ "$$(uname)" = "Darwin" ]; then \
+		open coverage.html; \
+	elif [ "$$(uname)" = "Linux" ]; then \
+		xdg-open coverage.html 2>/dev/null || echo "Please open coverage.html manually"; \
+	else \
+		echo "Please open coverage.html manually"; \
+	fi
+
+# Generate coverage badge locally
+coverage-badge:
+	@echo "Generating coverage badge..."
+	@go test -coverprofile=coverage.out ./... >/dev/null 2>&1
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	COLOR="red"; \
+	if [ $$(echo "$$COVERAGE > 80" | bc) -eq 1 ]; then COLOR="brightgreen"; \
+	elif [ $$(echo "$$COVERAGE > 60" | bc) -eq 1 ]; then COLOR="yellow"; \
+	elif [ $$(echo "$$COVERAGE > 40" | bc) -eq 1 ]; then COLOR="orange"; \
+	fi; \
+	echo "Coverage: $$COVERAGE% ($$COLOR)"; \
+	echo "Badge URL: https://img.shields.io/badge/coverage-$$COVERAGE%25-$$COLOR"
 
 # Build for multiple platforms
 build-all:
@@ -90,18 +131,30 @@ deps:
 # Display help
 help:
 	@echo "Available commands:"
-	@echo "  make build          - Build the binary"
-	@echo "  make run            - Run the application (launches TUI)"
-	@echo "  make run-tui        - Run the interactive TUI"
-	@echo "  make run-analytics  - Run with --analytics flag"
-	@echo "  make run-agents     - Run with --agents flag"
-	@echo "  make run-chats      - Run with --chats flag"
-	@echo "  make run-help       - Show help"
-	@echo "  make clean          - Remove build artifacts"
-	@echo "  make install        - Install to GOPATH/bin"
-	@echo "  make test           - Run tests"
-	@echo "  make test-coverage  - Run tests with coverage report"
-	@echo "  make build-all      - Build for all platforms"
-	@echo "  make fmt            - Format code"
-	@echo "  make lint           - Lint code"
-	@echo "  make deps           - Download and tidy dependencies"
+	@echo ""
+	@echo "Build & Run:"
+	@echo "  make build               - Build the binary"
+	@echo "  make run                 - Run the application (launches TUI)"
+	@echo "  make run-tui             - Run the interactive TUI"
+	@echo "  make run-analytics       - Run with --analytics flag"
+	@echo "  make run-agents          - Run with --agents flag"
+	@echo "  make run-chats           - Run with --chats flag"
+	@echo "  make run-help            - Show help"
+	@echo "  make build-all           - Build for all platforms"
+	@echo ""
+	@echo "Testing & Coverage:"
+	@echo "  make test                - Run tests"
+	@echo "  make test-verbose        - Run tests with verbose output and race detector"
+	@echo "  make test-race           - Run tests with race detector"
+	@echo "  make test-coverage       - Run tests with coverage report"
+	@echo "  make test-coverage-html  - Run tests and open coverage report in browser"
+	@echo "  make coverage-badge      - Generate coverage badge URL"
+	@echo ""
+	@echo "Code Quality:"
+	@echo "  make fmt                 - Format code"
+	@echo "  make lint                - Lint code"
+	@echo ""
+	@echo "Maintenance:"
+	@echo "  make clean               - Remove build artifacts"
+	@echo "  make install             - Install to GOPATH/bin"
+	@echo "  make deps                - Download and tidy dependencies"
