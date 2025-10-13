@@ -76,12 +76,19 @@ type Model struct {
 	claudeDir        string          // Claude directory for analytics
 
 	// Permissions state
-	permissionItems    []fileops.PermissionItem
-	permissionsCursor  int
-	permissionStates   []bool
-	permissionsLoading bool
-	permissionsSaving  bool
-	permissionsError   error
+	permissionItems          []fileops.PermissionItem
+	permissionsCursor        int
+	permissionStates         []bool   // States for current tab
+	permissionsLoading       bool
+	permissionsSaving        bool
+	permissionsError         error
+	permissionsMultiSource   *fileops.MultiSourceSettings // Settings from all sources
+	permissionsCurrentTab    fileops.SettingsSource      // Which tab is selected (global/project/local)
+	permissionsGlobalStates  []bool                      // States for global tab
+	permissionsProjectStates []bool                      // States for project tab
+	permissionsLocalStates   []bool                      // States for local tab
+	permissionsCustomInput   textinput.Model             // Input for custom permissions
+	permissionsAddingCustom  bool                        // Whether we're in custom permission add mode
 }
 
 // NewModel creates a new TUI model
@@ -100,6 +107,12 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 	ti.CharLimit = 50
 	ti.Width = 40
 
+	// Create custom permission input
+	customInput := textinput.New()
+	customInput.Placeholder = "e.g., Bash(npm *) or Read(/path/**)"
+	customInput.CharLimit = 200
+	customInput.Width = 60
+
 	componentTypes := []string{"Agents", "Commands", "MCPs", "Permissions"}
 
 	// Add "Launch Claude" options if Claude is available
@@ -111,18 +124,20 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 	analyticsEnabled := analyticsServer != nil
 
 	return Model{
-		screen:           ScreenMain,
-		componentTypes:   componentTypes,
-		selectedType:     0,
-		targetDir:        targetDir,
-		spinner:          s,
-		searchInput:      ti,
-		width:            80,
-		height:           24,
-		currentTheme:     GetCurrentThemeIndex(),
-		analyticsEnabled: analyticsEnabled,
-		analyticsServer:  analyticsServer,
-		claudeDir:        claudeDir,
+		screen:                ScreenMain,
+		componentTypes:        componentTypes,
+		selectedType:          0,
+		targetDir:             targetDir,
+		spinner:               s,
+		searchInput:           ti,
+		width:                 80,
+		height:                24,
+		currentTheme:          GetCurrentThemeIndex(),
+		analyticsEnabled:      analyticsEnabled,
+		analyticsServer:       analyticsServer,
+		claudeDir:             claudeDir,
+		permissionsCurrentTab: fileops.SettingsSourceLocal, // Default to local tab
+		permissionsCustomInput: customInput,
 	}
 }
 
@@ -204,8 +219,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case permissionsLoadedMsg:
 		m.permissionsLoading = false
 		m.permissionItems = msg.items
-		m.permissionStates = msg.states
+		m.permissionsMultiSource = msg.multiSource
+		m.permissionsGlobalStates = msg.globalStates
+		m.permissionsProjectStates = msg.projectStates
+		m.permissionsLocalStates = msg.localStates
 		m.permissionsError = msg.err
+
+		// Set current states based on selected tab
+		switch m.permissionsCurrentTab {
+		case fileops.SettingsSourceGlobal:
+			m.permissionStates = msg.globalStates
+		case fileops.SettingsSourceProject:
+			m.permissionStates = msg.projectStates
+		case fileops.SettingsSourceLocal:
+			m.permissionStates = msg.localStates
+		}
 		return m, nil
 
 	case permissionsSavedMsg:
