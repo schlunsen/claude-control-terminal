@@ -3,6 +3,8 @@
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://github.com/schlunsen/claude-control-terminal/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions)
+[![Tests](https://github.com/schlunsen/claude-control-terminal/workflows/Scheduled%20Tests%20%26%20Coverage/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions)
+[![codecov](https://codecov.io/gh/schlunsen/claude-control-terminal/branch/main/graph/badge.svg)](https://codecov.io/gh/schlunsen/claude-control-terminal)
 [![Release](https://img.shields.io/github/v/release/schlunsen/claude-control-terminal)](https://github.com/schlunsen/claude-control-terminal/releases)
 
 **A powerful wrapper and control center for Claude Code** - Manage components, configure AI providers, control permissions, launch Claude, run analytics, and deploy with Docker.
@@ -543,16 +545,40 @@ make clean      # or: just clean
 
 ### Testing
 
+CCT includes comprehensive automated testing with coverage reports:
+
 ```bash
-# Quick automated tests (7 tests)
-./TEST_QUICK.sh
+# Run all tests
+make test
 
-# Category search tests (9 tests)
-./TEST_CATEGORIES.sh
+# Run tests with verbose output and race detector
+make test-verbose
 
-# Manual testing
-# See TESTING.md for comprehensive testing guide
+# Generate coverage report
+make test-coverage
+
+# Open coverage report in browser
+make test-coverage-html
+
+# Generate coverage badge URL
+make coverage-badge
+
+# Quick automated integration tests
+./TEST_QUICK.sh        # 7 tests
+./TEST_CATEGORIES.sh   # 9 category search tests
 ```
+
+**Automated Testing:**
+- Comprehensive unit tests for analytics, components, docker, fileops, providers, server, cmd, and tui packages
+- Daily scheduled test runs at 8:00 AM UTC via GitHub Actions
+- Multi-platform testing (Linux, macOS, Windows)
+- Multi-version Go testing (1.23, 1.24)
+- Coverage reports with Codecov integration
+- Coverage threshold enforcement (20% minimum)
+
+**Current Coverage:** 27.8% (2,300+ lines of test code across 8 packages)
+
+For detailed testing guide, see [TESTING.md](TESTING.md).
 
 For detailed development setup, architecture documentation, and contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md) and [CLAUDE.md](CLAUDE.md).
 
