@@ -5,6 +5,12 @@
 [![Build Status](https://github.com/schlunsen/claude-control-terminal/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions)
 [![Release](https://img.shields.io/github/v/release/schlunsen/claude-control-terminal)](https://github.com/schlunsen/claude-control-terminal/releases)
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=iT4Oo3diySg">
+    <img src="https://img.youtube.com/vi/iT4Oo3diySg/maxresdefault.jpg" alt="CCT Demo Video" width="600">
+  </a>
+</p>
+
 **A powerful wrapper and control center for Claude Code** - Manage components, launch Claude, run analytics, and deploy with Docker.
 
 Rebranded from `go-claude-templates` to better reflect its role as a comprehensive control terminal for Claude Code environments.
