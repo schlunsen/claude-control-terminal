@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/schlunsen/claude-control-terminal/internal/fileops"
+	"github.com/schlunsen/claude-control-terminal/internal/providers"
 	"github.com/schlunsen/claude-control-terminal/internal/server"
 )
 
@@ -25,6 +26,10 @@ const (
 	ScreenRemoving
 	ScreenComplete
 	ScreenPermissions
+	ScreenProvidersList
+	ScreenProviderInput
+	ScreenProviderSaving
+	ScreenProviderComplete
 )
 
 // Model represents the application state
@@ -89,6 +94,17 @@ type Model struct {
 	permissionsLocalStates   []bool                      // States for local tab
 	permissionsCustomInput   textinput.Model             // Input for custom permissions
 	permissionsAddingCustom  bool                        // Whether we're in custom permission add mode
+
+	// Provider state
+	providersCursor      int              // Current selection in provider list
+	providerAPIKeyInput  textinput.Model  // API key input field
+	providerCustomURL    textinput.Model  // Custom URL input field (for Custom provider)
+	selectedProviderID   string           // ID of selected provider
+	providerSaving       bool             // Whether we're saving provider config
+	providerError        error            // Error during provider operations
+	providerSuccessMsg   string           // Success message to display
+	currentProviderName  string           // Name of currently configured provider
+	hasProviderConfig    bool             // Whether a provider is configured
 }
 
 // NewModel creates a new TUI model
@@ -113,7 +129,21 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 	customInput.CharLimit = 200
 	customInput.Width = 60
 
-	componentTypes := []string{"Agents", "Commands", "MCPs", "Permissions"}
+	// Create provider API key input
+	apiKeyInput := textinput.New()
+	apiKeyInput.Placeholder = "Enter your API key..."
+	apiKeyInput.CharLimit = 200
+	apiKeyInput.Width = 60
+	apiKeyInput.EchoMode = textinput.EchoPassword
+	apiKeyInput.EchoCharacter = '•'
+
+	// Create provider custom URL input
+	customURLInput := textinput.New()
+	customURLInput.Placeholder = "https://api.example.com/v1/anthropic"
+	customURLInput.CharLimit = 200
+	customURLInput.Width = 60
+
+	componentTypes := []string{"Agents", "Commands", "MCPs", "Providers", "Permissions"}
 
 	// Add "Launch Claude" options if Claude is available
 	if IsClaudeAvailable() {
@@ -123,21 +153,28 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 
 	analyticsEnabled := analyticsServer != nil
 
+	// Load current provider info if available
+	currentProviderName, hasProviderConfig, _ := providers.GetCurrentProviderInfo()
+
 	return Model{
-		screen:                ScreenMain,
-		componentTypes:        componentTypes,
-		selectedType:          0,
-		targetDir:             targetDir,
-		spinner:               s,
-		searchInput:           ti,
-		width:                 80,
-		height:                24,
-		currentTheme:          GetCurrentThemeIndex(),
-		analyticsEnabled:      analyticsEnabled,
-		analyticsServer:       analyticsServer,
-		claudeDir:             claudeDir,
-		permissionsCurrentTab: fileops.SettingsSourceLocal, // Default to local tab
+		screen:                 ScreenMain,
+		componentTypes:         componentTypes,
+		selectedType:           0,
+		targetDir:              targetDir,
+		spinner:                s,
+		searchInput:            ti,
+		width:                  80,
+		height:                 24,
+		currentTheme:           GetCurrentThemeIndex(),
+		analyticsEnabled:       analyticsEnabled,
+		analyticsServer:        analyticsServer,
+		claudeDir:              claudeDir,
+		permissionsCurrentTab:  fileops.SettingsSourceLocal, // Default to local tab
 		permissionsCustomInput: customInput,
+		providerAPIKeyInput:    apiKeyInput,
+		providerCustomURL:      customURLInput,
+		currentProviderName:    currentProviderName,
+		hasProviderConfig:      hasProviderConfig,
 	}
 }
 
@@ -245,6 +282,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Return to main screen after successful save
 		m.screen = ScreenMain
 		return m, nil
+
+	case providerSavedMsg:
+		return m.handleProviderSavedMsg(msg)
 	}
 
 	return m, nil
@@ -277,6 +317,12 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleCompleteScreen(msg)
 	case ScreenPermissions:
 		return m.handlePermissionsScreen(msg)
+	case ScreenProvidersList:
+		return m.handleProvidersListScreen(msg)
+	case ScreenProviderInput:
+		return m.handleProviderInputScreen(msg)
+	case ScreenProviderComplete:
+		return m.handleProviderCompleteScreen(msg)
 	}
 
 	return m, nil
@@ -293,6 +339,18 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selectedType < len(m.componentTypes)-1 {
 			m.selectedType++
 		}
+	case "pgup":
+		// Page up - jump 5 items up
+		m.selectedType -= 5
+		if m.selectedType < 0 {
+			m.selectedType = 0
+		}
+	case "pgdown":
+		// Page down - jump 5 items down
+		m.selectedType += 5
+		if m.selectedType >= len(m.componentTypes) {
+			m.selectedType = len(m.componentTypes) - 1
+		}
 	case "enter":
 		// Check if "Launch last Claude session" was selected
 		if m.componentTypes[m.selectedType] == "Launch last Claude session" {
@@ -307,6 +365,13 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.launchLastSession = false
 			m.quitting = true
 			return m, tea.Quit
+		}
+		// Check if "Providers" was selected
+		if m.componentTypes[m.selectedType] == "Providers" {
+			m.screen = ScreenProvidersList
+			m.providersCursor = 0
+			m.providerError = nil
+			return m, nil
 		}
 		// Check if "Permissions" was selected
 		if m.componentTypes[m.selectedType] == "Permissions" {
@@ -596,6 +661,14 @@ func (m Model) View() string {
 		return m.viewCompleteScreen()
 	case ScreenPermissions:
 		return m.viewPermissionsScreen()
+	case ScreenProvidersList:
+		return m.viewProvidersListScreen()
+	case ScreenProviderInput:
+		return m.viewProviderInputScreen()
+	case ScreenProviderSaving:
+		return m.viewProviderSavingScreen()
+	case ScreenProviderComplete:
+		return m.viewProviderCompleteScreen()
 	}
 
 	return ""
@@ -650,8 +723,16 @@ func (m Model) viewMainScreen() string {
 		analyticsStyle = StatusSuccessStyle
 	}
 	b.WriteString(SubtitleStyle.Render("Analytics: ") + analyticsStyle.Render(analyticsStatus))
-	b.WriteString(SubtitleStyle.Render(" (http://localhost:3333)") + "\n\n")
+	b.WriteString(SubtitleStyle.Render(" (http://localhost:3333)") + "\n")
 
+	// Provider status
+	if m.hasProviderConfig {
+		b.WriteString(SubtitleStyle.Render("Provider: ") + StatusSuccessStyle.Render(m.currentProviderName+" ✓") + "\n")
+	} else {
+		b.WriteString(SubtitleStyle.Render("Provider: ") + StatusErrorStyle.Render("Not configured") + "\n")
+	}
+
+	b.WriteString("\n")
 	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Toggle Analytics • Q/Esc: Quit"))
 
 	return BoxStyle.Render(b.String())
@@ -1003,9 +1084,10 @@ func (m Model) getComponentType() string {
 
 func (m Model) getIconForType(typeName string) string {
 	icons := map[string]string{
-		"Agents":                     "🤖",
+		"Agents":                     "😎",
 		"Commands":                   "⚡",
 		"MCPs":                       "🔌",
+		"Providers":                  "🤖",
 		"Permissions":                "⚙️",
 		"Launch last Claude session": "🔄",
 		"Launch Claude":              "🚀",
