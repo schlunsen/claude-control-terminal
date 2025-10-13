@@ -78,6 +78,9 @@ func (m Model) handleProvidersListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// For other providers, move to input screen
 		m.screen = ScreenProviderInput
 
+		// Check if this is custom provider
+		isCustomProvider := selectedProvider.ID == "custom"
+
 		// Try to load existing configuration for this specific provider
 		if m.dbRepo != nil {
 			existingConfig, err := providers.GetProviderConfig(m.dbRepo, selectedProvider.ID)
@@ -85,9 +88,10 @@ func (m Model) handleProvidersListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Pre-fill with saved values
 				m.providerAPIKeyInput.SetValue(existingConfig.APIKey)
 				m.providerCustomURL.SetValue(existingConfig.CustomURL)
+				m.providerModelInput.SetValue(existingConfig.ModelName)
 
-				// Set model cursor to saved model if found
-				if existingConfig.ModelName != "" {
+				// Set model cursor to saved model if found (for non-custom providers)
+				if !isCustomProvider && existingConfig.ModelName != "" {
 					// Find the saved model in the list
 					// Add 1 to account for "No model" option at position 0
 					found := false
@@ -108,6 +112,7 @@ func (m Model) handleProvidersListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				// Reset input fields for new provider
 				m.providerAPIKeyInput.SetValue("")
 				m.providerCustomURL.SetValue("")
+				m.providerModelInput.SetValue("")
 				m.providerModelCursor = 0
 			}
 		}
@@ -150,6 +155,8 @@ func (m Model) handleProviderInputScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Check if we're in custom URL mode (only for Custom provider)
 	isCustomProvider := provider.ID == "custom"
 	apiKeyFocused := m.providerAPIKeyInput.Focused()
+	customURLFocused := m.providerCustomURL.Focused()
+	modelInputFocused := m.providerModelInput.Focused()
 	hasModels := len(provider.Models) > 0
 
 	switch msg.String() {
@@ -157,11 +164,12 @@ func (m Model) handleProviderInputScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Go back to providers list
 		m.providerAPIKeyInput.Blur()
 		m.providerCustomURL.Blur()
+		m.providerModelInput.Blur()
 		m.screen = ScreenProvidersList
 		return m, nil
 	case "up", "k":
 		// Navigate model list (when not in input field)
-		if !apiKeyFocused && !m.providerCustomURL.Focused() && hasModels {
+		if !apiKeyFocused && !customURLFocused && !modelInputFocused && hasModels {
 			if m.providerModelCursor > 0 {
 				m.providerModelCursor--
 			}
@@ -170,20 +178,23 @@ func (m Model) handleProviderInputScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		// Navigate model list (when not in input field)
 		// Account for the extra "No model" option at position 0
-		if !apiKeyFocused && !m.providerCustomURL.Focused() && hasModels {
+		if !apiKeyFocused && !customURLFocused && !modelInputFocused && hasModels {
 			if m.providerModelCursor < len(provider.Models) {
 				m.providerModelCursor++
 			}
 			return m, nil
 		}
 	case "tab", "shift+tab":
-		// For custom provider: toggle between API key and custom URL inputs
+		// For custom provider: cycle through API key -> Custom URL -> Model Name
 		if isCustomProvider {
 			if apiKeyFocused {
 				m.providerAPIKeyInput.Blur()
 				m.providerCustomURL.Focus()
-			} else {
+			} else if customURLFocused {
 				m.providerCustomURL.Blur()
+				m.providerModelInput.Focus()
+			} else {
+				m.providerModelInput.Blur()
 				m.providerAPIKeyInput.Focus()
 			}
 			return m, textinput.Blink
@@ -217,10 +228,13 @@ func (m Model) handleProviderInputScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 		// Get selected model
-		// If cursor is at 0 and we have models, it means "No model (use provider default)"
-		// Otherwise, get the model at cursor position - 1 (accounting for the "No model" option)
 		selectedModel := ""
-		if hasModels && m.providerModelCursor > 0 && m.providerModelCursor <= len(provider.Models) {
+		if isCustomProvider {
+			// For custom provider, get model from input field
+			selectedModel = strings.TrimSpace(m.providerModelInput.Value())
+		} else if hasModels && m.providerModelCursor > 0 && m.providerModelCursor <= len(provider.Models) {
+			// For other providers with model lists, get from cursor position
+			// If cursor is at 0, it means "No model (use provider default)"
 			selectedModel = provider.Models[m.providerModelCursor-1]
 		}
 
@@ -237,6 +251,7 @@ func (m Model) handleProviderInputScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.providerSaving = true
 		m.providerAPIKeyInput.Blur()
 		m.providerCustomURL.Blur()
+		m.providerModelInput.Blur()
 
 		return m, saveProviderCmd(m.dbRepo, config)
 	}
@@ -245,8 +260,10 @@ func (m Model) handleProviderInputScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	if apiKeyFocused {
 		m.providerAPIKeyInput, cmd = m.providerAPIKeyInput.Update(msg)
-	} else {
+	} else if customURLFocused {
 		m.providerCustomURL, cmd = m.providerCustomURL.Update(msg)
+	} else if modelInputFocused {
+		m.providerModelInput, cmd = m.providerModelInput.Update(msg)
 	}
 
 	return m, cmd
@@ -367,94 +384,206 @@ func (m Model) viewProviderInputScreen() string {
 		return BoxStyle.Render(b.String())
 	}
 
+	// Check if we need compact mode (small terminal)
+	isCompactMode := m.height < 25
+	isCustomProvider := provider.ID == "custom"
+
 	b.WriteString(TitleStyle.Render(fmt.Sprintf("%s Configure %s", provider.Icon, provider.Name)) + "\n\n")
 
-	// API Key input
-	b.WriteString(SubtitleStyle.Render("API Key:") + "\n")
-	if m.providerAPIKeyInput.Focused() {
-		b.WriteString(InputFocusedStyle.Render(m.providerAPIKeyInput.View()) + "\n\n")
-	} else {
-		b.WriteString(InputStyle.Render(m.providerAPIKeyInput.View()) + "\n\n")
-	}
-
-	// Custom URL input (only for Custom provider)
-	if provider.ID == "custom" {
-		b.WriteString(SubtitleStyle.Render("Base URL:") + "\n")
-		if m.providerCustomURL.Focused() {
+	// In compact mode, show ONLY the currently focused/active field
+	if isCompactMode {
+		// Show focused field with position indicator
+		if m.providerAPIKeyInput.Focused() {
+			b.WriteString(SubtitleStyle.Render("API Key:") + StatusInfoStyle.Render(" (Field 1/"+m.getProviderFieldCount(provider)+")") + "\n")
+			b.WriteString(InputFocusedStyle.Render(m.providerAPIKeyInput.View()) + "\n\n")
+		} else if m.providerCustomURL.Focused() {
+			b.WriteString(SubtitleStyle.Render("Base URL:") + StatusInfoStyle.Render(" (Field 2/"+m.getProviderFieldCount(provider)+")") + "\n")
 			b.WriteString(InputFocusedStyle.Render(m.providerCustomURL.View()) + "\n\n")
-		} else {
-			b.WriteString(InputStyle.Render(m.providerCustomURL.View()) + "\n\n")
-		}
-	} else {
-		// Show the base URL for non-custom providers
-		b.WriteString(SubtitleStyle.Render("Base URL: ") + CategoryStyle.Render(provider.BaseURL) + "\n\n")
-	}
+		} else if m.providerModelInput.Focused() {
+			b.WriteString(SubtitleStyle.Render("Model Name (optional):") + StatusInfoStyle.Render(" (Field 3/"+m.getProviderFieldCount(provider)+")") + "\n")
+			b.WriteString(InputFocusedStyle.Render(m.providerModelInput.View()) + "\n\n")
+		} else if !isCustomProvider && len(provider.Models) > 0 {
+			// Model selection is active
+			totalModels := len(provider.Models) + 1
+			b.WriteString(SubtitleStyle.Render(fmt.Sprintf("Select Model (%d/%d):", m.providerModelCursor+1, totalModels)) + StatusSuccessStyle.Render(" ↑/↓") + "\n\n")
 
-	// Model selection (if models are available)
-	if len(provider.Models) > 0 {
-		// Show if model selection is active (input not focused)
-		modelSelectionActive := !m.providerAPIKeyInput.Focused() && !m.providerCustomURL.Focused()
-
-		if modelSelectionActive {
-			b.WriteString(SubtitleStyle.Render("Model: ") + StatusSuccessStyle.Render("(Press ↑/↓ to select)") + "\n")
-		} else {
-			b.WriteString(SubtitleStyle.Render("Model: ") + StatusInfoStyle.Render("(Press Tab to select)") + "\n")
-		}
-
-		// First option: "No model (use provider default)"
-		cursor := "  "
-		if m.providerModelCursor == 0 {
-			cursor = "> "
-		}
-		line := cursor + "No model (use provider default)"
-		if m.providerModelCursor == 0 {
-			b.WriteString(SelectedItemStyle.Render(line) + "\n")
-		} else {
-			b.WriteString(UnselectedItemStyle.Render(line) + "\n")
-		}
-
-		// Then show all available models
-		for i, model := range provider.Models {
-			cursor = "  "
-			if i+1 == m.providerModelCursor {
-				cursor = "> "
+			// Show only 3 models around the cursor for very compact view
+			maxVisible := 3
+			start := m.providerModelCursor - 1
+			if start < 0 {
+				start = 0
+			}
+			end := start + maxVisible
+			if end > totalModels {
+				end = totalModels
+				start = end - maxVisible
+				if start < 0 {
+					start = 0
+				}
 			}
 
-			line = cursor + model
-			if i+1 == m.providerModelCursor {
+			// Show indicator if there are more above
+			if start > 0 {
+				b.WriteString(SubtitleStyle.Render("  ⬆ "+fmt.Sprintf("%d more above", start)+" ⬆\n"))
+			}
+
+			// Show "No model" option if in range
+			if start == 0 {
+				cursor := "  "
+				if m.providerModelCursor == 0 {
+					cursor = "> "
+				}
+				line := cursor + "No model (default)"
+				if m.providerModelCursor == 0 {
+					b.WriteString(SelectedItemStyle.Render(line) + "\n")
+				} else {
+					b.WriteString(UnselectedItemStyle.Render(line) + "\n")
+				}
+				start = 1
+			}
+
+			// Show visible models
+			for i := start - 1; i < end - 1 && i < len(provider.Models); i++ {
+				cursor := "  "
+				if i+1 == m.providerModelCursor {
+					cursor = "> "
+				}
+				line := cursor + provider.Models[i]
+				if i+1 == m.providerModelCursor {
+					b.WriteString(SelectedItemStyle.Render(line) + "\n")
+				} else {
+					b.WriteString(UnselectedItemStyle.Render(line) + "\n")
+				}
+			}
+
+			// Show indicator if there are more below
+			if end < totalModels {
+				remaining := totalModels - end
+				b.WriteString(SubtitleStyle.Render("  ⬇ "+fmt.Sprintf("%d more below", remaining)+" ⬇\n"))
+			}
+			b.WriteString("\n")
+		}
+	} else {
+		// Full mode - show all fields
+		// API Key input
+		b.WriteString(SubtitleStyle.Render("API Key:") + "\n")
+		if m.providerAPIKeyInput.Focused() {
+			b.WriteString(InputFocusedStyle.Render(m.providerAPIKeyInput.View()) + "\n\n")
+		} else {
+			b.WriteString(InputStyle.Render(m.providerAPIKeyInput.View()) + "\n\n")
+		}
+
+		// Custom URL input (only for Custom provider)
+		if isCustomProvider {
+			b.WriteString(SubtitleStyle.Render("Base URL:") + "\n")
+			if m.providerCustomURL.Focused() {
+				b.WriteString(InputFocusedStyle.Render(m.providerCustomURL.View()) + "\n\n")
+			} else {
+				b.WriteString(InputStyle.Render(m.providerCustomURL.View()) + "\n\n")
+			}
+
+			// Model name input (for Custom provider)
+			b.WriteString(SubtitleStyle.Render("Model Name (optional):") + "\n")
+			if m.providerModelInput.Focused() {
+				b.WriteString(InputFocusedStyle.Render(m.providerModelInput.View()) + "\n\n")
+			} else {
+				b.WriteString(InputStyle.Render(m.providerModelInput.View()) + "\n\n")
+			}
+		} else {
+			// Show the base URL for non-custom providers
+			b.WriteString(SubtitleStyle.Render("Base URL: ") + CategoryStyle.Render(provider.BaseURL) + "\n\n")
+		}
+
+		// Model selection (if models are available)
+		if !isCustomProvider && len(provider.Models) > 0 {
+			// Show if model selection is active (input not focused)
+			modelSelectionActive := !m.providerAPIKeyInput.Focused() && !m.providerCustomURL.Focused()
+
+			if modelSelectionActive {
+				b.WriteString(SubtitleStyle.Render("Model: ") + StatusSuccessStyle.Render("(Press ↑/↓ to select)") + "\n")
+			} else {
+				b.WriteString(SubtitleStyle.Render("Model: ") + StatusInfoStyle.Render("(Press Tab to select)") + "\n")
+			}
+
+			// First option: "No model (use provider default)"
+			cursor := "  "
+			if m.providerModelCursor == 0 {
+				cursor = "> "
+			}
+			line := cursor + "No model (use provider default)"
+			if m.providerModelCursor == 0 {
 				b.WriteString(SelectedItemStyle.Render(line) + "\n")
 			} else {
 				b.WriteString(UnselectedItemStyle.Render(line) + "\n")
 			}
+
+			// Then show all available models
+			for i, model := range provider.Models {
+				cursor = "  "
+				if i+1 == m.providerModelCursor {
+					cursor = "> "
+				}
+
+				line = cursor + model
+				if i+1 == m.providerModelCursor {
+					b.WriteString(SelectedItemStyle.Render(line) + "\n")
+				} else {
+					b.WriteString(UnselectedItemStyle.Render(line) + "\n")
+				}
+			}
+			b.WriteString("\n")
+		}
+
+		// Instructions
+		b.WriteString(SubtitleStyle.Render("This will set:") + "\n")
+		b.WriteString("  • ANTHROPIC_AUTH_TOKEN\n")
+		b.WriteString("  • ANTHROPIC_BASE_URL\n")
+		// Show ANTHROPIC_MODEL if:
+		// - Custom provider with model input filled
+		// - Other providers with model selection (cursor > 0)
+		if isCustomProvider {
+			if strings.TrimSpace(m.providerModelInput.Value()) != "" {
+				b.WriteString("  • ANTHROPIC_MODEL\n")
+			}
+		} else if len(provider.Models) > 0 && m.providerModelCursor > 0 {
+			b.WriteString("  • ANTHROPIC_MODEL\n")
 		}
 		b.WriteString("\n")
 	}
 
-	// Show error if present
+	// Show error if present (compact in small mode)
 	if m.providerError != nil {
-		b.WriteString(StatusErrorStyle.Render("Error: "+m.providerError.Error()) + "\n\n")
+		if isCompactMode {
+			b.WriteString(StatusErrorStyle.Render("⚠ "+m.providerError.Error()) + "\n\n")
+		} else {
+			b.WriteString(StatusErrorStyle.Render("Error: "+m.providerError.Error()) + "\n\n")
+		}
 	}
-
-	// Instructions
-	b.WriteString(SubtitleStyle.Render("This will set:") + "\n")
-	b.WriteString("  • ANTHROPIC_AUTH_TOKEN\n")
-	b.WriteString("  • ANTHROPIC_BASE_URL\n")
-	// Only show ANTHROPIC_MODEL if a specific model is selected (cursor > 0)
-	if len(provider.Models) > 0 && m.providerModelCursor > 0 {
-		b.WriteString("  • ANTHROPIC_MODEL\n")
-	}
-	b.WriteString("\n")
 
 	// Help text
-	if provider.ID == "custom" {
-		b.WriteString(HelpStyle.Render("Tab: Switch fields • Enter: Save • Esc: Cancel"))
-	} else if len(provider.Models) > 0 {
-		b.WriteString(HelpStyle.Render("Tab: Toggle input/model • ↑/↓: Select model • Enter: Save • Esc: Cancel"))
+	if isCompactMode {
+		// Very compact help
+		b.WriteString(HelpStyle.Render("Tab: Next • ↑↓: Nav • Enter: Save • Esc: Back"))
 	} else {
-		b.WriteString(HelpStyle.Render("Enter: Save • Esc: Cancel"))
+		// Full help
+		if isCustomProvider {
+			b.WriteString(HelpStyle.Render("Tab: Cycle fields • Enter: Save • Esc: Cancel"))
+		} else if len(provider.Models) > 0 {
+			b.WriteString(HelpStyle.Render("Tab: Toggle input/model • ↑/↓: Select model • Enter: Save • Esc: Cancel"))
+		} else {
+			b.WriteString(HelpStyle.Render("Enter: Save • Esc: Cancel"))
+		}
 	}
 
 	return BoxStyle.Render(b.String())
+}
+
+// Helper function to get the field count for a provider
+func (m Model) getProviderFieldCount(provider *providers.Provider) string {
+	if provider.ID == "custom" {
+		return "3" // API Key, Base URL, Model Name
+	}
+	return "1" // Just API Key for others (base URL is shown as info)
 }
 
 // View: Provider saving screen
