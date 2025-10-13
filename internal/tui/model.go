@@ -102,6 +102,7 @@ type Model struct {
 	providersCursor      int              // Current selection in provider list
 	providerAPIKeyInput  textinput.Model  // API key input field
 	providerCustomURL    textinput.Model  // Custom URL input field (for Custom provider)
+	providerModelInput   textinput.Model  // Model name input field (for Custom provider)
 	providerModelCursor  int              // Current selection in model list
 	selectedProviderID   string           // ID of selected provider
 	providerSaving       bool             // Whether we're saving provider config
@@ -148,6 +149,12 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 	customURLInput.CharLimit = 200
 	customURLInput.Width = 60
 
+	// Create provider model name input
+	modelInput := textinput.New()
+	modelInput.Placeholder = "e.g., claude-3-5-sonnet-20241022"
+	modelInput.CharLimit = 100
+	modelInput.Width = 60
+
 	componentTypes := []string{"Agents", "Commands", "MCPs", "Providers", "Permissions"}
 
 	// Add "Launch Claude" options if Claude is available
@@ -191,6 +198,7 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 		permissionsCustomInput: customInput,
 		providerAPIKeyInput:    apiKeyInput,
 		providerCustomURL:      customURLInput,
+		providerModelInput:     modelInput,
 		currentProviderName:    currentProviderName,
 		hasProviderConfig:      hasProviderConfig,
 		dbRepo:                 repo,
