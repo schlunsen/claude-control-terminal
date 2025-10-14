@@ -25,14 +25,15 @@ func (r *Repository) RecordShellCommand(cmd *ShellCommand) error {
 
 	query := `
 		INSERT INTO shell_commands (
-			conversation_id, command, description, working_directory, git_branch,
+			conversation_id, session_name, command, description, working_directory, git_branch,
 			exit_code, stdout, stderr, duration_ms, executed_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
 		query,
 		cmd.ConversationID,
+		cmd.SessionName,
 		cmd.Command,
 		cmd.Description,
 		cmd.WorkingDirectory,
@@ -65,14 +66,15 @@ func (r *Repository) RecordClaudeCommand(cmd *ClaudeCommand) error {
 
 	query := `
 		INSERT INTO claude_commands (
-			conversation_id, tool_name, parameters, result, working_directory, git_branch,
+			conversation_id, session_name, tool_name, parameters, result, working_directory, git_branch,
 			success, error_message, duration_ms, executed_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
 		query,
 		cmd.ConversationID,
+		cmd.SessionName,
 		cmd.ToolName,
 		cmd.Parameters,
 		cmd.Result,
@@ -116,6 +118,7 @@ func (r *Repository) GetShellCommands(query *CommandHistoryQuery) ([]*ShellComma
 		err := rows.Scan(
 			&cmd.ID,
 			&cmd.ConversationID,
+			&cmd.SessionName,
 			&cmd.Command,
 			&cmd.Description,
 			&cmd.WorkingDirectory,
@@ -154,6 +157,7 @@ func (r *Repository) GetClaudeCommands(query *CommandHistoryQuery) ([]*ClaudeCom
 		err := rows.Scan(
 			&cmd.ID,
 			&cmd.ConversationID,
+			&cmd.SessionName,
 			&cmd.ToolName,
 			&cmd.Parameters,
 			&cmd.Result,
@@ -273,7 +277,7 @@ func (r *Repository) UpsertConversation(conv *Conversation) error {
 
 func (r *Repository) buildShellCommandQuery(query *CommandHistoryQuery) (string, []interface{}) {
 	sql := `
-		SELECT id, conversation_id, command, description, working_directory, git_branch,
+		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, command, description, working_directory, git_branch,
 		       exit_code, stdout, stderr, duration_ms, executed_at, created_at
 		FROM shell_commands
 		WHERE 1=1
@@ -313,7 +317,7 @@ func (r *Repository) buildShellCommandQuery(query *CommandHistoryQuery) (string,
 
 func (r *Repository) buildClaudeCommandQuery(query *CommandHistoryQuery) (string, []interface{}) {
 	sql := `
-		SELECT id, conversation_id, tool_name, parameters, result, working_directory, git_branch,
+		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, tool_name, parameters, result, working_directory, git_branch,
 		       success, error_message, duration_ms, executed_at, created_at
 		FROM claude_commands
 		WHERE 1=1
@@ -712,17 +716,88 @@ func (r *Repository) DeleteAllUserMessages() error {
 	return nil
 }
 
-// GetUniqueSessions retrieves all unique session IDs and names from user messages
+// DeleteAllShellCommands removes all shell commands
+func (r *Repository) DeleteAllShellCommands() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM shell_commands"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all shell commands: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllClaudeCommands removes all claude commands
+func (r *Repository) DeleteAllClaudeCommands() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM claude_commands"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all claude commands: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllHistory removes all history records (user messages, shell commands, and claude commands)
+func (r *Repository) DeleteAllHistory() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	// Delete from all three tables in a transaction
+	tx, err := r.db.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM user_messages"); err != nil {
+		return fmt.Errorf("failed to delete user messages: %w", err)
+	}
+
+	if _, err := tx.Exec("DELETE FROM shell_commands"); err != nil {
+		return fmt.Errorf("failed to delete shell commands: %w", err)
+	}
+
+	if _, err := tx.Exec("DELETE FROM claude_commands"); err != nil {
+		return fmt.Errorf("failed to delete claude commands: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// GetUniqueSessions retrieves all unique session IDs and names from all tables (user_messages, shell_commands, claude_commands)
 func (r *Repository) GetUniqueSessions() ([]map[string]string, error) {
 	r.db.mu.RLock()
 	defer r.db.mu.RUnlock()
 
+	// Union all three tables to get unique sessions
 	query := `
-		SELECT conversation_id, COALESCE(session_name, '') as session_name, MAX(submitted_at) as last_submitted
-		FROM user_messages
-		WHERE conversation_id != '' AND conversation_id IS NOT NULL
+		SELECT conversation_id, session_name, MAX(last_activity) as last_activity
+		FROM (
+			SELECT conversation_id, COALESCE(session_name, '') as session_name, submitted_at as last_activity
+			FROM user_messages
+			WHERE conversation_id != '' AND conversation_id IS NOT NULL
+			UNION ALL
+			SELECT conversation_id, COALESCE(session_name, '') as session_name, executed_at as last_activity
+			FROM shell_commands
+			WHERE conversation_id != '' AND conversation_id IS NOT NULL
+			UNION ALL
+			SELECT conversation_id, COALESCE(session_name, '') as session_name, executed_at as last_activity
+			FROM claude_commands
+			WHERE conversation_id != '' AND conversation_id IS NOT NULL
+		)
 		GROUP BY conversation_id, session_name
-		ORDER BY last_submitted DESC
+		ORDER BY last_activity DESC
 	`
 
 	rows, err := r.db.db.Query(query)
@@ -733,8 +808,8 @@ func (r *Repository) GetUniqueSessions() ([]map[string]string, error) {
 
 	var sessions []map[string]string
 	for rows.Next() {
-		var conversationID, sessionName, lastSubmitted string
-		err := rows.Scan(&conversationID, &sessionName, &lastSubmitted)
+		var conversationID, sessionName, lastActivity string
+		err := rows.Scan(&conversationID, &sessionName, &lastActivity)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
 		}
