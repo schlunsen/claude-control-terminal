@@ -224,5 +224,25 @@ func runMigrations(db *sql.DB) error {
 		}
 	}
 
+	// Migration 2: Add session_name column to user_messages table if it doesn't exist
+	var sessionNameExists bool
+	sessionQuery := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('user_messages')
+		WHERE name='session_name'
+	`
+	if err := db.QueryRow(sessionQuery).Scan(&sessionNameExists); err != nil {
+		// If the user_messages table doesn't exist yet, that's fine - it will be created by schema.sql
+		return nil
+	}
+
+	if !sessionNameExists {
+		// Add the session_name column
+		_, err := db.Exec("ALTER TABLE user_messages ADD COLUMN session_name TEXT")
+		if err != nil {
+			return fmt.Errorf("failed to add session_name column: %w", err)
+		}
+	}
+
 	return nil
 }
