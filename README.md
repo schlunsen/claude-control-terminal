@@ -4,7 +4,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://github.com/schlunsen/claude-control-terminal/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions)
 [![Coverage](https://img.shields.io/badge/coverage-27.8%25-red)](https://github.com/schlunsen/claude-control-terminal)
-[![codecov](https://codecov.io/gh/schlunsen/claude-control-terminal/branch/main/graph/badge.svg)](https://codecov.io/gh/schlunsen/claude-control-terminal)
 [![Release](https://img.shields.io/github/v/release/schlunsen/claude-control-terminal)](https://github.com/schlunsen/claude-control-terminal/releases)
 
 **A powerful wrapper and control center for Claude Code** - Manage components, configure AI providers, control permissions, launch Claude, run analytics, and deploy with Docker.
