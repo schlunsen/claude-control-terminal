@@ -1,9 +1,12 @@
 package components
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 )
 
 func TestNewAgentInstaller(t *testing.T) {
@@ -149,10 +152,16 @@ func TestRemoveAgentWithCategory(t *testing.T) {
 }
 
 func TestInstallMultipleAgentsAllFail(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewAgentInstaller()
 	tempDir := t.TempDir()
 
-	// These agents don't exist on GitHub (hopefully!)
+	// These agents don't exist on GitHub
 	agentNames := []string{
 		"nonexistent-agent-xyz-123",
 		"another-fake-agent-abc-456",
@@ -170,6 +179,12 @@ func TestInstallMultipleAgentsAllFail(t *testing.T) {
 }
 
 func TestPreviewMultipleAgentsAllFail(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewAgentInstaller()
 
 	// These agents don't exist
@@ -260,13 +275,213 @@ func TestRemoveAgentGlobalAndProject(t *testing.T) {
 }
 
 func TestInstallAgentInvalidTarget(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewAgentInstaller()
 
-	// Try to install to invalid directory (no write permissions)
+	// Try to install to invalid directory - should fail with file not found
 	err := installer.InstallAgent("test-agent", "/root/impossible", true)
 
 	if err == nil {
-		t.Log("Installation might have succeeded or failed with network error (expected)")
+		t.Error("expected error when agent not found")
 	}
-	// We can't easily test this without mocking the download
+}
+
+func TestInstallAgentSuccess(t *testing.T) {
+	// Mock successful download
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "# Test Agent\nThis is a test agent content", nil
+	})
+	defer fileops.MockDownloadFunc(nil)
+
+	installer := NewAgentInstaller()
+	tempDir := t.TempDir()
+
+	err := installer.InstallAgent("test-agent", tempDir, true)
+	if err != nil {
+		t.Errorf("InstallAgent failed: %v", err)
+	}
+
+	// Verify file was created
+	agentFile := filepath.Join(tempDir, ".claude", "agents", "test-agent.md")
+	if _, err := os.Stat(agentFile); os.IsNotExist(err) {
+		t.Error("agent file should have been created")
+	}
+
+	// Verify content
+	content, err := os.ReadFile(agentFile)
+	if err != nil {
+		t.Fatalf("failed to read agent file: %v", err)
+	}
+
+	if string(content) != "# Test Agent\nThis is a test agent content" {
+		t.Errorf("unexpected content: %s", content)
+	}
+}
+
+func TestInstallAgentWithCategory(t *testing.T) {
+	// Mock successful download
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "# Security Agent\nContent", nil
+	})
+	defer fileops.MockDownloadFunc(nil)
+
+	installer := NewAgentInstaller()
+	tempDir := t.TempDir()
+
+	// Install with category path
+	err := installer.InstallAgent("security/security-agent", tempDir, true)
+	if err != nil {
+		t.Errorf("InstallAgent with category failed: %v", err)
+	}
+
+	// Verify file was created (should use base name)
+	agentFile := filepath.Join(tempDir, ".claude", "agents", "security-agent.md")
+	if _, err := os.Stat(agentFile); os.IsNotExist(err) {
+		t.Error("agent file should have been created")
+	}
+}
+
+func TestPreviewAgentSuccess(t *testing.T) {
+	// Mock successful download
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "# Preview Agent\nThis is preview content", nil
+	})
+	defer fileops.MockDownloadFunc(nil)
+
+	installer := NewAgentInstaller()
+
+	err := installer.PreviewAgent("preview-agent")
+	if err != nil {
+		t.Errorf("PreviewAgent failed: %v", err)
+	}
+}
+
+func TestPreviewAgentNotFound(t *testing.T) {
+	// Mock download failure
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil)
+
+	installer := NewAgentInstaller()
+
+	err := installer.PreviewAgent("nonexistent-agent")
+	if err == nil {
+		t.Error("expected error for non-existent agent")
+	}
+}
+
+func TestInstallMultipleAgentsPartialSuccess(t *testing.T) {
+	// Mock download function that succeeds for some, fails for others
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		if filepath.Base(filePath) == "good-agent.md" {
+			return "# Good Agent", nil
+		}
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil)
+
+	installer := NewAgentInstaller()
+	tempDir := t.TempDir()
+
+	agentNames := []string{
+		"good-agent",
+		"bad-agent",
+	}
+
+	err := installer.InstallMultipleAgents(agentNames, tempDir, true)
+
+	// Should not return error if at least one succeeds
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Verify good agent was installed
+	goodFile := filepath.Join(tempDir, ".claude", "agents", "good-agent.md")
+	if _, err := os.Stat(goodFile); os.IsNotExist(err) {
+		t.Error("good agent file should have been created")
+	}
+}
+
+func TestInstallMultipleAgentsAllSuccess(t *testing.T) {
+	// Mock successful downloads for all agents
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return fmt.Sprintf("# Agent content for %s", filepath.Base(filePath)), nil
+	})
+	defer fileops.MockDownloadFunc(nil)
+
+	installer := NewAgentInstaller()
+	tempDir := t.TempDir()
+
+	agentNames := []string{
+		"agent-one",
+		"agent-two",
+		"agent-three",
+	}
+
+	err := installer.InstallMultipleAgents(agentNames, tempDir, true)
+	if err != nil {
+		t.Errorf("InstallMultipleAgents failed: %v", err)
+	}
+
+	// Verify all agents were installed
+	for _, name := range agentNames {
+		agentFile := filepath.Join(tempDir, ".claude", "agents", name+".md")
+		if _, err := os.Stat(agentFile); os.IsNotExist(err) {
+			t.Errorf("agent file %s should have been created", name)
+		}
+	}
+}
+
+func TestPreviewMultipleAgentsAllSuccess(t *testing.T) {
+	// Mock successful downloads
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return fmt.Sprintf("# Content for %s", filepath.Base(filePath)), nil
+	})
+	defer fileops.MockDownloadFunc(nil)
+
+	installer := NewAgentInstaller()
+
+	agentNames := []string{
+		"agent-one",
+		"agent-two",
+	}
+
+	err := installer.PreviewMultipleAgents(agentNames)
+	if err != nil {
+		t.Errorf("PreviewMultipleAgents failed: %v", err)
+	}
+}
+
+func TestAgentInstallerEdgeCases(t *testing.T) {
+	installer := NewAgentInstaller()
+	tempDir := t.TempDir()
+
+	t.Run("empty agent name", func(t *testing.T) {
+		fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+			return "", fmt.Errorf("empty name")
+		})
+		defer fileops.MockDownloadFunc(nil)
+
+		err := installer.InstallAgent("", tempDir, true)
+		if err == nil {
+			t.Error("expected error for empty agent name")
+		}
+	})
+
+	t.Run("agent with spaces", func(t *testing.T) {
+		fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+			return "# Agent Content", nil
+		})
+		defer fileops.MockDownloadFunc(nil)
+
+		err := installer.InstallAgent("agent with spaces", tempDir, true)
+		// Should handle spaces appropriately
+		_ = err
+	})
 }

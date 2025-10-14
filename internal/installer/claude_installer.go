@@ -475,3 +475,34 @@ func (ci *ClaudeInstaller) GetInstallLocation() (string, error) {
 
 	return filepath.Dir(claudePath), nil
 }
+
+// FindClaudePath finds the path to the actual claude executable.
+// It checks PATH first, then common installation locations.
+// This is useful when Claude is installed but not in PATH.
+func FindClaudePath() (string, error) {
+	// Check if claude is in PATH
+	path, err := exec.LookPath("claude")
+	if err == nil {
+		// Resolve symlinks to get the actual binary
+		realPath, err := filepath.EvalSymlinks(path)
+		if err == nil {
+			return realPath, nil
+		}
+		return path, nil
+	}
+
+	// Check common installation locations
+	commonPaths := []string{
+		"/usr/local/bin/claude",
+		"/opt/homebrew/bin/claude",
+		filepath.Join(os.Getenv("HOME"), ".local/bin/claude"),
+	}
+
+	for _, p := range commonPaths {
+		if _, err := os.Stat(p); err == nil {
+			return p, nil
+		}
+	}
+
+	return "", fmt.Errorf("claude executable not found in PATH or common locations")
+}

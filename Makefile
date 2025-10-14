@@ -37,7 +37,7 @@ clean:
 	@echo "Cleaning..."
 	@rm -f $(OUTPUT_DIR)/$(BINARY_NAME)
 	@rm -rf dist/
-	@rm -f coverage.out coverage.html
+	@rm -f coverage.out coverage-filtered.out coverage.html
 	@echo "✅ Clean complete"
 
 # Install the binary to GOPATH
@@ -65,14 +65,17 @@ test-race:
 test-coverage:
 	@echo "Running tests with coverage..."
 	@go test -v -coverprofile=coverage.out -covermode=atomic ./...
-	@go tool cover -html=coverage.out -o coverage.html
+	@./scripts/filter-coverage.sh coverage.out > coverage-filtered.out
+	@go tool cover -html=coverage-filtered.out -o coverage.html
 	@echo ""
 	@echo "📊 Coverage Summary:"
-	@go tool cover -func=coverage.out | grep total | awk '{print "   Total Coverage: " $$3}'
+	@go tool cover -func=coverage.out | grep total | awk '{print "   Total Coverage:    " $$3}'
+	@go tool cover -func=coverage-filtered.out | grep total | awk '{print "   Filtered Coverage: " $$3 " (excludes main.go, static files, interactive TUI)"}'
 	@echo ""
 	@echo "✅ Coverage report generated:"
-	@echo "   HTML: coverage.html"
+	@echo "   HTML: coverage.html (filtered)"
 	@echo "   Data: coverage.out"
+	@echo "   Filtered: coverage-filtered.out"
 
 # Open coverage report in browser
 test-coverage-html: test-coverage
@@ -85,18 +88,19 @@ test-coverage-html: test-coverage
 		echo "Please open coverage.html manually"; \
 	fi
 
-# Generate coverage badge locally
+# Generate coverage badge locally (uses filtered coverage)
 coverage-badge:
 	@echo "Generating coverage badge..."
 	@go test -coverprofile=coverage.out ./... >/dev/null 2>&1
-	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	@./scripts/filter-coverage.sh coverage.out > coverage-filtered.out
+	@COVERAGE=$$(go tool cover -func=coverage-filtered.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	COLOR="red"; \
 	if [ $$(echo "$$COVERAGE > 80" | bc) -eq 1 ]; then COLOR="brightgreen"; \
 	elif [ $$(echo "$$COVERAGE > 60" | bc) -eq 1 ]; then COLOR="yellow"; \
 	elif [ $$(echo "$$COVERAGE > 40" | bc) -eq 1 ]; then COLOR="orange"; \
 	fi; \
-	echo "Coverage: $$COVERAGE% ($$COLOR)"; \
-	echo "Badge URL: https://img.shields.io/badge/coverage-$$COVERAGE%25-$$COLOR"
+	echo "Filtered Coverage: $$COVERAGE% ($$COLOR)"; \
+	echo "Badge URL: https://img.shields.io/badge/coverage-$$COVERAGE%25%20filtered-$$COLOR"
 
 # Build for multiple platforms
 build-all:
