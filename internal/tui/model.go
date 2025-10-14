@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/schlunsen/claude-control-terminal/internal/components"
 	"github.com/schlunsen/claude-control-terminal/internal/database"
 	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 	"github.com/schlunsen/claude-control-terminal/internal/providers"
@@ -84,6 +85,10 @@ type Model struct {
 	analyticsEnabled bool            // Whether analytics server is running
 	analyticsServer  *server.Server  // Reference to analytics server
 	claudeDir        string          // Claude directory for analytics
+
+	// Hooks state
+	hookLoggerEnabled bool   // Whether user-prompt-logger hook is installed
+	hookInstallError  error  // Error during hook installation
 
 	// Permissions state
 	permissionItems          []fileops.PermissionItem
@@ -183,6 +188,10 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 		currentProviderName, hasProviderConfig, _ = providers.GetCurrentProviderInfo(repo)
 	}
 
+	// Check if user-prompt-logger hook is installed
+	hookInstaller := components.NewHookInstaller()
+	hookLoggerEnabled, _ := hookInstaller.CheckHookInstalled()
+
 	return Model{
 		screen:                 ScreenMain,
 		componentTypes:         componentTypes,
@@ -204,6 +213,7 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 		currentProviderName:    currentProviderName,
 		hasProviderConfig:      hasProviderConfig,
 		dbRepo:                 repo,
+		hookLoggerEnabled:      hookLoggerEnabled,
 	}
 }
 
@@ -314,6 +324,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case providerSavedMsg:
 		return m.handleProviderSavedMsg(msg)
+
+	case toggleHookMsg:
+		// Handle hook toggle result
+		m.hookLoggerEnabled = msg.enabled
+		m.hookInstallError = msg.err
+		return m, nil
 	}
 
 	return m, nil
@@ -435,6 +451,9 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Toggle analytics on/off
 		m.analyticsEnabled = !m.analyticsEnabled
 		return m, toggleAnalyticsCmd(m.analyticsEnabled, m.claudeDir)
+	case "h", "H":
+		// Toggle user-prompt-logger hook
+		return m, toggleHookCmd(m.hookLoggerEnabled)
 	}
 	return m, nil
 }
@@ -830,8 +849,17 @@ func (m Model) viewMainScreen() string {
 		b.WriteString(SubtitleStyle.Render("Provider: ") + StatusErrorStyle.Render("Not configured") + "\n")
 	}
 
+	// Hook status
+	hookStatus := "OFF"
+	hookStyle := StatusErrorStyle
+	if m.hookLoggerEnabled {
+		hookStatus = "ON"
+		hookStyle = StatusSuccessStyle
+	}
+	b.WriteString(SubtitleStyle.Render("User Prompt Logger: ") + hookStyle.Render(hookStatus) + "\n")
+
 	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Toggle Analytics • Q/Esc: Quit"))
+	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Hook Logger • Q/Esc: Quit"))
 
 	content := BoxStyle.Render(b.String())
 
@@ -1570,6 +1598,33 @@ func toggleAnalyticsCmd(enabled bool, targetDir string) tea.Cmd {
 		return toggleAnalyticsMsg{
 			enabled:   enabled,
 			targetDir: targetDir,
+		}
+	}
+}
+
+type toggleHookMsg struct {
+	enabled bool
+	err     error
+}
+
+func toggleHookCmd(currentlyEnabled bool) tea.Cmd {
+	return func() tea.Msg {
+		hookInstaller := components.NewHookInstaller()
+
+		if currentlyEnabled {
+			// Uninstall hook
+			err := hookInstaller.UninstallUserPromptLogger()
+			return toggleHookMsg{
+				enabled: false,
+				err:     err,
+			}
+		} else {
+			// Install hook
+			err := hookInstaller.InstallUserPromptLogger()
+			return toggleHookMsg{
+				enabled: err == nil, // Only set to true if installation succeeded
+				err:     err,
+			}
 		}
 	}
 }
