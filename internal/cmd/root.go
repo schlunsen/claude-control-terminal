@@ -79,6 +79,9 @@ var (
 
 	// Wrapper flags
 	installWrapper bool
+
+	// Claude installer flag
+	installClaude bool
 )
 
 // rootCmd represents the base command
@@ -95,6 +98,15 @@ var rootCmd = &cobra.Command{
 📖 Documentation: https://docs.aitmpl.com`,
 	Version: Version,
 	Run: func(cmd *cobra.Command, args []string) {
+		// Handle Claude installation first
+		if installClaude {
+			if err := tui.InstallClaude(); err != nil {
+				ShowError(fmt.Sprintf("Installation failed: %v", err))
+				os.Exit(1)
+			}
+			return
+		}
+
 		// Handle wrapper commands first (they need to be fast)
 		if installWrapper {
 			handleInstallWrapper()
@@ -107,7 +119,8 @@ var rootCmd = &cobra.Command{
 			!listAgents && createAgent == "" && removeAgent == "" && updateAgent == "" &&
 			agent == "" && command == "" && mcp == "" && setting == "" && hook == "" &&
 			workflow == "" && !studio && sandbox == "" &&
-			!dockerInit && !dockerBuild && !dockerRun && !dockerStop && !dockerLogs && !dockerCompose
+			!dockerInit && !dockerBuild && !dockerRun && !dockerStop && !dockerLogs && !dockerCompose &&
+			!installClaude
 
 		// If no flags provided, launch TUI
 		if isInteractive {
@@ -190,6 +203,9 @@ func init() {
 
 	// Wrapper installation flag
 	rootCmd.Flags().BoolVar(&installWrapper, "install-wrapper", false, "install Claude Code wrapper for message interception")
+
+	// Claude installer flag
+	rootCmd.Flags().BoolVar(&installClaude, "install-claude", false, "install Claude CLI automatically")
 }
 
 func handleCommand(cmd *cobra.Command, args []string) {
