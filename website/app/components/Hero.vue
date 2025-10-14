@@ -2,20 +2,11 @@
   <section class="hero">
     <div class="container">
       <div class="hero-content">
-        <div class="ascii-art">
-          <pre>
-   _____ _____ _____
-  / ____/ ____|_   _|
- | |   | |      | |
- | |   | |      | |
- | |___| |____ _| |_
-  \_____\_____|_____|
-          </pre>
-        </div>
+        
 
         <h1 class="hero-title">
-          <span class="text-purple">Claude</span>
-          <span class="text-cyan">Control</span>
+          <span class="text-purple">Claude</span>&nbsp;
+          <span class="text-cyan">Control</span>&nbsp;
           <span class="text-green">Terminal</span>
         </h1>
 
@@ -28,9 +19,17 @@
         </p>
 
         <div class="hero-badges">
+          <a href="https://github.com/schlunsen/claude-control-terminal/stargazers" target="_blank">
+            <img src="https://img.shields.io/github/stars/schlunsen/claude-control-terminal?style=flat&logo=github&color=yellow" alt="GitHub Stars">
+          </a>
           <img src="https://img.shields.io/badge/Go-1.23%2B-00ADD8?style=flat&logo=go" alt="Go Version">
           <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
           <img src="https://img.shields.io/github/v/release/schlunsen/claude-control-terminal" alt="Release">
+        </div>
+
+        <div class="quick-install">
+          <p class="install-label">Quick Install:</p>
+          <pre><code>brew install schlunsen/cct/cct</code></pre>
         </div>
 
         <div class="hero-video">
@@ -51,11 +50,6 @@
         <div class="hero-cta">
           <a href="#installation" class="btn btn-primary">Get Started</a>
           <a href="https://github.com/schlunsen/claude-control-terminal" class="btn btn-secondary" target="_blank">View on GitHub</a>
-        </div>
-
-        <div class="quick-install">
-          <p class="install-label">Quick Install:</p>
-          <pre><code>brew install schlunsen/cct/cct</code></pre>
         </div>
       </div>
     </div>

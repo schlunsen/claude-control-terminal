@@ -27,25 +27,38 @@ cct
 cct -d ~/my-project</code></pre>
           </div>
 
-          <div class="quick-start-option">
-            <h4>⚡ CLI Flags (For Automation)</h4>
-            <p>Install components directly via command line:</p>
-            <pre><code># Install components
-cct --agent api-documenter
-cct --command security-audit
-cct --mcp postgresql
-
-# Multiple at once
-cct --agent "api-documenter,database-architect" \
-    --command "security-audit,setup-linting" \
-    --mcp "postgresql,supabase"</code></pre>
-          </div>
-
-          <div class="quick-start-option">
-            <h4>📊 Analytics Dashboard</h4>
-            <p>Launch real-time monitoring:</p>
-            <pre><code>cct --analytics
-# Open browser to http://localhost:3333</code></pre>
+          <div class="quick-start-features">
+            <h4>What you can do with CCT:</h4>
+            <ul class="feature-list">
+              <li>
+                <span class="feature-icon">📦</span>
+                <div class="feature-content">
+                  <strong>Browse & Install Components</strong>
+                  <p>Toggle MCPs, agents, and commands for your project with a single keypress. Search through 600+ agents and 200+ commands.</p>
+                </div>
+              </li>
+              <li>
+                <span class="feature-icon">🔄</span>
+                <div class="feature-content">
+                  <strong>Switch AI Providers</strong>
+                  <p>Change between Claude, OpenAI, DeepSeek, Kimi, Z.AI, or configure custom Anthropic-compatible endpoints.</p>
+                </div>
+              </li>
+              <li>
+                <span class="feature-icon">⚙️</span>
+                <div class="feature-content">
+                  <strong>Manage Permissions</strong>
+                  <p>Easily set multiple permissions across Global, Project, and Local levels. Control bash commands, file operations, and web access.</p>
+                </div>
+              </li>
+              <li>
+                <span class="feature-icon">🚀</span>
+                <div class="feature-content">
+                  <strong>Launch & Monitor</strong>
+                  <p>Start Claude CLI directly from CCT and monitor conversations in real-time with the built-in analytics dashboard.</p>
+                </div>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
@@ -106,7 +119,7 @@ make build`
 
 .install-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: 1fr;
   gap: 2rem;
   margin-bottom: 4rem;
 }
@@ -168,9 +181,68 @@ make build`
   font-size: 0.9rem;
 }
 
+.quick-start-features {
+  padding: 2rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-top: 2rem;
+}
+
+.quick-start-features h4 {
+  font-size: 1.3rem;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+}
+
+.feature-list {
+  list-style: none;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.feature-list li {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.feature-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+
+.feature-content {
+  flex: 1;
+}
+
+.feature-content strong {
+  display: block;
+  font-size: 1rem;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.feature-content p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
 @media (max-width: 768px) {
-  .install-grid {
-    grid-template-columns: 1fr;
+  .quick-start-features {
+    padding: 1.5rem;
+  }
+
+  .feature-list li {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .feature-icon {
+    margin-top: 0;
   }
 }
 </style>

@@ -28,7 +28,7 @@ html {
 
 body {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.6;
   color: var(--text-primary);
   background: var(--bg-primary);
@@ -44,12 +44,12 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
 }
 
-h1 { font-size: 3rem; }
-h2 { font-size: 2.5rem; }
-h3 { font-size: 2rem; }
-h4 { font-size: 1.5rem; }
-h5 { font-size: 1.25rem; }
-h6 { font-size: 1rem; }
+h1 { font-size: 3.5rem; }
+h2 { font-size: 2.75rem; }
+h3 { font-size: 2.25rem; }
+h4 { font-size: 1.75rem; }
+h5 { font-size: 1.5rem; }
+h6 { font-size: 1.125rem; }
 
 p {
   margin-bottom: 1rem;
@@ -78,7 +78,7 @@ a:hover {
   display: inline-block;
   padding: 0.75rem 1.5rem;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.875rem;
+  font-size: 1rem;
   font-weight: 600;
   text-align: center;
   border: 2px solid;
@@ -112,7 +112,7 @@ a:hover {
 /* Code blocks */
 pre, code {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.875rem;
+  font-size: 1.0625rem;
 }
 
 code {
@@ -160,12 +160,12 @@ pre code {
 /* Responsive */
 @media (max-width: 768px) {
   body {
-    font-size: 13px;
+    font-size: 15px;
   }
 
-  h1 { font-size: 2rem; }
-  h2 { font-size: 1.75rem; }
-  h3 { font-size: 1.5rem; }
+  h1 { font-size: 2.25rem; }
+  h2 { font-size: 2rem; }
+  h3 { font-size: 1.75rem; }
 
   .container {
     padding: 0 1rem;
