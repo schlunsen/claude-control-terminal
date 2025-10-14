@@ -566,6 +566,16 @@
                 <input type="text" id="prompt-search-input" class="search-input" placeholder="Search prompts..." oninput="searchPrompts()">
             </div>
 
+            <div class="search-box">
+                <select id="session-filter" class="search-input" onchange="filterBySession()" style="cursor: pointer;">
+                    <option value="">All Sessions</option>
+                </select>
+            </div>
+
+            <div class="actions">
+                <button class="btn btn-danger" onclick="clearAllPrompts()">🗑️ Clear All Prompts</button>
+            </div>
+
             <div class="command-list" id="user-prompts">
                 <div class="empty-state">No prompts recorded yet</div>
             </div>
@@ -1025,12 +1035,43 @@
         let allPrompts = [];
         let filteredPrompts = [];
         let currentPromptOffset = 0;
+        let availableSessions = [];
+        let currentSessionFilter = '';
         const PROMPTS_PER_PAGE = 50;
+
+        // Load available sessions
+        async function loadAvailableSessions() {
+            try {
+                const response = await fetch('/api/prompts/sessions');
+                const data = await response.json();
+                availableSessions = data.sessions || [];
+
+                // Populate session filter dropdown
+                const sessionFilter = document.getElementById('session-filter');
+                sessionFilter.innerHTML = '<option value="">All Sessions</option>';
+
+                availableSessions.forEach(session => {
+                    const option = document.createElement('option');
+                    option.value = session.conversation_id;
+                    option.textContent = session.session_name ?
+                        `${session.session_name} (${session.conversation_id.substring(0, 8)}...)` :
+                        session.conversation_id.substring(0, 12) + '...';
+                    sessionFilter.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+            }
+        }
 
         // Load user prompts
         async function loadUserPrompts() {
             try {
-                const response = await fetch(`/api/prompts?limit=${PROMPTS_PER_PAGE}&offset=0`);
+                let url = `/api/prompts?limit=${PROMPTS_PER_PAGE}&offset=0`;
+                if (currentSessionFilter) {
+                    url += `&conversation_id=${encodeURIComponent(currentSessionFilter)}`;
+                }
+
+                const response = await fetch(url);
                 const data = await response.json();
 
                 allPrompts = (data.prompts || []).map(prompt => ({
@@ -1052,7 +1093,12 @@
             currentPromptOffset += PROMPTS_PER_PAGE;
 
             try {
-                const response = await fetch(`/api/prompts?limit=${PROMPTS_PER_PAGE}&offset=${currentPromptOffset}`);
+                let url = `/api/prompts?limit=${PROMPTS_PER_PAGE}&offset=${currentPromptOffset}`;
+                if (currentSessionFilter) {
+                    url += `&conversation_id=${encodeURIComponent(currentSessionFilter)}`;
+                }
+
+                const response = await fetch(url);
                 const data = await response.json();
 
                 const newPrompts = (data.prompts || []).map(prompt => ({
@@ -1064,6 +1110,38 @@
                 applyPromptFiltersAndSearch();
             } catch (error) {
                 console.error('Error loading more prompts:', error);
+            }
+        }
+
+        // Filter prompts by session
+        function filterBySession() {
+            currentSessionFilter = document.getElementById('session-filter').value;
+            currentPromptOffset = 0;
+            allPrompts = [];
+            loadUserPrompts();
+        }
+
+        // Clear all user prompts
+        async function clearAllPrompts() {
+            if (!confirm('⚠️ Delete ALL user prompts?\n\nThis action will permanently delete all recorded prompts from the database. This CANNOT be undone.\n\nAre you sure?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/prompts', { method: 'DELETE' });
+                const data = await response.json();
+
+                if (data.status === 'cleared') {
+                    alert(`✅ ${data.message}`);
+                    currentSessionFilter = '';
+                    document.getElementById('session-filter').value = '';
+                    loadAvailableSessions();
+                    loadUserPrompts();
+                } else {
+                    alert('❌ Clear failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error clearing prompts: ' + error.message);
             }
         }
 
@@ -1130,7 +1208,12 @@
                     <span>${prompt.message_length} chars</span>
                 </div>`);
 
-                if (prompt.conversation_id) {
+                if (prompt.session_name) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Session:</span>
+                        <span>${escapeHtml(prompt.session_name)}</span>
+                    </div>`);
+                } else if (prompt.conversation_id) {
                     metaItems.push(`<div class="command-meta-item">
                         <span class="command-meta-label">Session:</span>
                         <span>${escapeHtml(prompt.conversation_id.substring(0, 8))}...</span>
@@ -1168,6 +1251,7 @@
         loadData();
         loadBackgroundShells();
         loadCommandHistory();
+        loadAvailableSessions();
         loadUserPrompts();
         connectWebSocket();
 
@@ -1176,6 +1260,7 @@
             loadData();
             loadBackgroundShells();
             loadCommandHistory();
+            loadAvailableSessions();
             loadUserPrompts();
         }, 30000);
     </script>

@@ -4,7 +4,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -35,9 +34,6 @@ type Server struct {
 	claudeDir            string
 	port                 int
 	quiet                bool // Suppress output when running in TUI
-	lastParsedTime       time.Time
-	parsingCancel        context.CancelFunc
-	parsingDone          chan struct{}
 }
 
 // NewServer creates a new Fiber server instance
@@ -92,18 +88,6 @@ func (s *Server) Setup() error {
 	s.wsHub = ws.NewHub()
 	go s.wsHub.Run()
 
-	// Parse existing conversations on startup (synchronously to ensure data loads before server starts)
-	if !s.quiet {
-		fmt.Println("📝 Parsing conversation history...")
-	}
-	s.parseConversations()
-
-	// Start periodic conversation parsing (asynchronously)
-	ctx, cancel := context.WithCancel(context.Background())
-	s.parsingCancel = cancel
-	s.parsingDone = make(chan struct{})
-	go s.periodicConversationParsing(ctx)
-
 	// Setup API routes
 	s.setupRoutes()
 
@@ -146,6 +130,9 @@ func (s *Server) setupRoutes() {
 	// User prompts endpoints
 	api.Get("/prompts", s.handleGetUserPrompts)
 	api.Get("/prompts/stats", s.handleGetPromptStats)
+	api.Get("/prompts/sessions", s.handleGetUniqueSessions)
+	api.Post("/prompts", s.handleRecordUserPrompt)
+	api.Delete("/prompts", s.handleClearAllPrompts)
 
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
@@ -429,25 +416,10 @@ func (s *Server) Start() error {
 }
 
 // Shutdown gracefully shuts down the server and all its components.
-// It stops the file watcher, parsing goroutine, WebSocket hub, and closes the database.
+// It stops the file watcher, WebSocket hub, and closes the database.
 func (s *Server) Shutdown() error {
 	if !s.quiet {
 		fmt.Println("🛑 Shutting down server...")
-	}
-
-	// Stop periodic conversation parsing
-	if s.parsingCancel != nil {
-		s.parsingCancel()
-	}
-	if s.parsingDone != nil {
-		select {
-		case <-s.parsingDone:
-			// Parsing goroutine exited cleanly
-		case <-time.After(3 * time.Second):
-			if !s.quiet {
-				fmt.Println("⚠️  Warning: parsing goroutine did not exit cleanly")
-			}
-		}
 	}
 
 	// Stop file watcher
@@ -554,25 +526,6 @@ func (s *Server) handleGetDBStats(c *fiber.Ctx) error {
 	})
 }
 
-// parseConversations parses all conversations and records tool usage
-func (s *Server) parseConversations() {
-	count, err := s.conversationParser.ParseAllConversations(s.claudeDir)
-	if err != nil {
-		if !s.quiet {
-			fmt.Printf("⚠️  Error parsing conversations: %v\n", err)
-		}
-		return
-	}
-
-	if !s.quiet {
-		fmt.Printf("✅ Parsed %d conversation files\n", count)
-	}
-
-	s.lastParsedTime = time.Now()
-
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"history_updated"}`))
-}
 
 // Handler: Get user prompts
 func (s *Server) handleGetUserPrompts(c *fiber.Ctx) error {
@@ -648,20 +601,91 @@ func (s *Server) handleGetPromptStats(c *fiber.Ctx) error {
 	})
 }
 
-// periodicConversationParsing periodically parses new conversations every 5 minutes.
-// It runs until the context is cancelled via Shutdown().
-func (s *Server) periodicConversationParsing(ctx context.Context) {
-	defer close(s.parsingDone)
-
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.parseConversations()
-		}
+// Handler: Get unique sessions from user prompts
+func (s *Server) handleGetUniqueSessions(c *fiber.Ctx) error {
+	sessions, err := s.repo.GetUniqueSessions()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
+
+	return c.JSON(fiber.Map{
+		"sessions": sessions,
+		"count":    len(sessions),
+	})
+}
+
+// Handler: Record a new user prompt
+func (s *Server) handleRecordUserPrompt(c *fiber.Ctx) error {
+	// Parse request body
+	type RecordPromptRequest struct{
+		SessionID        string `json:"session_id"`
+		SessionName      string `json:"session_name"`
+		Prompt           string `json:"prompt"`
+		WorkingDirectory string `json:"cwd"`
+		GitBranch        string `json:"branch"`
+	}
+
+	var req RecordPromptRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.SessionID == "" || req.Prompt == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id and prompt are required",
+		})
+	}
+
+	// Create user message record
+	msg := &database.UserMessage{
+		ConversationID:   req.SessionID,
+		SessionName:      req.SessionName,
+		Message:          req.Prompt,
+		WorkingDirectory: req.WorkingDirectory,
+		GitBranch:        req.GitBranch,
+		MessageLength:    len(req.Prompt),
+		SubmittedAt:      time.Now(),
+	}
+
+	// Record the message
+	if err := s.repo.RecordUserMessage(msg); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to record prompt: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"prompt_recorded"}`))
+
+	return c.JSON(fiber.Map{
+		"status":  "recorded",
+		"id":      msg.ID,
+		"length":  msg.MessageLength,
+		"time":    msg.SubmittedAt,
+	})
+}
+
+// Handler: Clear all user prompts
+func (s *Server) handleClearAllPrompts(c *fiber.Ctx) error {
+	err := s.repo.DeleteAllUserMessages()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":  err.Error(),
+			"status": "failed",
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"prompts_cleared"}`))
+
+	return c.JSON(fiber.Map{
+		"status":  "cleared",
+		"message": "All user prompts have been deleted",
+		"time":    time.Now(),
+	})
 }
