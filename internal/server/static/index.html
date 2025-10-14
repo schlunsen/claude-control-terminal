@@ -538,32 +538,10 @@
         </div>
 
         <div class="section">
-            <h2 class="section-title">Command History</h2>
+            <h2 class="section-title">Activity History</h2>
 
             <div class="search-box">
-                <input type="text" id="search-input" class="search-input" placeholder="Search commands..." oninput="searchCommands()">
-            </div>
-
-            <div class="filter-tabs">
-                <button class="filter-tab active" data-type="all" onclick="filterCommands('all')">All</button>
-                <button class="filter-tab" data-type="shell" onclick="filterCommands('shell')">Shell</button>
-                <button class="filter-tab" data-type="claude" onclick="filterCommands('claude')">Claude</button>
-            </div>
-
-            <div class="command-list" id="command-history">
-                <div class="empty-state">No commands in history</div>
-            </div>
-
-            <div class="load-more" id="load-more" style="display: none;">
-                <button class="load-more-btn" onclick="loadMoreCommands()">Load More</button>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2 class="section-title">User Prompts</h2>
-
-            <div class="search-box">
-                <input type="text" id="prompt-search-input" class="search-input" placeholder="Search prompts..." oninput="searchPrompts()">
+                <input type="text" id="search-input" class="search-input" placeholder="Search activity..." oninput="searchHistory()">
             </div>
 
             <div class="search-box">
@@ -572,16 +550,23 @@
                 </select>
             </div>
 
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-type="all" onclick="filterHistory('all')">All</button>
+                <button class="filter-tab" data-type="shell" onclick="filterHistory('shell')">Shell</button>
+                <button class="filter-tab" data-type="claude" onclick="filterHistory('claude')">Claude</button>
+                <button class="filter-tab" data-type="prompt" onclick="filterHistory('prompt')">Prompts</button>
+            </div>
+
             <div class="actions">
-                <button class="btn btn-danger" onclick="clearAllPrompts()">🗑️ Clear All Prompts</button>
+                <button class="btn btn-danger" onclick="clearAllHistory()">🗑️ Clear All History</button>
             </div>
 
-            <div class="command-list" id="user-prompts">
-                <div class="empty-state">No prompts recorded yet</div>
+            <div class="command-list" id="activity-history">
+                <div class="empty-state">No activity recorded yet</div>
             </div>
 
-            <div class="load-more" id="prompts-load-more" style="display: none;">
-                <button class="load-more-btn" onclick="loadMorePrompts()">Load More</button>
+            <div class="load-more" id="load-more" style="display: none;">
+                <button class="load-more-btn" onclick="loadMoreHistory()">Load More</button>
             </div>
         </div>
 
@@ -835,211 +820,16 @@
             };
         }
 
-        // Command History State
-        let allCommands = [];
-        let filteredCommands = [];
+        // Unified Activity History State
+        let allHistory = [];
+        let filteredHistory = [];
         let currentFilter = 'all';
-        let currentOffset = 0;
-        const COMMANDS_PER_PAGE = 50;
-
-        // Load command history
-        async function loadCommandHistory() {
-            try {
-                const [shellResponse, claudeResponse] = await Promise.all([
-                    fetch(`/api/history/shell?limit=${COMMANDS_PER_PAGE}&offset=0`),
-                    fetch(`/api/history/claude?limit=${COMMANDS_PER_PAGE}&offset=0`)
-                ]);
-
-                const shellData = await shellResponse.json();
-                const claudeData = await claudeResponse.json();
-
-                const shellCommands = (shellData.commands || []).map(cmd => ({
-                    ...cmd,
-                    type: 'shell',
-                    displayCommand: cmd.command,
-                    tool_name: 'Bash'
-                }));
-
-                const claudeCommands = (claudeData.commands || []).map(cmd => ({
-                    ...cmd,
-                    type: 'claude',
-                    displayCommand: cmd.tool_name
-                }));
-
-                allCommands = [...shellCommands, ...claudeCommands]
-                    .sort((a, b) => new Date(b.executed_at) - new Date(a.executed_at));
-
-                currentOffset = 0;
-                applyFiltersAndSearch();
-            } catch (error) {
-                console.error('Error loading command history:', error);
-                document.getElementById('command-history').innerHTML =
-                    '<div class="empty-state">Error loading command history</div>';
-            }
-        }
-
-        // Load more commands
-        async function loadMoreCommands() {
-            currentOffset += COMMANDS_PER_PAGE;
-
-            try {
-                const [shellResponse, claudeResponse] = await Promise.all([
-                    fetch(`/api/history/shell?limit=${COMMANDS_PER_PAGE}&offset=${currentOffset}`),
-                    fetch(`/api/history/claude?limit=${COMMANDS_PER_PAGE}&offset=${currentOffset}`)
-                ]);
-
-                const shellData = await shellResponse.json();
-                const claudeData = await claudeResponse.json();
-
-                const shellCommands = (shellData.commands || []).map(cmd => ({
-                    ...cmd,
-                    type: 'shell',
-                    displayCommand: cmd.command,
-                    tool_name: 'Bash'
-                }));
-
-                const claudeCommands = (claudeData.commands || []).map(cmd => ({
-                    ...cmd,
-                    type: 'claude',
-                    displayCommand: cmd.tool_name
-                }));
-
-                const newCommands = [...shellCommands, ...claudeCommands]
-                    .sort((a, b) => new Date(b.executed_at) - new Date(a.executed_at));
-
-                allCommands = [...allCommands, ...newCommands];
-                applyFiltersAndSearch();
-            } catch (error) {
-                console.error('Error loading more commands:', error);
-            }
-        }
-
-        // Filter commands by type
-        function filterCommands(type) {
-            currentFilter = type;
-
-            // Update active tab
-            document.querySelectorAll('.filter-tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelector(`[data-type="${type}"]`).classList.add('active');
-
-            applyFiltersAndSearch();
-        }
-
-        // Search commands
-        function searchCommands() {
-            applyFiltersAndSearch();
-        }
-
-        // Apply filters and search
-        function applyFiltersAndSearch() {
-            const searchTerm = document.getElementById('search-input').value.toLowerCase();
-
-            filteredCommands = allCommands.filter(cmd => {
-                // Apply type filter
-                if (currentFilter !== 'all' && cmd.type !== currentFilter) {
-                    return false;
-                }
-
-                // Apply search filter
-                if (searchTerm) {
-                    const searchableText = [
-                        cmd.displayCommand,
-                        cmd.command || '',
-                        cmd.tool_name || '',
-                        cmd.git_branch || '',
-                        cmd.working_directory || ''
-                    ].join(' ').toLowerCase();
-
-                    return searchableText.includes(searchTerm);
-                }
-
-                return true;
-            });
-
-            displayCommands();
-        }
-
-        // Display commands
-        function displayCommands() {
-            const container = document.getElementById('command-history');
-            const loadMore = document.getElementById('load-more');
-
-            if (filteredCommands.length === 0) {
-                container.innerHTML = '<div class="empty-state">No commands found</div>';
-                loadMore.style.display = 'none';
-                return;
-            }
-
-            container.innerHTML = filteredCommands.map(cmd => {
-                const time = new Date(cmd.executed_at).toLocaleString();
-                const isShell = cmd.type === 'shell';
-
-                let metaItems = [];
-
-                if (cmd.git_branch) {
-                    metaItems.push(`<div class="command-meta-item">
-                        <span class="command-meta-label">Branch:</span>
-                        <span class="command-branch">${escapeHtml(cmd.git_branch)}</span>
-                    </div>`);
-                }
-
-                if (cmd.working_directory) {
-                    metaItems.push(`<div class="command-meta-item">
-                        <span class="command-meta-label">Dir:</span>
-                        <span>${escapeHtml(cmd.working_directory)}</span>
-                    </div>`);
-                }
-
-                if (isShell && cmd.exit_code !== null && cmd.exit_code !== undefined) {
-                    const exitClass = cmd.exit_code === 0 ? 'command-success' : 'command-error';
-                    metaItems.push(`<div class="command-meta-item ${exitClass}">
-                        Exit: ${cmd.exit_code}
-                    </div>`);
-                }
-
-                if (!isShell) {
-                    const statusClass = cmd.success ? 'command-success' : 'command-error';
-                    const statusText = cmd.success ? 'Success' : 'Error';
-                    metaItems.push(`<div class="command-meta-item ${statusClass}">
-                        ${statusText}
-                    </div>`);
-                }
-
-                if (cmd.duration_ms) {
-                    metaItems.push(`<div class="command-meta-item">
-                        ${cmd.duration_ms}ms
-                    </div>`);
-                }
-
-                return `
-                    <div class="command-item">
-                        <div class="command-header">
-                            <div class="command-tool">${escapeHtml(cmd.tool_name || cmd.displayCommand)}</div>
-                            <div class="command-time">${time}</div>
-                        </div>
-                        <div class="command-text">${escapeHtml(isShell ? cmd.command : cmd.displayCommand)}</div>
-                        <div class="command-meta">
-                            ${metaItems.join('')}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            // Show load more button if there might be more commands
-            loadMore.style.display = allCommands.length >= COMMANDS_PER_PAGE ? 'block' : 'none';
-        }
-
-        // User Prompts State
-        let allPrompts = [];
-        let filteredPrompts = [];
-        let currentPromptOffset = 0;
-        let availableSessions = [];
         let currentSessionFilter = '';
-        const PROMPTS_PER_PAGE = 50;
+        let currentOffset = 0;
+        let availableSessions = [];
+        const HISTORY_PER_PAGE = 100;
 
-        // Load available sessions
+        // Load available sessions from all tables
         async function loadAvailableSessions() {
             try {
                 const response = await fetch('/api/prompts/sessions');
@@ -1063,10 +853,10 @@
             }
         }
 
-        // Load user prompts
-        async function loadUserPrompts() {
+        // Load unified activity history
+        async function loadActivityHistory() {
             try {
-                let url = `/api/prompts?limit=${PROMPTS_PER_PAGE}&offset=0`;
+                let url = `/api/history/all?limit=${HISTORY_PER_PAGE}&offset=0`;
                 if (currentSessionFilter) {
                     url += `&conversation_id=${encodeURIComponent(currentSessionFilter)}`;
                 }
@@ -1074,26 +864,28 @@
                 const response = await fetch(url);
                 const data = await response.json();
 
-                allPrompts = (data.prompts || []).map(prompt => ({
-                    ...prompt,
-                    type: 'prompt'
-                })).sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+                allHistory = (data.history || []).map(item => ({
+                    ...item.content,
+                    type: item.type,
+                    timestamp: item.timestamp,
+                    session_name: item.session_name || item.content.session_name
+                }));
 
-                currentPromptOffset = 0;
-                applyPromptFiltersAndSearch();
+                currentOffset = 0;
+                applyFiltersAndSearch();
             } catch (error) {
-                console.error('Error loading user prompts:', error);
-                document.getElementById('user-prompts').innerHTML =
-                    '<div class="empty-state">Error loading user prompts</div>';
+                console.error('Error loading activity history:', error);
+                document.getElementById('activity-history').innerHTML =
+                    '<div class="empty-state">Error loading activity history</div>';
             }
         }
 
-        // Load more prompts
-        async function loadMorePrompts() {
-            currentPromptOffset += PROMPTS_PER_PAGE;
+        // Load more history
+        async function loadMoreHistory() {
+            currentOffset += HISTORY_PER_PAGE;
 
             try {
-                let url = `/api/prompts?limit=${PROMPTS_PER_PAGE}&offset=${currentPromptOffset}`;
+                let url = `/api/history/all?limit=${HISTORY_PER_PAGE}&offset=${currentOffset}`;
                 if (currentSessionFilter) {
                     url += `&conversation_id=${encodeURIComponent(currentSessionFilter)}`;
                 }
@@ -1101,67 +893,64 @@
                 const response = await fetch(url);
                 const data = await response.json();
 
-                const newPrompts = (data.prompts || []).map(prompt => ({
-                    ...prompt,
-                    type: 'prompt'
-                })).sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+                const newHistory = (data.history || []).map(item => ({
+                    ...item.content,
+                    type: item.type,
+                    timestamp: item.timestamp,
+                    session_name: item.session_name || item.content.session_name
+                }));
 
-                allPrompts = [...allPrompts, ...newPrompts];
-                applyPromptFiltersAndSearch();
+                allHistory = [...allHistory, ...newHistory];
+                applyFiltersAndSearch();
             } catch (error) {
-                console.error('Error loading more prompts:', error);
+                console.error('Error loading more history:', error);
             }
         }
 
-        // Filter prompts by session
+        // Filter history by type
+        function filterHistory(type) {
+            currentFilter = type;
+
+            // Update active tab
+            document.querySelectorAll('.filter-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelector(`[data-type="${type}"]`).classList.add('active');
+
+            applyFiltersAndSearch();
+        }
+
+        // Filter by session
         function filterBySession() {
             currentSessionFilter = document.getElementById('session-filter').value;
-            currentPromptOffset = 0;
-            allPrompts = [];
-            loadUserPrompts();
+            currentOffset = 0;
+            allHistory = [];
+            loadActivityHistory();
         }
 
-        // Clear all user prompts
-        async function clearAllPrompts() {
-            if (!confirm('⚠️ Delete ALL user prompts?\n\nThis action will permanently delete all recorded prompts from the database. This CANNOT be undone.\n\nAre you sure?')) {
-                return;
-            }
+        // Search history
+        function searchHistory() {
+            applyFiltersAndSearch();
+        }
 
-            try {
-                const response = await fetch('/api/prompts', { method: 'DELETE' });
-                const data = await response.json();
+        // Apply filters and search
+        function applyFiltersAndSearch() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
 
-                if (data.status === 'cleared') {
-                    alert(`✅ ${data.message}`);
-                    currentSessionFilter = '';
-                    document.getElementById('session-filter').value = '';
-                    loadAvailableSessions();
-                    loadUserPrompts();
-                } else {
-                    alert('❌ Clear failed: ' + (data.error || 'Unknown error'));
+            filteredHistory = allHistory.filter(item => {
+                // Apply type filter
+                if (currentFilter !== 'all' && item.type !== currentFilter) {
+                    return false;
                 }
-            } catch (error) {
-                alert('❌ Error clearing prompts: ' + error.message);
-            }
-        }
 
-        // Search prompts
-        function searchPrompts() {
-            applyPromptFiltersAndSearch();
-        }
-
-        // Apply filters and search for prompts
-        function applyPromptFiltersAndSearch() {
-            const searchTerm = document.getElementById('prompt-search-input').value.toLowerCase();
-
-            filteredPrompts = allPrompts.filter(prompt => {
                 // Apply search filter
                 if (searchTerm) {
                     const searchableText = [
-                        prompt.message || '',
-                        prompt.git_branch || '',
-                        prompt.working_directory || '',
-                        prompt.conversation_id || ''
+                        item.command || '',
+                        item.tool_name || '',
+                        item.message || '',
+                        item.git_branch || '',
+                        item.working_directory || ''
                     ].join(' ').toLowerCase();
 
                     return searchableText.includes(searchTerm);
@@ -1170,72 +959,152 @@
                 return true;
             });
 
-            displayPrompts();
+            displayHistory();
         }
 
-        // Display prompts
-        function displayPrompts() {
-            const container = document.getElementById('user-prompts');
-            const loadMore = document.getElementById('prompts-load-more');
+        // Display history
+        function displayHistory() {
+            const container = document.getElementById('activity-history');
+            const loadMore = document.getElementById('load-more');
 
-            if (filteredPrompts.length === 0) {
-                container.innerHTML = '<div class="empty-state">No prompts found</div>';
+            if (filteredHistory.length === 0) {
+                container.innerHTML = '<div class="empty-state">No activity found</div>';
                 loadMore.style.display = 'none';
                 return;
             }
 
-            container.innerHTML = filteredPrompts.map(prompt => {
-                const time = new Date(prompt.submitted_at).toLocaleString();
+            container.innerHTML = filteredHistory.map(item => {
+                const time = new Date(item.timestamp || item.executed_at || item.submitted_at).toLocaleString();
+                const isShell = item.type === 'shell';
+                const isClaude = item.type === 'claude';
+                const isPrompt = item.type === 'prompt';
 
                 let metaItems = [];
 
-                if (prompt.git_branch) {
+                // Add session name if available
+                if (item.session_name) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Session:</span>
+                        <span>${escapeHtml(item.session_name)}</span>
+                    </div>`);
+                }
+
+                if (item.git_branch) {
                     metaItems.push(`<div class="command-meta-item">
                         <span class="command-meta-label">Branch:</span>
-                        <span class="command-branch">${escapeHtml(prompt.git_branch)}</span>
+                        <span class="command-branch">${escapeHtml(item.git_branch)}</span>
                     </div>`);
                 }
 
-                if (prompt.working_directory) {
+                if (item.working_directory) {
                     metaItems.push(`<div class="command-meta-item">
                         <span class="command-meta-label">Dir:</span>
-                        <span>${escapeHtml(prompt.working_directory)}</span>
+                        <span>${escapeHtml(item.working_directory)}</span>
                     </div>`);
                 }
 
-                metaItems.push(`<div class="command-meta-item">
-                    <span class="command-meta-label">Length:</span>
-                    <span>${prompt.message_length} chars</span>
-                </div>`);
-
-                if (prompt.session_name) {
-                    metaItems.push(`<div class="command-meta-item">
-                        <span class="command-meta-label">Session:</span>
-                        <span>${escapeHtml(prompt.session_name)}</span>
-                    </div>`);
-                } else if (prompt.conversation_id) {
-                    metaItems.push(`<div class="command-meta-item">
-                        <span class="command-meta-label">Session:</span>
-                        <span>${escapeHtml(prompt.conversation_id.substring(0, 8))}...</span>
+                if (isShell && item.exit_code !== null && item.exit_code !== undefined) {
+                    const exitClass = item.exit_code === 0 ? 'command-success' : 'command-error';
+                    metaItems.push(`<div class="command-meta-item ${exitClass}">
+                        Exit: ${item.exit_code}
                     </div>`);
                 }
 
-                // Truncate long prompts
-                let displayMessage = prompt.message || '';
-                const maxLength = 500;
-                let isTruncated = false;
-                if (displayMessage.length > maxLength) {
-                    displayMessage = displayMessage.substring(0, maxLength) + '...';
-                    isTruncated = true;
+                if (isClaude) {
+                    const statusClass = item.success ? 'command-success' : 'command-error';
+                    const statusText = item.success ? 'Success' : 'Error';
+                    metaItems.push(`<div class="command-meta-item ${statusClass}">
+                        ${statusText}
+                    </div>`);
+                }
+
+                if (item.duration_ms) {
+                    metaItems.push(`<div class="command-meta-item">
+                        ${item.duration_ms}ms
+                    </div>`);
+                }
+
+                if (isPrompt && item.message_length) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Length:</span>
+                        <span>${item.message_length} chars</span>
+                    </div>`);
+                }
+
+                // Determine tool name/label
+                let toolLabel = '';
+                if (isShell) {
+                    toolLabel = 'Bash';
+                } else if (isClaude) {
+                    toolLabel = item.tool_name || 'Claude Tool';
+                } else if (isPrompt) {
+                    toolLabel = '💬 User Prompt';
+                }
+
+                // Determine display text
+                let displayText = '';
+                if (isShell) {
+                    displayText = item.command || '';
+                } else if (isClaude) {
+                    // Show tool name with key parameter
+                    let toolDisplay = item.tool_name || 'Claude Tool';
+
+                    // Parse parameters to extract key info
+                    try {
+                        const params = JSON.parse(item.parameters || '{}');
+                        let keyParam = '';
+
+                        switch(item.tool_name) {
+                            case 'WebFetch':
+                                keyParam = params.url || '';
+                                break;
+                            case 'Read':
+                            case 'Edit':
+                            case 'Write':
+                                keyParam = params.file_path || '';
+                                break;
+                            case 'Glob':
+                                keyParam = params.pattern || '';
+                                break;
+                            case 'Grep':
+                                keyParam = params.pattern || '';
+                                break;
+                            default:
+                                // For other tools, show first parameter value if available
+                                const values = Object.values(params);
+                                if (values.length > 0 && typeof values[0] === 'string') {
+                                    keyParam = values[0];
+                                }
+                        }
+
+                        if (keyParam) {
+                            // Truncate long parameters
+                            if (keyParam.length > 100) {
+                                keyParam = keyParam.substring(0, 100) + '...';
+                            }
+                            toolDisplay = `${item.tool_name}(${keyParam})`;
+                        }
+                    } catch (e) {
+                        // If JSON parsing fails, just show tool name
+                    }
+
+                    displayText = toolDisplay;
+                } else if (isPrompt) {
+                    let msg = item.message || '';
+                    const maxLength = 500;
+                    if (msg.length > maxLength) {
+                        msg = msg.substring(0, maxLength) + '...\n<em style="color: #999;">(truncated)</em>';
+                    }
+                    displayText = msg;
                 }
 
                 return `
                     <div class="command-item">
                         <div class="command-header">
-                            <div class="command-tool">💬 User Prompt</div>
+                            <div class="command-tool">${escapeHtml(toolLabel)}</div>
                             <div class="command-time">${time}</div>
                         </div>
-                        <div class="command-text">${escapeHtml(displayMessage)}${isTruncated ? '<br><em style="color: #999;">(truncated)</em>' : ''}</div>
+                        <div class="command-text">${escapeHtml(displayText)}</div>
                         <div class="command-meta">
                             ${metaItems.join('')}
                         </div>
@@ -1243,25 +1112,47 @@
                 `;
             }).join('');
 
-            // Show load more button if there might be more prompts
-            loadMore.style.display = allPrompts.length >= PROMPTS_PER_PAGE ? 'block' : 'none';
+            // Show load more button if there might be more items
+            loadMore.style.display = allHistory.length >= HISTORY_PER_PAGE ? 'block' : 'none';
+        }
+
+        // Clear all history
+        async function clearAllHistory() {
+            if (!confirm('⚠️ Delete ALL history?\n\nThis action will permanently delete all recorded user prompts, shell commands, and Claude commands from the database. This CANNOT be undone.\n\nAre you sure?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/history', { method: 'DELETE' });
+                const data = await response.json();
+
+                if (data.status === 'cleared') {
+                    alert(`✅ ${data.message}`);
+                    currentSessionFilter = '';
+                    document.getElementById('session-filter').value = '';
+                    loadAvailableSessions();
+                    loadActivityHistory();
+                } else {
+                    alert('❌ Clear failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error clearing history: ' + error.message);
+            }
         }
 
         // Initialize
         loadData();
         loadBackgroundShells();
-        loadCommandHistory();
         loadAvailableSessions();
-        loadUserPrompts();
+        loadActivityHistory();
         connectWebSocket();
 
         // Refresh every 30 seconds
         setInterval(() => {
             loadData();
             loadBackgroundShells();
-            loadCommandHistory();
             loadAvailableSessions();
-            loadUserPrompts();
+            loadActivityHistory();
         }, 30000);
     </script>
 </body>

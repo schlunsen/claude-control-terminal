@@ -240,7 +240,39 @@ func runMigrations(db *sql.DB) error {
 		// Add the session_name column
 		_, err := db.Exec("ALTER TABLE user_messages ADD COLUMN session_name TEXT")
 		if err != nil {
-			return fmt.Errorf("failed to add session_name column: %w", err)
+			return fmt.Errorf("failed to add session_name column to user_messages: %w", err)
+		}
+	}
+
+	// Migration 3: Add session_name column to shell_commands table if it doesn't exist
+	var shellSessionNameExists bool
+	shellSessionQuery := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('shell_commands')
+		WHERE name='session_name'
+	`
+	if err := db.QueryRow(shellSessionQuery).Scan(&shellSessionNameExists); err == nil {
+		if !shellSessionNameExists {
+			_, err := db.Exec("ALTER TABLE shell_commands ADD COLUMN session_name TEXT")
+			if err != nil {
+				return fmt.Errorf("failed to add session_name column to shell_commands: %w", err)
+			}
+		}
+	}
+
+	// Migration 4: Add session_name column to claude_commands table if it doesn't exist
+	var claudeSessionNameExists bool
+	claudeSessionQuery := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('claude_commands')
+		WHERE name='session_name'
+	`
+	if err := db.QueryRow(claudeSessionQuery).Scan(&claudeSessionNameExists); err == nil {
+		if !claudeSessionNameExists {
+			_, err := db.Exec("ALTER TABLE claude_commands ADD COLUMN session_name TEXT")
+			if err != nil {
+				return fmt.Errorf("failed to add session_name column to claude_commands: %w", err)
+			}
 		}
 	}
 

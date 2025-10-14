@@ -127,6 +127,11 @@ func (hi *HookInstaller) copyHookScript(hookName string, hooksDir string) error 
 
 // addHookToSettingsAtPath adds a hook to settings.local.json at specified directory
 func (hi *HookInstaller) addHookToSettingsAtPath(settingsDir string, hooksDir string, hookName string, eventName string) error {
+	return hi.addHookToSettingsWithMatcher(settingsDir, hooksDir, hookName, eventName, "")
+}
+
+// addHookToSettingsWithMatcher adds a hook with optional matcher to settings.local.json
+func (hi *HookInstaller) addHookToSettingsWithMatcher(settingsDir string, hooksDir string, hookName string, eventName string, matcher string) error {
 	settingsPath := filepath.Join(settingsDir, "settings.local.json")
 
 	// Read existing settings or create new one
@@ -179,12 +184,16 @@ func (hi *HookInstaller) addHookToSettingsAtPath(settingsDir string, hooksDir st
 	hookExists := false
 	for _, entry := range eventHooks {
 		if entryMap, ok := entry.(map[string]interface{}); ok {
-			if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
-				for _, h := range hooksArr {
-					if hMap, ok := h.(map[string]interface{}); ok {
-						if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, hookName) {
-							hookExists = true
-							break
+			// Check if matcher matches (or both empty)
+			entryMatcher, _ := entryMap["matcher"].(string)
+			if entryMatcher == matcher {
+				if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
+					for _, h := range hooksArr {
+						if hMap, ok := h.(map[string]interface{}); ok {
+							if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, hookName) {
+								hookExists = true
+								break
+							}
 						}
 					}
 				}
@@ -196,8 +205,7 @@ func (hi *HookInstaller) addHookToSettingsAtPath(settingsDir string, hooksDir st
 	}
 
 	if !hookExists {
-		// Add hook in the proper format: hooks -> type/command
-		// No matcher needed for UserPromptSubmit - it should run on every prompt
+		// Add hook in the proper format
 		hookEntry := map[string]interface{}{
 			"hooks": []interface{}{
 				map[string]interface{}{
@@ -206,9 +214,20 @@ func (hi *HookInstaller) addHookToSettingsAtPath(settingsDir string, hooksDir st
 				},
 			},
 		}
+
+		// Add matcher if specified (for PostToolUse, PreToolUse, etc.)
+		if matcher != "" {
+			hookEntry["matcher"] = matcher
+		}
+
 		eventHooks = append(eventHooks, hookEntry)
 		hooks[eventName] = eventHooks
-		fmt.Printf("   ✓ Added hook to %s event\n", eventName)
+
+		if matcher != "" {
+			fmt.Printf("   ✓ Added hook to %s event (matcher: %s)\n", eventName, matcher)
+		} else {
+			fmt.Printf("   ✓ Added hook to %s event\n", eventName)
+		}
 	} else {
 		fmt.Printf("   ℹ Hook already exists in %s event\n", eventName)
 	}
@@ -419,4 +438,193 @@ func (hi *HookInstaller) checkHookInSettingsFile(settingsPath string) (bool, err
 	}
 
 	return false, nil
+}
+
+// InstallToolLogger installs the tool-logger hook for current project only
+// Hooks are always installed in the project's .claude directory, never globally
+func (hi *HookInstaller) InstallToolLogger() error {
+	// Get current working directory for project-based installation
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	fmt.Println("🔧 Installing Tool Logger Hook (project-only)...")
+
+	// Project .claude directory
+	settingsDir := filepath.Join(cwd, ".claude")
+	if err := os.MkdirAll(settingsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create project .claude directory: %w", err)
+	}
+
+	// Hooks subdirectory in PROJECT .claude dir (not global)
+	hooksDir := filepath.Join(settingsDir, "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		return fmt.Errorf("failed to create project hooks directory: %w", err)
+	}
+
+	// Copy hook script to PROJECT hooks directory
+	hookName := "tool-logger.sh"
+	if err := hi.copyHookScript(hookName, hooksDir); err != nil {
+		return fmt.Errorf("failed to copy hook script: %w", err)
+	}
+
+	// Update settings.json in project directory with PostToolUse hook and wildcard matcher
+	if err := hi.addHookToSettingsWithMatcher(settingsDir, hooksDir, hookName, "PostToolUse", "*"); err != nil {
+		return fmt.Errorf("failed to update settings.json: %w", err)
+	}
+
+	fmt.Println("✅ Tool Logger Hook installed successfully!")
+	fmt.Printf("   Project: %s\n", cwd)
+	fmt.Printf("   Hook script: %s\n", filepath.Join(hooksDir, hookName))
+	fmt.Printf("   Settings: %s\n", filepath.Join(settingsDir, "settings.local.json"))
+	fmt.Println("\n💡 This hook will capture all tool usage (Bash, Read, Edit, Write, etc.)")
+	fmt.Println("   View analytics: cct --analytics")
+
+	return nil
+}
+
+// UninstallToolLogger removes the tool-logger hook from current project
+func (hi *HookInstaller) UninstallToolLogger() error {
+	fmt.Println("🗑️  Uninstalling Tool Logger Hook...")
+
+	hookName := "tool-logger.sh"
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	// Remove from project settings.json
+	projectSettingsDir := filepath.Join(cwd, ".claude")
+	if err := hi.removeHookFromSettingsAtPath(projectSettingsDir, hookName, "PostToolUse"); err != nil {
+		fmt.Printf("   ℹ Project settings: %v\n", err)
+	}
+
+	// Remove the hook script file from project directory
+	hookScriptPath := filepath.Join(projectSettingsDir, "hooks", hookName)
+	if err := os.Remove(hookScriptPath); err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Printf("   ⚠️  Failed to remove hook script: %v\n", err)
+		}
+	} else {
+		fmt.Printf("   ✓ Removed hook script: %s\n", hookScriptPath)
+	}
+
+	fmt.Println("✅ Tool Logger Hook uninstalled successfully!")
+	return nil
+}
+
+// CheckToolLoggerInstalled checks if the tool-logger hook is installed in current project
+// Only checks project-based installation, never global
+func (hi *HookInstaller) CheckToolLoggerInstalled() (bool, error) {
+	// Check project-based installation only
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false, fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	projectSettingsPath := filepath.Join(cwd, ".claude", "settings.local.json")
+	return hi.checkToolLoggerInSettingsFile(projectSettingsPath)
+}
+
+// checkToolLoggerInSettingsFile checks if tool-logger hook is installed in specific settings file
+func (hi *HookInstaller) checkToolLoggerInSettingsFile(settingsPath string) (bool, error) {
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	var rawSettings map[string]interface{}
+	if err := json.Unmarshal(content, &rawSettings); err != nil {
+		return false, err
+	}
+
+	hooksRaw, exists := rawSettings["hooks"]
+	if !exists {
+		return false, nil
+	}
+
+	hooks, ok := hooksRaw.(map[string]interface{})
+	if !ok {
+		return false, nil
+	}
+
+	eventRaw, exists := hooks["PostToolUse"]
+	if !exists {
+		return false, nil
+	}
+
+	eventHooks, ok := eventRaw.([]interface{})
+	if !ok {
+		return false, nil
+	}
+
+	for _, entry := range eventHooks {
+		if entryMap, ok := entry.(map[string]interface{}); ok {
+			if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
+				for _, h := range hooksArr {
+					if hMap, ok := h.(map[string]interface{}); ok {
+						if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, "tool-logger") {
+							return true, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false, nil
+}
+
+// InstallAllHooks installs both user-prompt-logger and tool-logger hooks for current project
+// Always installs to project's .claude directory, never globally
+func (hi *HookInstaller) InstallAllHooks() error {
+	fmt.Println("📦 Installing All Hooks (project-only)...")
+	fmt.Println()
+
+	// Install user prompt logger
+	if err := hi.InstallUserPromptLogger(); err != nil {
+		return fmt.Errorf("failed to install user prompt logger: %w", err)
+	}
+
+	fmt.Println()
+
+	// Install tool logger
+	if err := hi.InstallToolLogger(); err != nil {
+		return fmt.Errorf("failed to install tool logger: %w", err)
+	}
+
+	fmt.Println()
+	fmt.Println("✅ All hooks installed successfully!")
+	fmt.Println("   Both hooks are project-specific and will only run in this directory")
+
+	return nil
+}
+
+// UninstallAllHooks removes both hooks from current project
+func (hi *HookInstaller) UninstallAllHooks() error {
+	fmt.Println("🗑️  Uninstalling All Hooks...")
+	fmt.Println()
+
+	// Uninstall user prompt logger
+	if err := hi.UninstallUserPromptLogger(); err != nil {
+		fmt.Printf("   ⚠️  User prompt logger: %v\n", err)
+	}
+
+	fmt.Println()
+
+	// Uninstall tool logger
+	if err := hi.UninstallToolLogger(); err != nil {
+		fmt.Printf("   ⚠️  Tool logger: %v\n", err)
+	}
+
+	fmt.Println()
+	fmt.Println("✅ All hooks uninstalled successfully!")
+
+	return nil
 }

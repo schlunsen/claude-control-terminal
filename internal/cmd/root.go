@@ -67,6 +67,14 @@ var (
 	dockerPorts   string
 	dockerVolumes string
 
+	// Hook management flags
+	installUserPromptHook   bool
+	uninstallUserPromptHook bool
+	installToolHook         bool
+	uninstallToolHook       bool
+	installAllHooks         bool
+	uninstallAllHooks       bool
+
 	// Other flags
 	template   string
 	language   string
@@ -111,7 +119,10 @@ var rootCmd = &cobra.Command{
 			agent == "" && command == "" && mcp == "" && setting == "" && hook == "" &&
 			workflow == "" && !studio && sandbox == "" &&
 			!dockerInit && !dockerBuild && !dockerRun && !dockerStop && !dockerLogs && !dockerCompose &&
-			!installClaude
+			!installClaude &&
+			!installUserPromptHook && !uninstallUserPromptHook &&
+			!installToolHook && !uninstallToolHook &&
+			!installAllHooks && !uninstallAllHooks
 
 		// If no flags provided, launch TUI
 		if isInteractive {
@@ -192,11 +203,25 @@ func init() {
 	rootCmd.Flags().StringVar(&e2bAPIKey, "e2b-api-key", "", "E2B API key")
 	rootCmd.Flags().StringVar(&anthropicAPIKey, "anthropic-api-key", "", "Anthropic API key")
 
+	// Hook management flags
+	rootCmd.Flags().BoolVar(&installUserPromptHook, "install-user-prompt-hook", false, "install user prompt logger hook (project-only)")
+	rootCmd.Flags().BoolVar(&uninstallUserPromptHook, "uninstall-user-prompt-hook", false, "uninstall user prompt logger hook")
+	rootCmd.Flags().BoolVar(&installToolHook, "install-tool-hook", false, "install tool logger hook (project-only)")
+	rootCmd.Flags().BoolVar(&uninstallToolHook, "uninstall-tool-hook", false, "uninstall tool logger hook")
+	rootCmd.Flags().BoolVar(&installAllHooks, "install-all-hooks", false, "install all hooks (user-prompt + tool loggers, project-only)")
+	rootCmd.Flags().BoolVar(&uninstallAllHooks, "uninstall-all-hooks", false, "uninstall all hooks")
+
 	// Claude installer flag
 	rootCmd.Flags().BoolVar(&installClaude, "install-claude", false, "install Claude CLI automatically")
 }
 
 func handleCommand(cmd *cobra.Command, args []string) {
+	// Hook management commands
+	if installUserPromptHook || uninstallUserPromptHook || installToolHook || uninstallToolHook || installAllHooks || uninstallAllHooks {
+		handleHookManagement()
+		return
+	}
+
 	// Docker commands
 	if dockerInit || dockerBuild || dockerRun || dockerStop || dockerLogs || dockerCompose {
 		handleDockerCommands(directory)
@@ -452,7 +477,7 @@ func createAnalyticsServer(targetDir string) *server.Server {
 	return server.NewServer(claudeDir, 3333)
 }
 
-// handleHookInstallation handles installation of hooks
+// handleHookInstallation handles installation of hooks (legacy via --hook flag)
 func handleHookInstallation(hookName string) {
 	fmt.Printf("\n🔧 Installing Hook: %s\n", hookName)
 
@@ -464,10 +489,81 @@ func handleHookInstallation(hookName string) {
 			ShowError(fmt.Sprintf("Failed to install hook: %v", err))
 			return
 		}
+	case "tool-logger":
+		if err := hookInstaller.InstallToolLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to install hook: %v", err))
+			return
+		}
+	case "all":
+		if err := hookInstaller.InstallAllHooks(); err != nil {
+			ShowError(fmt.Sprintf("Failed to install hooks: %v", err))
+			return
+		}
 	default:
 		ShowError(fmt.Sprintf("Unknown hook: %s", hookName))
 		ShowInfo("Available hooks:")
 		ShowInfo("  - user-prompt-logger: Capture user prompts for analytics")
+		ShowInfo("  - tool-logger: Capture all tool usage (Bash, Read, Edit, etc.)")
+		ShowInfo("  - all: Install both hooks")
+		return
+	}
+}
+
+// handleHookManagement handles hook installation and removal via dedicated flags
+func handleHookManagement() {
+	hookInstaller := components.NewHookInstaller()
+
+	// Install all hooks
+	if installAllHooks {
+		if err := hookInstaller.InstallAllHooks(); err != nil {
+			ShowError(fmt.Sprintf("Failed to install hooks: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Uninstall all hooks
+	if uninstallAllHooks {
+		if err := hookInstaller.UninstallAllHooks(); err != nil {
+			ShowError(fmt.Sprintf("Failed to uninstall hooks: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Install user prompt hook
+	if installUserPromptHook {
+		if err := hookInstaller.InstallUserPromptLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to install user prompt hook: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Uninstall user prompt hook
+	if uninstallUserPromptHook {
+		if err := hookInstaller.UninstallUserPromptLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to uninstall user prompt hook: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Install tool hook
+	if installToolHook {
+		if err := hookInstaller.InstallToolLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to install tool hook: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Uninstall tool hook
+	if uninstallToolHook {
+		if err := hookInstaller.UninstallToolLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to uninstall tool hook: %v", err))
+			os.Exit(1)
+		}
 		return
 	}
 }

@@ -122,9 +122,13 @@ func (s *Server) setupRoutes() {
 	api.Get("/reset/status", s.handleResetStatus)
 
 	// Command history endpoints
+	api.Get("/history/all", s.handleGetAllHistory)
 	api.Get("/history/shell", s.handleGetShellHistory)
 	api.Get("/history/claude", s.handleGetClaudeHistory)
 	api.Get("/history/stats", s.handleGetCommandStats)
+	api.Post("/commands/shell", s.handleRecordShellCommand)
+	api.Post("/commands/claude", s.handleRecordClaudeCommand)
+	api.Delete("/history", s.handleClearAllHistory)
 	api.Get("/db/stats", s.handleGetDBStats)
 
 	// User prompts endpoints
@@ -132,7 +136,7 @@ func (s *Server) setupRoutes() {
 	api.Get("/prompts/stats", s.handleGetPromptStats)
 	api.Get("/prompts/sessions", s.handleGetUniqueSessions)
 	api.Post("/prompts", s.handleRecordUserPrompt)
-	api.Delete("/prompts", s.handleClearAllPrompts)
+	api.Delete("/prompts", s.handleClearAllHistory) // Alias for backward compatibility
 
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
@@ -670,9 +674,9 @@ func (s *Server) handleRecordUserPrompt(c *fiber.Ctx) error {
 	})
 }
 
-// Handler: Clear all user prompts
-func (s *Server) handleClearAllPrompts(c *fiber.Ctx) error {
-	err := s.repo.DeleteAllUserMessages()
+// Handler: Clear all history (user prompts, shell commands, and claude commands)
+func (s *Server) handleClearAllHistory(c *fiber.Ctx) error {
+	err := s.repo.DeleteAllHistory()
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error":  err.Error(),
@@ -681,11 +685,240 @@ func (s *Server) handleClearAllPrompts(c *fiber.Ctx) error {
 	}
 
 	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"prompts_cleared"}`))
+	s.wsHub.Broadcast([]byte(`{"event":"history_cleared"}`))
 
 	return c.JSON(fiber.Map{
 		"status":  "cleared",
-		"message": "All user prompts have been deleted",
+		"message": "All history (prompts, shell commands, and Claude commands) have been deleted",
 		"time":    time.Now(),
+	})
+}
+
+// Handler: Record a shell command
+func (s *Server) handleRecordShellCommand(c *fiber.Ctx) error {
+	type RecordShellCommandRequest struct {
+		SessionID        string `json:"session_id"`
+		SessionName      string `json:"session_name"`
+		Command          string `json:"command"`
+		Description      string `json:"description"`
+		WorkingDirectory string `json:"cwd"`
+		GitBranch        string `json:"branch"`
+		ExitCode         *int   `json:"exit_code"`
+		Stdout           string `json:"stdout"`
+		Stderr           string `json:"stderr"`
+		DurationMs       *int   `json:"duration_ms"`
+	}
+
+	var req RecordShellCommandRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.SessionID == "" || req.Command == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id and command are required",
+		})
+	}
+
+	// Create shell command record
+	cmd := &database.ShellCommand{
+		ConversationID:   req.SessionID,
+		SessionName:      req.SessionName,
+		Command:          req.Command,
+		Description:      req.Description,
+		WorkingDirectory: req.WorkingDirectory,
+		GitBranch:        req.GitBranch,
+		ExitCode:         req.ExitCode,
+		Stdout:           req.Stdout,
+		Stderr:           req.Stderr,
+		DurationMs:       req.DurationMs,
+		ExecutedAt:       time.Now(),
+	}
+
+	// Record the command
+	if err := s.repo.RecordShellCommand(cmd); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to record shell command: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"command_recorded","type":"shell"}`))
+
+	return c.JSON(fiber.Map{
+		"status": "recorded",
+		"id":     cmd.ID,
+		"time":   cmd.ExecutedAt,
+	})
+}
+
+// Handler: Record a Claude command
+func (s *Server) handleRecordClaudeCommand(c *fiber.Ctx) error {
+	type RecordClaudeCommandRequest struct {
+		SessionID        string `json:"session_id"`
+		SessionName      string `json:"session_name"`
+		ToolName         string `json:"tool_name"`
+		Parameters       string `json:"parameters"`
+		Result           string `json:"result"`
+		WorkingDirectory string `json:"cwd"`
+		GitBranch        string `json:"branch"`
+		Success          bool   `json:"success"`
+		ErrorMessage     string `json:"error_message"`
+		DurationMs       *int   `json:"duration_ms"`
+	}
+
+	var req RecordClaudeCommandRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.SessionID == "" || req.ToolName == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id and tool_name are required",
+		})
+	}
+
+	// Create Claude command record
+	cmd := &database.ClaudeCommand{
+		ConversationID:   req.SessionID,
+		SessionName:      req.SessionName,
+		ToolName:         req.ToolName,
+		Parameters:       req.Parameters,
+		Result:           req.Result,
+		WorkingDirectory: req.WorkingDirectory,
+		GitBranch:        req.GitBranch,
+		Success:          req.Success,
+		ErrorMessage:     req.ErrorMessage,
+		DurationMs:       req.DurationMs,
+		ExecutedAt:       time.Now(),
+	}
+
+	// Record the command
+	if err := s.repo.RecordClaudeCommand(cmd); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to record claude command: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"command_recorded","type":"claude"}`))
+
+	return c.JSON(fiber.Map{
+		"status": "recorded",
+		"id":     cmd.ID,
+		"time":   cmd.ExecutedAt,
+	})
+}
+
+// Handler: Get all history (unified endpoint for shell commands, claude commands, and user prompts)
+func (s *Server) handleGetAllHistory(c *fiber.Ctx) error {
+	conversationID := c.Query("conversation_id")
+	limit := c.QueryInt("limit", 100)
+	offset := c.QueryInt("offset", 0)
+
+	query := &database.CommandHistoryQuery{
+		ConversationID: conversationID,
+		Limit:          limit,
+		Offset:         offset,
+	}
+
+	// Fetch all three types
+	shellCommands, err := s.repo.GetShellCommands(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get shell commands: %v", err),
+		})
+	}
+
+	claudeCommands, err := s.repo.GetClaudeCommands(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get claude commands: %v", err),
+		})
+	}
+
+	userMessages, err := s.repo.GetUserMessages(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get user messages: %v", err),
+		})
+	}
+
+	// Combine into unified response with type field
+	type HistoryItem struct {
+		Type             string      `json:"type"`
+		ID               int64       `json:"id"`
+		ConversationID   string      `json:"conversation_id"`
+		SessionName      string      `json:"session_name,omitempty"`
+		Timestamp        time.Time   `json:"timestamp"`
+		WorkingDirectory string      `json:"working_directory,omitempty"`
+		GitBranch        string      `json:"git_branch,omitempty"`
+		Content          interface{} `json:"content"`
+	}
+
+	var allHistory []HistoryItem
+
+	// Add shell commands
+	for _, cmd := range shellCommands {
+		allHistory = append(allHistory, HistoryItem{
+			Type:             "shell",
+			ID:               cmd.ID,
+			ConversationID:   cmd.ConversationID,
+			SessionName:      cmd.SessionName,
+			Timestamp:        cmd.ExecutedAt,
+			WorkingDirectory: cmd.WorkingDirectory,
+			GitBranch:        cmd.GitBranch,
+			Content:          cmd,
+		})
+	}
+
+	// Add claude commands
+	for _, cmd := range claudeCommands {
+		allHistory = append(allHistory, HistoryItem{
+			Type:             "claude",
+			ID:               cmd.ID,
+			ConversationID:   cmd.ConversationID,
+			SessionName:      cmd.SessionName,
+			Timestamp:        cmd.ExecutedAt,
+			WorkingDirectory: cmd.WorkingDirectory,
+			GitBranch:        cmd.GitBranch,
+			Content:          cmd,
+		})
+	}
+
+	// Add user messages
+	for _, msg := range userMessages {
+		allHistory = append(allHistory, HistoryItem{
+			Type:             "prompt",
+			ID:               msg.ID,
+			ConversationID:   msg.ConversationID,
+			SessionName:      msg.SessionName,
+			Timestamp:        msg.SubmittedAt,
+			WorkingDirectory: msg.WorkingDirectory,
+			GitBranch:        msg.GitBranch,
+			Content:          msg,
+		})
+	}
+
+	// Sort by timestamp descending
+	// Simple bubble sort since we're dealing with already sorted slices
+	for i := 0; i < len(allHistory)-1; i++ {
+		for j := i + 1; j < len(allHistory); j++ {
+			if allHistory[i].Timestamp.Before(allHistory[j].Timestamp) {
+				allHistory[i], allHistory[j] = allHistory[j], allHistory[i]
+			}
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"history": allHistory,
+		"count":   len(allHistory),
+		"query":   query,
 	})
 }

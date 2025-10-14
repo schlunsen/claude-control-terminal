@@ -4,6 +4,7 @@
 CREATE TABLE IF NOT EXISTS shell_commands (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id TEXT NOT NULL,
+    session_name TEXT,
     command TEXT NOT NULL,
     description TEXT,
     working_directory TEXT,
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS shell_commands (
 CREATE TABLE IF NOT EXISTS claude_commands (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id TEXT NOT NULL,
+    session_name TEXT,
     tool_name TEXT NOT NULL,
     parameters TEXT, -- JSON string
     result TEXT, -- JSON string

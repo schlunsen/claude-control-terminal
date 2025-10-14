@@ -9,6 +9,7 @@ import "time"
 type ShellCommand struct {
 	ID               int64     `json:"id"`
 	ConversationID   string    `json:"conversation_id"`
+	SessionName      string    `json:"session_name,omitempty"`
 	Command          string    `json:"command"`
 	Description      string    `json:"description,omitempty"`
 	WorkingDirectory string    `json:"working_directory,omitempty"`
@@ -25,6 +26,7 @@ type ShellCommand struct {
 type ClaudeCommand struct {
 	ID               int64     `json:"id"`
 	ConversationID   string    `json:"conversation_id"`
+	SessionName      string    `json:"session_name,omitempty"`
 	ToolName         string    `json:"tool_name"`
 	Parameters       string    `json:"parameters,omitempty"` // JSON string
 	Result           string    `json:"result,omitempty"`     // JSON string
