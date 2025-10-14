@@ -363,7 +363,7 @@ func handleComponentInstallation(targetDir string) {
 	}
 
 	if hook != "" {
-		fmt.Println("\n🔧 Hooks installation coming soon...")
+		handleHookInstallation(hook)
 	}
 
 	if !hasErrors {
@@ -450,6 +450,26 @@ func createAnalyticsServer(targetDir string) *server.Server {
 	}
 
 	return server.NewServer(claudeDir, 3333)
+}
+
+// handleHookInstallation handles installation of hooks
+func handleHookInstallation(hookName string) {
+	fmt.Printf("\n🔧 Installing Hook: %s\n", hookName)
+
+	hookInstaller := components.NewHookInstaller()
+
+	switch hookName {
+	case "user-prompt-logger":
+		if err := hookInstaller.InstallUserPromptLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to install hook: %v", err))
+			return
+		}
+	default:
+		ShowError(fmt.Sprintf("Unknown hook: %s", hookName))
+		ShowInfo("Available hooks:")
+		ShowInfo("  - user-prompt-logger: Capture user prompts for analytics")
+		return
+	}
 }
 
 // handleDockerCommands handles all Docker-related operations
