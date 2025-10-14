@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS command_stats (
 CREATE TABLE IF NOT EXISTS user_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id TEXT,
+    session_name TEXT,
     message TEXT NOT NULL,
     working_directory TEXT,
     git_branch TEXT,

@@ -37,40 +37,81 @@ if [[ -d "$CWD/.git" ]]; then
     GIT_BRANCH=$(cd "$CWD" && git branch --show-current 2>/dev/null || echo "")
 fi
 
-# Find cct binary
-CCT_BIN=""
-if command -v cct &> /dev/null; then
-    CCT_BIN="cct"
-elif [[ -x "/usr/local/bin/cct" ]]; then
-    CCT_BIN="/usr/local/bin/cct"
-elif [[ -x "$HOME/go/bin/cct" ]]; then
-    CCT_BIN="$HOME/go/bin/cct"
-elif [[ -x "./cct" ]]; then
-    CCT_BIN="./cct"
-fi
+# Generate friendly session name from session_id
+# Use a list of 10 South Park character names and hash the session_id to pick one
+SESSION_NAMES=(
+    "Cartman"
+    "Stan"
+    "Kyle"
+    "Kenny"
+    "Butters"
+    "Randy"
+    "Tweek"
+    "Craig"
+    "Token"
+    "Wendy"
+)
 
-# If cct not found, try to find it in common locations
-if [[ -z "$CCT_BIN" ]]; then
-    for path in /usr/local/bin ~/go/bin ~/.local/bin /opt/homebrew/bin; do
-        if [[ -x "$path/cct" ]]; then
-            CCT_BIN="$path/cct"
-            break
-        fi
+# Generate a numeric hash from session_id to pick a name (modulo 10)
+# Use first 8 characters of session_id to get a stable hash
+if command -v cksum &> /dev/null; then
+    HASH=$(echo -n "$SESSION_ID" | cksum | cut -d' ' -f1)
+    INDEX=$((HASH % 10))
+else
+    # Fallback: use character values
+    HASH=0
+    for ((i=0; i<${#SESSION_ID} && i<8; i++)); do
+        CHAR="${SESSION_ID:$i:1}"
+        ASCII=$(printf '%d' "'$CHAR")
+        HASH=$((HASH + ASCII))
     done
+    INDEX=$((HASH % 10))
 fi
 
-# If still not found, silently exit (don't block Claude Code)
-if [[ -z "$CCT_BIN" ]]; then
-    exit 0
+SESSION_NAME="${SESSION_NAMES[$INDEX]}"
+
+# Analytics server endpoint (default port)
+ANALYTICS_URL="http://localhost:3333/api/prompts"
+
+# Build JSON payload
+if command -v jq &> /dev/null; then
+    # Use jq for proper JSON encoding
+    PAYLOAD=$(jq -n \
+        --arg session "$SESSION_ID" \
+        --arg sessionName "$SESSION_NAME" \
+        --arg prompt "$PROMPT" \
+        --arg cwd "$CWD" \
+        --arg branch "$GIT_BRANCH" \
+        '{session_id: $session, session_name: $sessionName, prompt: $prompt, cwd: $cwd, branch: $branch}')
+else
+    # Fallback: basic JSON (less robust, but works for most cases)
+    # Note: This doesn't escape special characters properly
+    PAYLOAD=$(cat <<EOF
+{
+  "session_id": "$SESSION_ID",
+  "session_name": "$SESSION_NAME",
+  "prompt": "$PROMPT",
+  "cwd": "$CWD",
+  "branch": "$GIT_BRANCH"
+}
+EOF
+)
 fi
 
-# Call cct to record the prompt (run in background to not slow down Claude Code)
-"$CCT_BIN" record-prompt \
-    --session "$SESSION_ID" \
-    --prompt "$PROMPT" \
-    --cwd "$CWD" \
-    --branch "$GIT_BRANCH" \
-    &> /dev/null &
+# POST to analytics server (run in background to not slow down Claude Code)
+# Use curl if available, otherwise try wget
+if command -v curl &> /dev/null; then
+    curl -X POST "$ANALYTICS_URL" \
+        -H "Content-Type: application/json" \
+        -d "$PAYLOAD" \
+        &> /dev/null &
+elif command -v wget &> /dev/null; then
+    wget --quiet --post-data="$PAYLOAD" \
+        --header="Content-Type: application/json" \
+        -O /dev/null \
+        "$ANALYTICS_URL" \
+        &> /dev/null &
+fi
 
 # Exit successfully (don't block Claude Code)
 exit 0

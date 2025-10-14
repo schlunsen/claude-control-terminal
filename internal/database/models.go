@@ -80,6 +80,7 @@ type CommandHistoryQuery struct {
 type UserMessage struct {
 	ID               int64     `json:"id"`
 	ConversationID   string    `json:"conversation_id,omitempty"`
+	SessionName      string    `json:"session_name,omitempty"`
 	Message          string    `json:"message"`
 	WorkingDirectory string    `json:"working_directory,omitempty"`
 	GitBranch        string    `json:"git_branch,omitempty"`

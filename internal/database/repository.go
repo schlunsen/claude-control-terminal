@@ -431,14 +431,15 @@ func (r *Repository) RecordUserMessage(msg *UserMessage) error {
 
 	query := `
 		INSERT INTO user_messages (
-			conversation_id, message, working_directory, git_branch,
+			conversation_id, session_name, message, working_directory, git_branch,
 			message_length, submitted_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
 		query,
 		msg.ConversationID,
+		msg.SessionName,
 		msg.Message,
 		msg.WorkingDirectory,
 		msg.GitBranch,
@@ -462,7 +463,7 @@ func (r *Repository) GetUserMessages(query *CommandHistoryQuery) ([]*UserMessage
 	defer r.db.mu.RUnlock()
 
 	sql := `
-		SELECT id, conversation_id, message, working_directory, git_branch,
+		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, message, working_directory, git_branch,
 		       message_length, submitted_at, created_at
 		FROM user_messages
 		WHERE 1=1
@@ -509,6 +510,7 @@ func (r *Repository) GetUserMessages(query *CommandHistoryQuery) ([]*UserMessage
 		err := rows.Scan(
 			&msg.ID,
 			&msg.ConversationID,
+			&msg.SessionName,
 			&msg.Message,
 			&msg.WorkingDirectory,
 			&msg.GitBranch,
@@ -694,4 +696,53 @@ func (r *Repository) DeleteAllProviders() error {
 	}
 
 	return nil
+}
+
+// DeleteAllUserMessages removes all user messages
+func (r *Repository) DeleteAllUserMessages() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM user_messages"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all user messages: %w", err)
+	}
+
+	return nil
+}
+
+// GetUniqueSessions retrieves all unique session IDs and names from user messages
+func (r *Repository) GetUniqueSessions() ([]map[string]string, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT conversation_id, COALESCE(session_name, '') as session_name, MAX(submitted_at) as last_submitted
+		FROM user_messages
+		WHERE conversation_id != '' AND conversation_id IS NOT NULL
+		GROUP BY conversation_id, session_name
+		ORDER BY last_submitted DESC
+	`
+
+	rows, err := r.db.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unique sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []map[string]string
+	for rows.Next() {
+		var conversationID, sessionName, lastSubmitted string
+		err := rows.Scan(&conversationID, &sessionName, &lastSubmitted)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan session: %w", err)
+		}
+		sessions = append(sessions, map[string]string{
+			"conversation_id": conversationID,
+			"session_name":    sessionName,
+		})
+	}
+
+	return sessions, nil
 }

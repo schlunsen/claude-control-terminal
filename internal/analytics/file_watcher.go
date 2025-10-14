@@ -53,8 +53,8 @@ func NewFileWatcherWithOptions(claudeDir string, refreshCallback func() error, q
 	return fw, nil
 }
 
-// Start begins watching for file changes and starts periodic refresh.
-// It spawns goroutines for event watching and periodic refreshing.
+// Start begins watching for file changes.
+// It spawns a goroutine for event watching on .jsonl files.
 func (fw *FileWatcher) Start() error {
 	// Add the Claude directory to watch
 	err := fw.watcher.Add(fw.claudeDir)
@@ -71,9 +71,10 @@ func (fw *FileWatcher) Start() error {
 	fw.setActive(true)
 
 	// Start watching in goroutines
-	fw.wg.Add(2)
+	fw.wg.Add(1) // Changed from 2 to 1 - removed periodic refresh
 	go fw.watchLoop()
-	go fw.periodicRefresh()
+	// Disabled periodic refresh to prevent database duplication
+	// go fw.periodicRefresh()
 
 	return nil
 }

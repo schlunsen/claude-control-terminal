@@ -39,8 +39,8 @@ func NewHookInstallerWithDir(claudeDir string) *HookInstaller {
 	}
 }
 
-// InstallUserPromptLogger installs the user-prompt-logger hook for current project
-// Defaults to project-based installation (cwd/.claude/settings.json)
+// InstallUserPromptLogger installs the user-prompt-logger hook for current project only
+// Hooks are always installed in the project's .claude directory, never globally
 func (hi *HookInstaller) InstallUserPromptLogger() error {
 	// Get current working directory for project-based installation
 	cwd, err := os.Getwd()
@@ -48,60 +48,36 @@ func (hi *HookInstaller) InstallUserPromptLogger() error {
 		return fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	return hi.InstallUserPromptLoggerWithScope(cwd)
-}
+	fmt.Println("📝 Installing User Prompt Logger Hook (project-only)...")
 
-// InstallUserPromptLoggerGlobal installs the hook globally
-func (hi *HookInstaller) InstallUserPromptLoggerGlobal() error {
-	return hi.InstallUserPromptLoggerWithScope("")
-}
-
-// InstallUserPromptLoggerWithScope installs the hook with specified scope
-// projectDir: empty string for global, or project path for project-specific
-func (hi *HookInstaller) InstallUserPromptLoggerWithScope(projectDir string) error {
-	scope := "global"
-	settingsDir := hi.claudeDir
-
-	if projectDir != "" {
-		scope = "project"
-		settingsDir = filepath.Join(projectDir, ".claude")
-		// Ensure project .claude directory exists
-		if err := os.MkdirAll(settingsDir, 0755); err != nil {
-			return fmt.Errorf("failed to create project .claude directory: %w", err)
-		}
+	// Project .claude directory
+	settingsDir := filepath.Join(cwd, ".claude")
+	if err := os.MkdirAll(settingsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create project .claude directory: %w", err)
 	}
 
-	fmt.Printf("📝 Installing User Prompt Logger Hook (%s)...\n", scope)
-
-	// 1. Ensure hooks subdirectory exists in global Claude dir (scripts always go there)
-	hooksDir := filepath.Join(hi.claudeDir, "hooks")
+	// Hooks subdirectory in PROJECT .claude dir (not global)
+	hooksDir := filepath.Join(settingsDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
-		return fmt.Errorf("failed to create hooks directory: %w", err)
+		return fmt.Errorf("failed to create project hooks directory: %w", err)
 	}
 
-	// 2. Copy hook script to global hooks directory (reused across projects)
+	// Copy hook script to PROJECT hooks directory
 	hookName := "user-prompt-logger.sh"
 	if err := hi.copyHookScript(hookName, hooksDir); err != nil {
 		return fmt.Errorf("failed to copy hook script: %w", err)
 	}
 
-	// 3. Update settings.json in appropriate location
-	if err := hi.addHookToSettingsAtPath(settingsDir, hookName, "UserPromptSubmit"); err != nil {
+	// Update settings.json in project directory
+	if err := hi.addHookToSettingsAtPath(settingsDir, hooksDir, hookName, "UserPromptSubmit"); err != nil {
 		return fmt.Errorf("failed to update settings.json: %w", err)
 	}
 
 	fmt.Println("✅ User Prompt Logger Hook installed successfully!")
-	fmt.Printf("   Scope: %s\n", scope)
-	if scope == "project" {
-		fmt.Printf("   Project: %s\n", projectDir)
-	}
+	fmt.Printf("   Project: %s\n", cwd)
 	fmt.Printf("   Hook script: %s\n", filepath.Join(hooksDir, hookName))
-	fmt.Printf("   Settings: %s\n", filepath.Join(settingsDir, "settings.json"))
-	if scope == "project" {
-		fmt.Println("\n💡 This hook will only capture prompts for this project")
-	} else {
-		fmt.Println("\n💡 This hook will capture prompts for all projects")
-	}
+	fmt.Printf("   Settings: %s\n", filepath.Join(settingsDir, "settings.local.json"))
+	fmt.Println("\n💡 This hook will only capture prompts for this project")
 	fmt.Println("   View analytics: cct --analytics")
 
 	return nil
@@ -149,14 +125,9 @@ func (hi *HookInstaller) copyHookScript(hookName string, hooksDir string) error 
 	return nil
 }
 
-// addHookToSettings adds a hook to the global Claude Code settings.json file
-func (hi *HookInstaller) addHookToSettings(hookName string, eventName string) error {
-	return hi.addHookToSettingsAtPath(hi.claudeDir, hookName, eventName)
-}
-
-// addHookToSettingsAtPath adds a hook to settings.json at specified directory
-func (hi *HookInstaller) addHookToSettingsAtPath(settingsDir string, hookName string, eventName string) error {
-	settingsPath := filepath.Join(settingsDir, "settings.json")
+// addHookToSettingsAtPath adds a hook to settings.local.json at specified directory
+func (hi *HookInstaller) addHookToSettingsAtPath(settingsDir string, hooksDir string, hookName string, eventName string) error {
+	settingsPath := filepath.Join(settingsDir, "settings.local.json")
 
 	// Read existing settings or create new one
 	var rawSettings map[string]interface{}
@@ -189,7 +160,8 @@ func (hi *HookInstaller) addHookToSettingsAtPath(settingsDir string, hookName st
 	}
 
 	// Add hook to the specified event
-	hookScriptPath := filepath.Join("hooks", hookName)
+	// Use absolute path to PROJECT hooks directory
+	hookScriptPath := filepath.Join(hooksDir, hookName)
 
 	// Get or create event array
 	var eventHooks []interface{}
@@ -205,22 +177,36 @@ func (hi *HookInstaller) addHookToSettingsAtPath(settingsDir string, hookName st
 
 	// Check if hook already exists
 	hookExists := false
-	for _, h := range eventHooks {
-		if hStr, ok := h.(string); ok && strings.Contains(hStr, hookName) {
-			hookExists = true
-			break
-		}
-		if hMap, ok := h.(map[string]interface{}); ok {
-			if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, hookName) {
-				hookExists = true
-				break
+	for _, entry := range eventHooks {
+		if entryMap, ok := entry.(map[string]interface{}); ok {
+			if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
+				for _, h := range hooksArr {
+					if hMap, ok := h.(map[string]interface{}); ok {
+						if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, hookName) {
+							hookExists = true
+							break
+						}
+					}
+				}
 			}
+		}
+		if hookExists {
+			break
 		}
 	}
 
 	if !hookExists {
-		// Add as simple string path
-		eventHooks = append(eventHooks, hookScriptPath)
+		// Add hook in the proper format: hooks -> type/command
+		// No matcher needed for UserPromptSubmit - it should run on every prompt
+		hookEntry := map[string]interface{}{
+			"hooks": []interface{}{
+				map[string]interface{}{
+					"type":    "command",
+					"command": hookScriptPath,
+				},
+			},
+		}
+		eventHooks = append(eventHooks, hookEntry)
 		hooks[eventName] = eventHooks
 		fmt.Printf("   ✓ Added hook to %s event\n", eventName)
 	} else {
@@ -248,34 +234,35 @@ func (hi *HookInstaller) UninstallUserPromptLogger() error {
 
 	hookName := "user-prompt-logger.sh"
 
-	// 1. Remove from project settings.json first
+	// Get current working directory
 	cwd, err := os.Getwd()
-	if err == nil {
-		projectSettingsDir := filepath.Join(cwd, ".claude")
-		if err := hi.removeHookFromSettingsAtPath(projectSettingsDir, hookName, "UserPromptSubmit"); err != nil {
-			fmt.Printf("   ℹ Project settings: %v\n", err)
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	// Remove from project settings.json
+	projectSettingsDir := filepath.Join(cwd, ".claude")
+	if err := hi.removeHookFromSettingsAtPath(projectSettingsDir, hookName, "UserPromptSubmit"); err != nil {
+		fmt.Printf("   ℹ Project settings: %v\n", err)
+	}
+
+	// Remove the hook script file from project directory
+	hookScriptPath := filepath.Join(projectSettingsDir, "hooks", hookName)
+	if err := os.Remove(hookScriptPath); err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Printf("   ⚠️  Failed to remove hook script: %v\n", err)
 		}
+	} else {
+		fmt.Printf("   ✓ Removed hook script: %s\n", hookScriptPath)
 	}
-
-	// 2. Also remove from global settings.json if present
-	if err := hi.removeHookFromSettings(hookName, "UserPromptSubmit"); err != nil {
-		fmt.Printf("   ℹ Global settings: %v\n", err)
-	}
-
-	// Note: We don't remove the hook script file since it might be used by other projects
 
 	fmt.Println("✅ User Prompt Logger Hook uninstalled successfully!")
 	return nil
 }
 
-// removeHookFromSettings removes a hook from global settings.json
-func (hi *HookInstaller) removeHookFromSettings(hookName string, eventName string) error {
-	return hi.removeHookFromSettingsAtPath(hi.claudeDir, hookName, eventName)
-}
-
-// removeHookFromSettingsAtPath removes a hook from settings.json at specified directory
+// removeHookFromSettingsAtPath removes a hook from settings.local.json at specified directory
 func (hi *HookInstaller) removeHookFromSettingsAtPath(settingsDir string, hookName string, eventName string) error {
-	settingsPath := filepath.Join(settingsDir, "settings.json")
+	settingsPath := filepath.Join(settingsDir, "settings.local.json")
 
 	content, err := os.ReadFile(settingsPath)
 	if err != nil {
@@ -312,21 +299,30 @@ func (hi *HookInstaller) removeHookFromSettingsAtPath(settingsDir string, hookNa
 	// Filter out the hook
 	var newEventHooks []interface{}
 	removed := false
-	for _, h := range eventHooks {
+	for _, entry := range eventHooks {
 		shouldKeep := true
 
-		if hStr, ok := h.(string); ok && strings.Contains(hStr, hookName) {
+		// Check for old format (simple string)
+		if hStr, ok := entry.(string); ok && strings.Contains(hStr, hookName) {
 			shouldKeep = false
 			removed = true
-		} else if hMap, ok := h.(map[string]interface{}); ok {
-			if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, hookName) {
-				shouldKeep = false
-				removed = true
+		} else if entryMap, ok := entry.(map[string]interface{}); ok {
+			// Check for new format (matcher -> hooks -> type/command)
+			if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
+				for _, h := range hooksArr {
+					if hMap, ok := h.(map[string]interface{}); ok {
+						if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, hookName) {
+							shouldKeep = false
+							removed = true
+							break
+						}
+					}
+				}
 			}
 		}
 
 		if shouldKeep {
-			newEventHooks = append(newEventHooks, h)
+			newEventHooks = append(newEventHooks, entry)
 		}
 	}
 
@@ -355,20 +351,16 @@ func (hi *HookInstaller) removeHookFromSettingsAtPath(settingsDir string, hookNa
 }
 
 // CheckHookInstalled checks if the user-prompt-logger hook is installed in current project
-// Checks project-based installation first, then falls back to global
+// Only checks project-based installation, never global
 func (hi *HookInstaller) CheckHookInstalled() (bool, error) {
-	// Check project-based installation first
+	// Check project-based installation only
 	cwd, err := os.Getwd()
-	if err == nil {
-		projectSettingsPath := filepath.Join(cwd, ".claude", "settings.json")
-		if installed, _ := hi.checkHookInSettingsFile(projectSettingsPath); installed {
-			return true, nil
-		}
+	if err != nil {
+		return false, fmt.Errorf("failed to get current directory: %w", err)
 	}
 
-	// Fall back to global installation
-	globalSettingsPath := filepath.Join(hi.claudeDir, "settings.json")
-	return hi.checkHookInSettingsFile(globalSettingsPath)
+	projectSettingsPath := filepath.Join(cwd, ".claude", "settings.local.json")
+	return hi.checkHookInSettingsFile(projectSettingsPath)
 }
 
 // checkHookInSettingsFile checks if hook is installed in specific settings file
@@ -407,13 +399,21 @@ func (hi *HookInstaller) checkHookInSettingsFile(settingsPath string) (bool, err
 		return false, nil
 	}
 
-	for _, h := range eventHooks {
-		if hStr, ok := h.(string); ok && strings.Contains(hStr, "user-prompt-logger") {
+	for _, entry := range eventHooks {
+		// Check for old format (simple string)
+		if hStr, ok := entry.(string); ok && strings.Contains(hStr, "user-prompt-logger") {
 			return true, nil
 		}
-		if hMap, ok := h.(map[string]interface{}); ok {
-			if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, "user-prompt-logger") {
-				return true, nil
+		// Check for new format (matcher -> hooks -> type/command)
+		if entryMap, ok := entry.(map[string]interface{}); ok {
+			if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
+				for _, h := range hooksArr {
+					if hMap, ok := h.(map[string]interface{}); ok {
+						if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, "user-prompt-logger") {
+							return true, nil
+						}
+					}
+				}
 			}
 		}
 	}
