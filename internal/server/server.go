@@ -143,6 +143,10 @@ func (s *Server) setupRoutes() {
 	api.Get("/history/stats", s.handleGetCommandStats)
 	api.Get("/db/stats", s.handleGetDBStats)
 
+	// User prompts endpoints
+	api.Get("/prompts", s.handleGetUserPrompts)
+	api.Get("/prompts/stats", s.handleGetPromptStats)
+
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
 }
@@ -568,6 +572,80 @@ func (s *Server) parseConversations() {
 
 	// Broadcast update to WebSocket clients
 	s.wsHub.Broadcast([]byte(`{"event":"history_updated"}`))
+}
+
+// Handler: Get user prompts
+func (s *Server) handleGetUserPrompts(c *fiber.Ctx) error {
+	query := &database.CommandHistoryQuery{
+		ConversationID: c.Query("conversation_id"),
+		Limit:          c.QueryInt("limit", 100),
+		Offset:         c.QueryInt("offset", 0),
+	}
+
+	messages, err := s.repo.GetUserMessages(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"prompts": messages,
+		"count":   len(messages),
+		"query":   query,
+	})
+}
+
+// Handler: Get prompt statistics
+func (s *Server) handleGetPromptStats(c *fiber.Ctx) error {
+	// Get total count of prompts
+	allPrompts, err := s.repo.GetUserMessages(&database.CommandHistoryQuery{
+		Limit: 0, // No limit to get accurate count
+	})
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	totalPrompts := len(allPrompts)
+
+	// Calculate average prompt length
+	totalLength := 0
+	if totalPrompts > 0 {
+		for _, msg := range allPrompts {
+			totalLength += msg.MessageLength
+		}
+	}
+
+	avgLength := 0
+	if totalPrompts > 0 {
+		avgLength = totalLength / totalPrompts
+	}
+
+	// Get unique conversations
+	conversationSet := make(map[string]bool)
+	for _, msg := range allPrompts {
+		if msg.ConversationID != "" {
+			conversationSet[msg.ConversationID] = true
+		}
+	}
+
+	// Get unique branches
+	branchSet := make(map[string]bool)
+	for _, msg := range allPrompts {
+		if msg.GitBranch != "" {
+			branchSet[msg.GitBranch] = true
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"total_prompts":      totalPrompts,
+		"avg_prompt_length":  avgLength,
+		"unique_conversations": len(conversationSet),
+		"unique_branches":    len(branchSet),
+		"timestamp":          time.Now(),
+	})
 }
 
 // periodicConversationParsing periodically parses new conversations every 5 minutes.

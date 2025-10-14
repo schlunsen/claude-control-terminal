@@ -560,6 +560,22 @@
         </div>
 
         <div class="section">
+            <h2 class="section-title">User Prompts</h2>
+
+            <div class="search-box">
+                <input type="text" id="prompt-search-input" class="search-input" placeholder="Search prompts..." oninput="searchPrompts()">
+            </div>
+
+            <div class="command-list" id="user-prompts">
+                <div class="empty-state">No prompts recorded yet</div>
+            </div>
+
+            <div class="load-more" id="prompts-load-more" style="display: none;">
+                <button class="load-more-btn" onclick="loadMorePrompts()">Load More</button>
+            </div>
+        </div>
+
+        <div class="section">
             <h2 class="section-title">API Endpoints</h2>
             <div class="endpoints">
                 <div class="endpoint">GET <code>/api/data</code> — Complete analytics data</div>
@@ -570,6 +586,8 @@
                 <div class="endpoint">GET <code>/api/history/shell</code> — Shell command history</div>
                 <div class="endpoint">GET <code>/api/history/claude</code> — Claude command history</div>
                 <div class="endpoint">GET <code>/api/history/stats</code> — Command statistics</div>
+                <div class="endpoint">GET <code>/api/prompts</code> — User prompts history</div>
+                <div class="endpoint">GET <code>/api/prompts/stats</code> — Prompt statistics</div>
                 <div class="endpoint">GET <code>/ws</code> — WebSocket real-time updates</div>
             </div>
         </div>
@@ -1003,10 +1021,154 @@
             loadMore.style.display = allCommands.length >= COMMANDS_PER_PAGE ? 'block' : 'none';
         }
 
+        // User Prompts State
+        let allPrompts = [];
+        let filteredPrompts = [];
+        let currentPromptOffset = 0;
+        const PROMPTS_PER_PAGE = 50;
+
+        // Load user prompts
+        async function loadUserPrompts() {
+            try {
+                const response = await fetch(`/api/prompts?limit=${PROMPTS_PER_PAGE}&offset=0`);
+                const data = await response.json();
+
+                allPrompts = (data.prompts || []).map(prompt => ({
+                    ...prompt,
+                    type: 'prompt'
+                })).sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+
+                currentPromptOffset = 0;
+                applyPromptFiltersAndSearch();
+            } catch (error) {
+                console.error('Error loading user prompts:', error);
+                document.getElementById('user-prompts').innerHTML =
+                    '<div class="empty-state">Error loading user prompts</div>';
+            }
+        }
+
+        // Load more prompts
+        async function loadMorePrompts() {
+            currentPromptOffset += PROMPTS_PER_PAGE;
+
+            try {
+                const response = await fetch(`/api/prompts?limit=${PROMPTS_PER_PAGE}&offset=${currentPromptOffset}`);
+                const data = await response.json();
+
+                const newPrompts = (data.prompts || []).map(prompt => ({
+                    ...prompt,
+                    type: 'prompt'
+                })).sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+
+                allPrompts = [...allPrompts, ...newPrompts];
+                applyPromptFiltersAndSearch();
+            } catch (error) {
+                console.error('Error loading more prompts:', error);
+            }
+        }
+
+        // Search prompts
+        function searchPrompts() {
+            applyPromptFiltersAndSearch();
+        }
+
+        // Apply filters and search for prompts
+        function applyPromptFiltersAndSearch() {
+            const searchTerm = document.getElementById('prompt-search-input').value.toLowerCase();
+
+            filteredPrompts = allPrompts.filter(prompt => {
+                // Apply search filter
+                if (searchTerm) {
+                    const searchableText = [
+                        prompt.message || '',
+                        prompt.git_branch || '',
+                        prompt.working_directory || '',
+                        prompt.conversation_id || ''
+                    ].join(' ').toLowerCase();
+
+                    return searchableText.includes(searchTerm);
+                }
+
+                return true;
+            });
+
+            displayPrompts();
+        }
+
+        // Display prompts
+        function displayPrompts() {
+            const container = document.getElementById('user-prompts');
+            const loadMore = document.getElementById('prompts-load-more');
+
+            if (filteredPrompts.length === 0) {
+                container.innerHTML = '<div class="empty-state">No prompts found</div>';
+                loadMore.style.display = 'none';
+                return;
+            }
+
+            container.innerHTML = filteredPrompts.map(prompt => {
+                const time = new Date(prompt.submitted_at).toLocaleString();
+
+                let metaItems = [];
+
+                if (prompt.git_branch) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Branch:</span>
+                        <span class="command-branch">${escapeHtml(prompt.git_branch)}</span>
+                    </div>`);
+                }
+
+                if (prompt.working_directory) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Dir:</span>
+                        <span>${escapeHtml(prompt.working_directory)}</span>
+                    </div>`);
+                }
+
+                metaItems.push(`<div class="command-meta-item">
+                    <span class="command-meta-label">Length:</span>
+                    <span>${prompt.message_length} chars</span>
+                </div>`);
+
+                if (prompt.conversation_id) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Session:</span>
+                        <span>${escapeHtml(prompt.conversation_id.substring(0, 8))}...</span>
+                    </div>`);
+                }
+
+                // Truncate long prompts
+                let displayMessage = prompt.message || '';
+                const maxLength = 500;
+                let isTruncated = false;
+                if (displayMessage.length > maxLength) {
+                    displayMessage = displayMessage.substring(0, maxLength) + '...';
+                    isTruncated = true;
+                }
+
+                return `
+                    <div class="command-item">
+                        <div class="command-header">
+                            <div class="command-tool">💬 User Prompt</div>
+                            <div class="command-time">${time}</div>
+                        </div>
+                        <div class="command-text">${escapeHtml(displayMessage)}${isTruncated ? '<br><em style="color: #999;">(truncated)</em>' : ''}</div>
+                        <div class="command-meta">
+                            ${metaItems.join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Show load more button if there might be more prompts
+            loadMore.style.display = allPrompts.length >= PROMPTS_PER_PAGE ? 'block' : 'none';
+        }
+
         // Initialize
         loadData();
         loadBackgroundShells();
         loadCommandHistory();
+        loadUserPrompts();
         connectWebSocket();
 
         // Refresh every 30 seconds
@@ -1014,6 +1176,7 @@
             loadData();
             loadBackgroundShells();
             loadCommandHistory();
+            loadUserPrompts();
         }, 30000);
     </script>
 </body>
