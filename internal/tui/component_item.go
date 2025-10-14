@@ -158,29 +158,43 @@ func CheckInstallationStatus(componentName, componentType, projectDir string) (g
 
 // checkMCPInstallation checks if an MCP is installed by looking for server entries in config files
 func checkMCPInstallation(mcpName, projectDir string) (global bool, project bool) {
-	mcpNameLower := strings.ToLower(mcpName)
+	// Strategy 1: Check metadata first (most accurate)
+	// Check global metadata
+	if installation, err := fileops.GetMCPInstallation(fileops.MCPScopeUser, projectDir, mcpName); err == nil && installation != nil {
+		global = true
+	}
 
-	// Check global installation (~/.claude/config.json)
-	homeDir, err := os.UserHomeDir()
-	if err == nil {
-		globalConfigPath := filepath.Join(homeDir, ".claude", "config.json")
-		if config, err := loadMCPConfigSafe(globalConfigPath); err == nil {
-			for serverName := range config.MCPServers {
-				if mcpNamesMatch(mcpNameLower, strings.ToLower(serverName)) {
-					global = true
-					break
+	// Check project metadata
+	if installation, err := fileops.GetMCPInstallation(fileops.MCPScopeProject, projectDir, mcpName); err == nil && installation != nil {
+		project = true
+	}
+
+	// Strategy 2: Fallback to config file scanning (for legacy installs without metadata)
+	if !global && !project {
+		mcpNameLower := strings.ToLower(mcpName)
+
+		// Check global installation (~/.claude/config.json)
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			globalConfigPath := filepath.Join(homeDir, ".claude", "config.json")
+			if config, err := loadMCPConfigSafe(globalConfigPath); err == nil {
+				for serverName := range config.MCPServers {
+					if mcpNamesMatch(mcpNameLower, strings.ToLower(serverName)) {
+						global = true
+						break
+					}
 				}
 			}
 		}
-	}
 
-	// Check project installation (<projectDir>/.mcp.json)
-	projectConfigPath := filepath.Join(projectDir, ".mcp.json")
-	if config, err := loadMCPConfigSafe(projectConfigPath); err == nil {
-		for serverName := range config.MCPServers {
-			if mcpNamesMatch(mcpNameLower, strings.ToLower(serverName)) {
-				project = true
-				break
+		// Check project installation (<projectDir>/.mcp.json)
+		projectConfigPath := filepath.Join(projectDir, ".mcp.json")
+		if config, err := loadMCPConfigSafe(projectConfigPath); err == nil {
+			for serverName := range config.MCPServers {
+				if mcpNamesMatch(mcpNameLower, strings.ToLower(serverName)) {
+					project = true
+					break
+				}
 			}
 		}
 	}
