@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.20] - 2025-10-14
+
+### Added
+- MCP metadata tracking system (.mcp-metadata.json) that maintains install name to server keys mapping
+- Reliable MCP uninstall using metadata for exact server key removal from .mcp.json
+- Comprehensive test suite with 15 new tests for MCP metadata and detection functionality
+- Backward compatibility with legacy MCP installs through substring matching fallback
+
+### Changed
+- Improved TUI installation status detection for MCPs with complex names (e.g., deepgraph-vue → DeepGraph Vue MCP)
+- Enhanced MCP detection with bidirectional name matching between install names and server keys
+
+### Fixed
+- MCP uninstall now accurately removes correct server entries using metadata tracking
+- Installation status indicator in TUI now correctly identifies installed MCPs regardless of name complexity
+
 ## [0.2.19] - 2025-10-14
 
 ### Added
@@ -395,7 +411,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.19...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.20...HEAD
+[0.2.20]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.19...v0.2.20
 [0.2.19]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.18...v0.2.19
 [0.2.18]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.17...v0.2.18
 [0.2.17]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.16...v0.2.17
