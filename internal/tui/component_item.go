@@ -1,8 +1,12 @@
 package tui
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 )
 
 // ComponentItem represents a single component that can be installed
@@ -111,25 +115,28 @@ func GetComponentMetadata() map[string]ComponentMetadata {
 // CheckInstallationStatus checks if a component is installed globally and/or in project
 func CheckInstallationStatus(componentName, componentType, projectDir string) (global bool, project bool) {
 	metadata := GetComponentMetadata()
-	meta, ok := metadata[componentType]
+	_, ok := metadata[componentType]
 	if !ok {
 		return false, false
 	}
 
-	// Determine subdirectory based on component type
+	// MCPs use a different detection method - check config files
+	if componentType == "mcp" {
+		return checkMCPInstallation(componentName, projectDir)
+	}
+
+	// For agents and commands, check for individual files
 	var subDir string
 	switch componentType {
 	case "agent":
 		subDir = "agents"
 	case "command":
 		subDir = "commands"
-	case "mcp":
-		subDir = "mcp"
 	default:
 		return false, false
 	}
 
-	fileName := componentName + meta.Extension
+	fileName := componentName + metadata[componentType].Extension
 
 	// Check global installation (~/.claude/)
 	homeDir, err := os.UserHomeDir()
@@ -147,4 +154,92 @@ func CheckInstallationStatus(componentName, componentType, projectDir string) (g
 	}
 
 	return global, project
+}
+
+// checkMCPInstallation checks if an MCP is installed by looking for server entries in config files
+func checkMCPInstallation(mcpName, projectDir string) (global bool, project bool) {
+	// Strategy 1: Check metadata first (most accurate)
+	// Check global metadata
+	if installation, err := fileops.GetMCPInstallation(fileops.MCPScopeUser, projectDir, mcpName); err == nil && installation != nil {
+		global = true
+	}
+
+	// Check project metadata
+	if installation, err := fileops.GetMCPInstallation(fileops.MCPScopeProject, projectDir, mcpName); err == nil && installation != nil {
+		project = true
+	}
+
+	// Strategy 2: Fallback to config file scanning (for legacy installs without metadata)
+	if !global && !project {
+		mcpNameLower := strings.ToLower(mcpName)
+
+		// Check global installation (~/.claude/config.json)
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			globalConfigPath := filepath.Join(homeDir, ".claude", "config.json")
+			if config, err := loadMCPConfigSafe(globalConfigPath); err == nil {
+				for serverName := range config.MCPServers {
+					if mcpNamesMatch(mcpNameLower, strings.ToLower(serverName)) {
+						global = true
+						break
+					}
+				}
+			}
+		}
+
+		// Check project installation (<projectDir>/.mcp.json)
+		projectConfigPath := filepath.Join(projectDir, ".mcp.json")
+		if config, err := loadMCPConfigSafe(projectConfigPath); err == nil {
+			for serverName := range config.MCPServers {
+				if mcpNamesMatch(mcpNameLower, strings.ToLower(serverName)) {
+					project = true
+					break
+				}
+			}
+		}
+	}
+
+	return global, project
+}
+
+// mcpNamesMatch checks if an MCP name matches a server name using bidirectional substring matching
+// This handles cases like:
+// - "postgresql-integration" should match "postgresql"
+// - "postgresql" should match "postgresql-integration"
+// - "github" should match "GitHub"
+func mcpNamesMatch(mcpName, serverName string) bool {
+	// Exact match
+	if mcpName == serverName {
+		return true
+	}
+
+	// Bidirectional substring matching
+	if strings.Contains(serverName, mcpName) || strings.Contains(mcpName, serverName) {
+		return true
+	}
+
+	return false
+}
+
+// loadMCPConfigSafe loads an MCP config file, returning empty config on error
+func loadMCPConfigSafe(configPath string) (*fileops.ClaudeConfig, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return &fileops.ClaudeConfig{
+			MCPServers: make(map[string]fileops.MCPServerConfig),
+		}, err
+	}
+
+	var config fileops.ClaudeConfig
+	if err := json.Unmarshal(data, &config); err != nil {
+		return &fileops.ClaudeConfig{
+			MCPServers: make(map[string]fileops.MCPServerConfig),
+		}, err
+	}
+
+	if config.MCPServers == nil {
+		config.MCPServers = make(map[string]fileops.MCPServerConfig)
+	}
+
+	return &config, nil
 }

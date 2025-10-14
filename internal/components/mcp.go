@@ -111,6 +111,14 @@ Success:
 		return fmt.Errorf("failed to register MCP: %w", err)
 	}
 
+	// Record installation metadata
+	if err := fileops.AddMCPInstallation(mi.scope, targetDir, mcpName, serverNames, githubPath); err != nil {
+		// Log warning but don't fail installation
+		if !silent {
+			fmt.Printf("⚠️  Warning: Failed to save installation metadata: %v\n", err)
+		}
+	}
+
 	if !silent {
 		configPath := fileops.GetMCPConfigPath(mi.scope, targetDir)
 		relPath, _ := filepath.Rel(targetDir, configPath)
@@ -254,14 +262,55 @@ func (mi *MCPInstaller) RemoveMCP(mcpName, targetDir string, silent bool) error 
 		fmt.Printf("🗑️  Removing MCP: %s\n", mcpName)
 	}
 
-	// For MCPs, we need to remove server entries from the config file
-	// Since MCPs register servers with specific names, we'll use the MCP name as a hint
-	// to find and remove matching server entries
+	var removed []string
+	var err error
 
-	configPath := fileops.GetMCPConfigPath(mi.scope, targetDir)
-	removed, err := fileops.RemoveMCPServers(mi.scope, targetDir, mcpName)
-	if err != nil {
-		return fmt.Errorf("failed to remove MCP: %w", err)
+	// Strategy 1: Try to use metadata for exact match
+	installation, metadataErr := fileops.GetMCPInstallation(mi.scope, targetDir, mcpName)
+	if metadataErr == nil && installation != nil {
+		// Found in metadata - remove exact server keys
+		if !silent {
+			fmt.Printf("📋 Found in metadata: %d server(s) registered\n", len(installation.ServerKeys))
+		}
+
+		configPath := fileops.GetMCPConfigPath(mi.scope, targetDir)
+		config, err := fileops.LoadMCPConfig(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+
+		// Remove each server key from the installation
+		for _, serverKey := range installation.ServerKeys {
+			if _, exists := config.MCPServers[serverKey]; exists {
+				delete(config.MCPServers, serverKey)
+				removed = append(removed, serverKey)
+			}
+		}
+
+		// Save updated config
+		if len(removed) > 0 {
+			if err := fileops.SaveMCPConfig(configPath, config); err != nil {
+				return fmt.Errorf("failed to save config: %w", err)
+			}
+		}
+
+		// Remove metadata entry
+		if err := fileops.RemoveMCPInstallation(mi.scope, targetDir, mcpName); err != nil {
+			// Log warning but don't fail
+			if !silent {
+				fmt.Printf("⚠️  Warning: Failed to remove metadata: %v\n", err)
+			}
+		}
+	} else {
+		// Strategy 2: Fallback to substring matching (for legacy installs or if metadata missing)
+		if !silent {
+			fmt.Printf("📋 Metadata not found, using pattern matching fallback\n")
+		}
+
+		removed, err = fileops.RemoveMCPServers(mi.scope, targetDir, mcpName)
+		if err != nil {
+			return fmt.Errorf("failed to remove MCP: %w", err)
+		}
 	}
 
 	if len(removed) == 0 {
@@ -269,6 +318,7 @@ func (mi *MCPInstaller) RemoveMCP(mcpName, targetDir string, silent bool) error 
 	}
 
 	if !silent {
+		configPath := fileops.GetMCPConfigPath(mi.scope, targetDir)
 		fmt.Printf("✅ Removed %d server(s) from config:\n", len(removed))
 		for _, serverName := range removed {
 			fmt.Printf("   🔌 %s\n", serverName)

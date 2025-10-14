@@ -188,16 +188,12 @@ func TestCheckInstallationStatusWithFiles(t *testing.T) {
 	claudeDir := filepath.Join(tempDir, ".claude")
 	agentsDir := filepath.Join(claudeDir, "agents")
 	commandsDir := filepath.Join(claudeDir, "commands")
-	mcpDir := filepath.Join(claudeDir, "mcp")
 
 	if err := os.MkdirAll(agentsDir, 0755); err != nil {
 		t.Fatalf("Failed to create agents dir: %v", err)
 	}
 	if err := os.MkdirAll(commandsDir, 0755); err != nil {
 		t.Fatalf("Failed to create commands dir: %v", err)
-	}
-	if err := os.MkdirAll(mcpDir, 0755); err != nil {
-		t.Fatalf("Failed to create mcp dir: %v", err)
 	}
 
 	// Create test files
@@ -211,9 +207,18 @@ func TestCheckInstallationStatusWithFiles(t *testing.T) {
 		t.Fatalf("Failed to create command file: %v", err)
 	}
 
-	mcpFile := filepath.Join(mcpDir, "test-mcp.json")
-	if err := os.WriteFile(mcpFile, []byte("{}"), 0644); err != nil {
-		t.Fatalf("Failed to create mcp file: %v", err)
+	// Create MCP config file with a test-mcp server
+	mcpConfigFile := filepath.Join(tempDir, ".mcp.json")
+	mcpConfig := `{
+  "mcpServers": {
+    "test-mcp": {
+      "command": "node",
+      "args": ["test.js"]
+    }
+  }
+}`
+	if err := os.WriteFile(mcpConfigFile, []byte(mcpConfig), 0644); err != nil {
+		t.Fatalf("Failed to create mcp config file: %v", err)
 	}
 
 	// Test agent installation status
