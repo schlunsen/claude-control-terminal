@@ -1,9 +1,12 @@
 package components
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 )
 
 func TestNewCommandInstaller(t *testing.T) {
@@ -108,6 +111,12 @@ func TestRemoveCommandWithCategory(t *testing.T) {
 }
 
 func TestInstallMultipleCommandsAllFail(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewCommandInstaller()
 	tempDir := t.TempDir()
 
@@ -129,6 +138,12 @@ func TestInstallMultipleCommandsAllFail(t *testing.T) {
 }
 
 func TestPreviewMultipleCommandsAllFail(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewCommandInstaller()
 
 	// These commands don't exist
@@ -260,15 +275,20 @@ func TestCommandExtractFilename(t *testing.T) {
 }
 
 func TestInstallCommandInvalidTarget(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewCommandInstaller()
 
-	// Try to install to invalid directory (no write permissions)
+	// Try to install to invalid directory - should fail with file not found
 	err := installer.InstallCommand("test-command", "/root/impossible", true)
 
 	if err == nil {
-		t.Log("Installation might have succeeded or failed with network error (expected)")
+		t.Error("expected error when command not found")
 	}
-	// We can't easily test this without mocking the download
 }
 
 func TestRemoveCommandSilentMode(t *testing.T) {

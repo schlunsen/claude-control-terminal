@@ -7,14 +7,13 @@ import (
 
 	"github.com/schlunsen/claude-control-terminal/internal/installer"
 	"github.com/schlunsen/claude-control-terminal/internal/providers"
-	"github.com/schlunsen/claude-control-terminal/internal/wrapper"
 )
 
 // LaunchClaudeInteractive suspends the TUI and launches Claude CLI interactively.
 // When Claude exits, control returns to the caller.
 func LaunchClaudeInteractive(workingDir string) error {
 	// Find Claude binary (checks PATH and common locations like ~/.local/bin)
-	claudePath, err := wrapper.FindClaudePath()
+	claudePath, err := installer.FindClaudePath()
 	if err != nil {
 		return fmt.Errorf("claude CLI not found. Please install Claude CLI first.\nRun 'cct --install-claude' or use the installer from the main menu.\n\nError: %w", err)
 	}
@@ -56,7 +55,7 @@ func LaunchClaudeInteractive(workingDir string) error {
 // to continue the last conversation. When Claude exits, control returns to the caller.
 func LaunchClaudeWithLastSession(workingDir string) error {
 	// Find Claude binary (checks PATH and common locations like ~/.local/bin)
-	claudePath, err := wrapper.FindClaudePath()
+	claudePath, err := installer.FindClaudePath()
 	if err != nil {
 		return fmt.Errorf("claude CLI not found. Please install Claude CLI first.\nRun 'cct --install-claude' or use the installer from the main menu.\n\nError: %w", err)
 	}
@@ -96,13 +95,13 @@ func LaunchClaudeWithLastSession(workingDir string) error {
 
 // IsClaudeAvailable checks if Claude CLI is available (in PATH or common locations)
 func IsClaudeAvailable() bool {
-	_, err := wrapper.FindClaudePath()
+	_, err := installer.FindClaudePath()
 	return err == nil
 }
 
 // GetClaudePath returns the full path to the Claude CLI binary
 func GetClaudePath() (string, error) {
-	return wrapper.FindClaudePath()
+	return installer.FindClaudePath()
 }
 
 // InstallClaude attempts to install Claude CLI with user interaction
@@ -114,7 +113,7 @@ func InstallClaude() error {
 	fmt.Println("========================")
 
 	// Check if already installed (checks PATH and common locations)
-	claudePath, err := wrapper.FindClaudePath()
+	claudePath, err := installer.FindClaudePath()
 	if err == nil {
 		// Already installed
 		fmt.Printf("✓ Claude CLI is already installed\n")
@@ -161,7 +160,7 @@ func InstallClaude() error {
 
 	// Installation might have succeeded but not in PATH yet
 	// Check common locations as a fallback
-	claudePath, pathErr := wrapper.FindClaudePath()
+	claudePath, pathErr := installer.FindClaudePath()
 	if pathErr == nil {
 		fmt.Printf("\n✓ Claude CLI installed successfully!\n")
 		fmt.Printf("  Location: %s\n", claudePath)
