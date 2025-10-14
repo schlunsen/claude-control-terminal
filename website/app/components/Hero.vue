@@ -89,7 +89,9 @@
 .hero-description {
   font-size: 1.1rem;
   max-width: 700px;
-  margin: 0 auto 2rem;
+  margin: 0 auto 2.5rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
 }
 
 .hero-badges {
@@ -98,6 +100,12 @@
   justify-content: center;
   margin-bottom: 2rem;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+.hero-badges img {
+  height: auto;
+  display: block;
 }
 
 .hero-video {
