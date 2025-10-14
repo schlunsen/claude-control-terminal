@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.19] - 2025-10-14
+
+### Added
+- Multi-component selection support with Space key for batch operations
+- Action chooser screen to select install/uninstall for multiple components
+- Auto-refresh component list after install/remove operations to show updated status
+- Visual selection indicators (checkmark) and improved help text
+
+### Changed
+- Component operations now support batch install/uninstall workflows
+- Silent skip for non-installed components instead of errors during uninstall
+
+### Fixed
+- MCP removal now properly cleans up all servers from .mcp.json configuration
+- Fixed broken string matching for MCP server removal
+
 ## [0.2.18] - 2025-10-14
 
 ### Fixed
@@ -379,7 +395,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.18...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.19...HEAD
+[0.2.19]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.18...v0.2.19
 [0.2.18]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.17...v0.2.18
 [0.2.17]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.16...v0.2.17
 [0.2.16]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.15...v0.2.16
