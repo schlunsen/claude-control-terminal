@@ -14,9 +14,24 @@ export default defineNuxtConfig({
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'description', content: 'A powerful wrapper and control center for Claude Code - Manage components, configure AI providers, control permissions, and deploy with Docker.' },
+
+        // OpenGraph
+        { property: 'og:site_name', content: 'Claude Control Terminal' },
         { property: 'og:title', content: 'Claude Control Terminal (CCT)' },
-        { property: 'og:description', content: 'A powerful wrapper and control center for Claude Code' },
-        { property: 'og:type', content: 'website' }
+        { property: 'og:description', content: 'A powerful wrapper and control center for Claude Code - Manage components, configure AI providers, control permissions, and deploy with Docker.' },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:url', content: 'https://schlunsen.github.io/claude-control-terminal/' },
+        { property: 'og:image', content: 'https://schlunsen.github.io/claude-control-terminal/images/cct-tui-main.png' },
+        { property: 'og:image:width', content: '1200' },
+        { property: 'og:image:height', content: '630' },
+        { property: 'og:image:alt', content: 'Claude Control Terminal TUI Interface' },
+
+        // Twitter Card
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:title', content: 'Claude Control Terminal (CCT)' },
+        { name: 'twitter:description', content: 'A powerful wrapper and control center for Claude Code - Manage components, configure AI providers, control permissions, and deploy with Docker.' },
+        { name: 'twitter:image', content: 'https://schlunsen.github.io/claude-control-terminal/images/cct-tui-main.png' },
+        { name: 'twitter:image:alt', content: 'Claude Control Terminal TUI Interface' }
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/claude-control-terminal/favicon.ico' },
