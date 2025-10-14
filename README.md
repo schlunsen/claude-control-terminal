@@ -35,6 +35,7 @@ Rebranded from `go-claude-templates` to better reflect its role as a comprehensi
 
 - [Features](#features)
 - [Installation](#installation)
+- [Claude CLI Installation](#claude-cli-installation)
 - [Quick Start](#quick-start)
 - [Component Installation](#component-installation)
 - [AI Provider Configuration](#ai-provider-configuration)
@@ -48,9 +49,10 @@ Rebranded from `go-claude-templates` to better reflect its role as a comprehensi
 ## Features
 
 - 🎮 **Control Center**: Comprehensive wrapper for managing Claude Code environments
+- 🤖 **Claude CLI Installer**: Automatic installation and setup of Claude CLI (no Node.js required)
 - 🚀 **Interactive TUI**: Modern terminal interface for browsing and installing components
 - 📦 **Component Management**: Install agents, commands, and MCPs from 600+ templates
-- 🤖 **AI Provider Configuration**: Switch between Claude, DeepSeek, GLM, Kimi, and custom providers
+- 🔄 **AI Provider Configuration**: Switch between Claude, DeepSeek, GLM, Kimi, and custom providers
 - ⚙️ **Permissions Management**: Granular control over Claude Code tool permissions (global/project/local)
 - 🐳 **Docker Support**: Containerize Claude environments with one command
 - 📊 **Analytics Dashboard**: Real-time WebSocket-based monitoring with process correlation
@@ -92,6 +94,68 @@ go install github.com/schlunsen/claude-control-terminal/cmd/cct@latest
 git clone https://github.com/schlunsen/claude-control-terminal
 cd claude-control-terminal
 make build  # or: just build
+```
+
+## Claude CLI Installation
+
+CCT includes an automatic Claude CLI installer for quick setup.
+
+### Automatic Installation
+
+```bash
+# Install Claude CLI automatically (interactive)
+cct --install-claude
+
+# The installer will:
+# ✓ Check if Claude is already installed
+# ✓ Detect your Node.js version (if using npm method)
+# ✓ Recommend the best installation method
+# ✓ Download and install Claude CLI
+# ✓ Verify installation with 'claude doctor'
+```
+
+### Installation Methods
+
+CCT supports two installation methods:
+
+**Native Binary (Recommended)**:
+- No Node.js required
+- Faster startup times
+- Official installation method
+- Automatically maintained
+- Works on macOS, Linux, and Windows
+
+**NPM Installation (Fallback)**:
+- Requires Node.js v18+
+- Uses `npm install -g @anthropic-ai/claude-code`
+- Available if native method fails
+
+### Manual Installation
+
+If you prefer to install Claude CLI manually:
+
+**macOS/Linux (Native)**:
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+**Windows (PowerShell)**:
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+**NPM (All Platforms)**:
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### Verification
+
+After installation, verify Claude CLI is working:
+
+```bash
+claude --version
+claude doctor
 ```
 
 ## Quick Start
