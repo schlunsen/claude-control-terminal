@@ -249,6 +249,7 @@ func (mi *MCPInstallerForTUI) PreviewMCP(mcpName, category string) (string, erro
 }
 
 // RemoveAgent removes an installed agent
+// Returns nil if the agent is not installed (silently skips)
 func (ai *AgentInstallerForTUI) RemoveAgent(agentName, targetDir string) error {
 	// Check project installation
 	projectFile := filepath.Join(targetDir, ".claude", "agents", agentName+".md")
@@ -265,8 +266,9 @@ func (ai *AgentInstallerForTUI) RemoveAgent(agentName, targetDir string) error {
 		globalExists = true
 	}
 
+	// If not installed anywhere, silently skip (return nil)
 	if !projectExists && !globalExists {
-		return fmt.Errorf("agent '%s' is not installed", agentName)
+		return nil
 	}
 
 	// Remove project installation if exists
@@ -287,6 +289,7 @@ func (ai *AgentInstallerForTUI) RemoveAgent(agentName, targetDir string) error {
 }
 
 // RemoveCommand removes an installed command
+// Returns nil if the command is not installed (silently skips)
 func (ci *CommandInstallerForTUI) RemoveCommand(commandName, targetDir string) error {
 	// Extract filename if category path provided
 	var fileName string
@@ -312,8 +315,9 @@ func (ci *CommandInstallerForTUI) RemoveCommand(commandName, targetDir string) e
 		globalExists = true
 	}
 
+	// If not installed anywhere, silently skip (return nil)
 	if !projectExists && !globalExists {
-		return fmt.Errorf("command '%s' is not installed", commandName)
+		return nil
 	}
 
 	// Remove project installation if exists
@@ -334,21 +338,32 @@ func (ci *CommandInstallerForTUI) RemoveCommand(commandName, targetDir string) e
 }
 
 // RemoveMCP removes an installed MCP
+// Returns nil if the MCP is not installed (silently skips)
 func (mi *MCPInstallerForTUI) RemoveMCP(mcpName, targetDir string) error {
-	// Remove from .mcp.json config
-	removed, err := fileops.RemoveMCPServers(fileops.MCPScopeProject, targetDir, mcpName)
+	// Check if MCP JSON file exists in .claude/mcp directory
+	mcpFile := filepath.Join(targetDir, ".claude", "mcp", mcpName+".json")
+	content, err := os.ReadFile(mcpFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// MCP not installed, silently skip
+			return nil
+		}
+		return fmt.Errorf("failed to read MCP file: %w", err)
+	}
+
+	// Remove servers from .mcp.json by reading the exact servers from the MCP file
+	removed, err := fileops.RemoveMCPServersByContent(fileops.MCPScopeProject, targetDir, string(content))
 	if err != nil {
 		return fmt.Errorf("failed to remove MCP from config: %w", err)
 	}
 
-	if len(removed) == 0 {
-		return fmt.Errorf("MCP '%s' is not installed or no matching servers found", mcpName)
-	}
+	// If no servers were removed, the MCP might not be in .mcp.json (but file exists)
+	// This is okay, we'll still remove the file
+	_ = removed
 
-	// Optionally remove the MCP JSON file from .claude/mcp directory
-	mcpFile := filepath.Join(targetDir, ".claude", "mcp", mcpName+".json")
-	if _, err := os.Stat(mcpFile); err == nil {
-		os.Remove(mcpFile) // Ignore error, file removal is optional
+	// Remove the MCP JSON file from .claude/mcp directory
+	if err := os.Remove(mcpFile); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove MCP file: %w", err)
 	}
 
 	return nil
