@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.17] - 2025-10-14
+
+### Added
+- Automatic Claude CLI installer with native binary and npm fallback support
+- New `--install-claude` flag for automated Claude CLI installation
+- Node.js version detection and compatibility checking (v18+ required for npm fallback)
+- TUI integration for Claude CLI installation detection and prompts
+- Interactive installation prompts with progress feedback
+- Detection of existing Claude installations to avoid redundant installs
+
+### Changed
+- TUI claude_launcher now detects missing Claude CLI and suggests installation
+- Improved user experience with automatic installation option instead of manual setup
+
+### Documentation
+- Updated README with comprehensive installation documentation
+- Added automatic installer benefits and usage examples
+
+### Testing
+- Added 40+ new tests for installer functionality
+- Docker-based testing environment for clean installation verification
+- Comprehensive test coverage for edge cases and error handling
+
 ## [0.2.16] - 2025-10-14
 
 ### Added
@@ -344,7 +367,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.16...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.17...HEAD
+[0.2.17]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.16...v0.2.17
 [0.2.16]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.15...v0.2.16
 [0.2.15]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.13...v0.2.14
