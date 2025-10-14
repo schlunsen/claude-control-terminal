@@ -3,7 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://github.com/schlunsen/claude-control-terminal/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions)
-[![Coverage](https://img.shields.io/badge/coverage-28.3%25-red)](https://github.com/schlunsen/claude-control-terminal)
+[![Coverage](https://img.shields.io/badge/coverage-28.5%25-red)](https://github.com/schlunsen/claude-control-terminal)
 [![Release](https://img.shields.io/github/v/release/schlunsen/claude-control-terminal)](https://github.com/schlunsen/claude-control-terminal/releases)
 
 **A powerful wrapper and control center for Claude Code** - Manage components, configure AI providers, control permissions, launch Claude, run analytics, and deploy with Docker.
@@ -639,7 +639,7 @@ make coverage-badge
 - Coverage reports with Codecov integration
 - Coverage threshold enforcement (20% minimum)
 
-**Current Coverage:** 28.3% (2,300+ lines of test code across 8 packages)
+**Current Coverage:** 28.5% (2,300+ lines of test code across 8 packages)
 
 For detailed testing guide, see [TESTING.md](TESTING.md).
 

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.18] - 2025-10-14
+
+### Fixed
+- Claude CLI detection now works when installed in ~/.local/bin but not in PATH
+- TUI launcher now properly finds Claude binary in common installation locations (/usr/local/bin, /opt/homebrew/bin, ~/.local/bin)
+- FindClaudePath() function enhanced to check common locations beyond PATH
+
+### Testing
+- Added comprehensive tests for FindClaudePath() function in wrapper package
+- Added 160+ lines of test coverage for Claude binary detection
+- Tests cover PATH detection, common location fallback, and error cases
+
 ## [0.2.17] - 2025-10-14
 
 ### Added
@@ -367,7 +379,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.17...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.18...HEAD
+[0.2.18]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.17...v0.2.18
 [0.2.17]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.16...v0.2.17
 [0.2.16]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.15...v0.2.16
 [0.2.15]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.14...v0.2.15
