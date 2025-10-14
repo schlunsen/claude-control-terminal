@@ -183,9 +183,9 @@ func TestSaveMCPConfig_CreatesDirectory(t *testing.T) {
 		t.Error("SaveMCPConfig did not create directory")
 	}
 
-	// Verify file was created
-	if !FileExists(configPath) {
-		t.Error("Config file was not created")
+	// For .mcp.json with empty config, file should be deleted/not created
+	if FileExists(configPath) {
+		t.Error("Empty .mcp.json file should not exist (should be deleted)")
 	}
 }
 
@@ -458,9 +458,9 @@ func TestContainsFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.s+"_contains_"+tt.substr, func(t *testing.T) {
-			got := contains(tt.s, tt.substr)
+			got := strings.Contains(tt.s, tt.substr)
 			if got != tt.want {
-				t.Errorf("contains(%q, %q) = %v, want %v", tt.s, tt.substr, got, tt.want)
+				t.Errorf("strings.Contains(%q, %q) = %v, want %v", tt.s, tt.substr, got, tt.want)
 			}
 		})
 	}

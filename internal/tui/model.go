@@ -23,6 +23,7 @@ const (
 	ScreenMain Screen = iota
 	ScreenComponentList
 	ScreenPreview
+	ScreenChooseAction
 	ScreenConfirm
 	ScreenConfirmRemove
 	ScreenInstalling
@@ -61,6 +62,7 @@ type Model struct {
 	installError   error
 	installSuccess []string
 	installFailed  []string
+	lastOperation  string // "install" or "remove"
 
 	// Preview
 	previewContent  string
@@ -336,6 +338,8 @@ func (m Model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleComponentListScreen(msg)
 	case ScreenPreview:
 		return m.handlePreviewScreen(msg)
+	case ScreenChooseAction:
+		return m.handleChooseActionScreen(msg)
 	case ScreenConfirm:
 		return m.handleConfirmScreen(msg)
 	case ScreenConfirmRemove:
@@ -491,11 +495,22 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.searchActive = true
 		m.searchInput.Focus()
 		return m, textinput.Blink
-	case "enter":
-		// Proceed to confirmation with current component
+	case " ":
+		// Toggle selection for current component
 		if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
 			idx := m.filteredIndices[m.cursor]
-			// Mark only this component as selected
+			m.components[idx].Selected = !m.components[idx].Selected
+		}
+	case "enter":
+		// Check if we have any selected components
+		selectedCount := m.getSelectedCount()
+		if selectedCount > 0 {
+			// Multiple selections - go to choose action screen
+			m.screen = ScreenChooseAction
+			return m, nil
+		} else if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
+			// No selections - select current component and go directly to install confirm
+			idx := m.filteredIndices[m.cursor]
 			for i := range m.components {
 				m.components[i].Selected = false
 			}
@@ -516,8 +531,23 @@ func (m Model) handleComponentListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, loadPreviewCmd(m.previewComponent)
 		}
 	case "d", "x":
-		// Remove selected component (only if installed)
-		if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
+		// Remove selected component(s)
+		selectedCount := m.getSelectedCount()
+		if selectedCount > 0 {
+			// Multiple selections - check if any are installed and go to confirm
+			hasInstalled := false
+			for _, comp := range m.components {
+				if comp.Selected && (comp.InstalledProject || comp.InstalledGlobal) {
+					hasInstalled = true
+					break
+				}
+			}
+			if hasInstalled {
+				m.screen = ScreenConfirmRemove
+				return m, nil
+			}
+		} else if len(m.filteredIndices) > 0 && m.cursor < len(m.filteredIndices) {
+			// No selections - check current component
 			idx := m.filteredIndices[m.cursor]
 			comp := m.components[idx]
 			// Only allow removal if component is installed
@@ -605,9 +635,13 @@ func (m Model) handleConfirmScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Start installation
 		m.screen = ScreenInstalling
 		m.installing = true
+		m.lastOperation = "install"
 		return m, installComponentsCmd(m.getSelectedComponents(), m.targetDir)
 	case "n", "esc":
-		// Go back to component list
+		// Go back to component list and clear selections
+		for i := range m.components {
+			m.components[i].Selected = false
+		}
 		m.screen = ScreenComponentList
 		return m, nil
 	}
@@ -621,9 +655,35 @@ func (m Model) handleConfirmRemoveScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Start removal
 		m.screen = ScreenRemoving
 		m.installing = true
+		m.lastOperation = "remove"
 		return m, removeComponentsCmd(m.getSelectedComponents(), m.targetDir)
 	case "n", "esc":
-		// Go back to component list
+		// Go back to component list and clear selections
+		for i := range m.components {
+			m.components[i].Selected = false
+		}
+		m.screen = ScreenComponentList
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleChooseActionScreen handles input on the choose action screen
+func (m Model) handleChooseActionScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "i", "1":
+		// Install selected components
+		m.screen = ScreenConfirm
+		return m, nil
+	case "u", "2":
+		// Uninstall selected components
+		m.screen = ScreenConfirmRemove
+		return m, nil
+	case "esc", "n":
+		// Go back to component list and clear selections
+		for i := range m.components {
+			m.components[i].Selected = false
+		}
 		m.screen = ScreenComponentList
 		return m, nil
 	}
@@ -651,14 +711,23 @@ func (m Model) handleCompleteScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.installSuccess = nil
 		m.installFailed = nil
 		m.installError = nil
+		// Clear selections
+		for i := range m.components {
+			m.components[i].Selected = false
+		}
 		return m, nil
 	case "esc", "enter":
-		// Return to component list
+		// Return to component list and reload to refresh installation status
 		m.screen = ScreenComponentList
 		m.installSuccess = nil
 		m.installFailed = nil
 		m.installError = nil
-		return m, nil
+		m.loading = true
+		// Clear selections
+		for i := range m.components {
+			m.components[i].Selected = false
+		}
+		return m, loadComponentsCmd(m.getComponentType(), m.targetDir)
 	}
 	return m, nil
 }
@@ -676,6 +745,8 @@ func (m Model) View() string {
 		return m.viewComponentListScreen()
 	case ScreenPreview:
 		return m.viewPreviewScreen()
+	case ScreenChooseAction:
+		return m.viewChooseActionScreen()
 	case ScreenConfirm:
 		return m.viewConfirmScreen()
 	case ScreenConfirmRemove:
@@ -762,7 +833,16 @@ func (m Model) viewMainScreen() string {
 	b.WriteString("\n")
 	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Toggle Analytics • Q/Esc: Quit"))
 
-	return BoxStyle.Render(b.String())
+	content := BoxStyle.Render(b.String())
+
+	// Place content in the terminal, filling the available space to clear previous content
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // viewComponentListScreen renders the component list screen
@@ -837,6 +917,12 @@ func (m Model) viewComponentListScreen() string {
 				cursor = "> "
 			}
 
+			// Add selection indicator
+			selectionIndicator := " "
+			if component.Selected {
+				selectionIndicator = "✓"
+			}
+
 			// Determine style based on installation status
 			// Green for project-installed, Yellow for global-installed
 			var nameStyle lipgloss.Style
@@ -848,8 +934,8 @@ func (m Model) viewComponentListScreen() string {
 				nameStyle = lipgloss.NewStyle() // Default (no special color)
 			}
 
-			// Build the line with styled name
-			line := cursor + nameStyle.Render(component.Name)
+			// Build the line with selection indicator and styled name
+			line := cursor + selectionIndicator + " " + nameStyle.Render(component.Name)
 			if component.Category != "root" && component.Category != "" {
 				line += CategoryStyle.Render(" ("+component.Category+")")
 			}
@@ -874,16 +960,22 @@ func (m Model) viewComponentListScreen() string {
 
 	b.WriteString("\n")
 
+	// Show selected count if any
+	selectedCount := m.getSelectedCount()
+	if selectedCount > 0 {
+		b.WriteString(StatusInfoStyle.Render(fmt.Sprintf("Selected: %d component(s)", selectedCount)) + "\n\n")
+	}
+
 	// Help - keep compact for small terminals
 	if m.height < 20 {
 		// Compact help for small terminals
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • P: Preview • Enter: Install • D: Remove • Esc: Back\n"))
+		b.WriteString(HelpStyle.Render("Space: Select • Enter: Action • P: Preview • D: Remove • Esc: Back\n"))
 		b.WriteString(StatusSuccessStyle.Render("[P]=Project  "))
 		b.WriteString(StatusWarningStyle.Render("[G]=Global"))
 	} else {
 		// Full help for larger terminals
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • PgUp/PgDn: Page • /: Search • P: Preview • R: Refresh\n"))
-		b.WriteString(HelpStyle.Render("Enter: Install • D: Remove • Esc: Back • "))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • PgUp/PgDn: Page • /: Search • Space: Toggle • P: Preview • R: Refresh\n"))
+		b.WriteString(HelpStyle.Render("Enter: Action • D: Remove (if installed) • Esc: Back • "))
 		b.WriteString(StatusSuccessStyle.Render("[P]=Project  "))
 		b.WriteString(StatusWarningStyle.Render("[G]=Global"))
 	}
@@ -956,6 +1048,58 @@ func (m Model) viewPreviewScreen() string {
 	return BoxStyle.Width(m.width - 4).Render(b.String())
 }
 
+// viewChooseActionScreen renders the choose action screen
+func (m Model) viewChooseActionScreen() string {
+	var b strings.Builder
+
+	selected := m.getSelectedComponents()
+	if len(selected) == 0 {
+		b.WriteString(StatusErrorStyle.Render("No components selected") + "\n")
+		return BoxStyle.Render(b.String())
+	}
+
+	b.WriteString(TitleStyle.Render("Choose Action") + "\n\n")
+
+	b.WriteString(fmt.Sprintf("You have selected %d component(s):\n\n", len(selected)))
+
+	// Show selected components
+	for _, comp := range selected {
+		icon := m.getIconForType(comp.Type + "s")
+		b.WriteString(fmt.Sprintf("  %s %s", icon, comp.Name))
+		if comp.Category != "root" && comp.Category != "" {
+			b.WriteString(CategoryStyle.Render(" (" + comp.Category + ")"))
+		}
+		// Show installation status
+		var indicators string
+		if comp.InstalledGlobal {
+			indicators += InstalledIndicatorStyle.Render(" [G]")
+		}
+		if comp.InstalledProject {
+			indicators += InstalledIndicatorStyle.Render(" [P]")
+		}
+		b.WriteString(indicators)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString("What would you like to do?\n\n")
+	b.WriteString("  [1] " + StatusSuccessStyle.Render("Install") + " selected components\n")
+	b.WriteString("  [2] " + StatusWarningStyle.Render("Uninstall") + " selected components\n\n")
+
+	b.WriteString(HelpStyle.Render("1/I: Install • 2/U: Uninstall • Esc/N: Cancel"))
+
+	content := BoxStyle.Render(b.String())
+
+	// Place content in the terminal, filling the available space
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
+}
+
 // viewConfirmScreen renders the confirmation screen
 func (m Model) viewConfirmScreen() string {
 	var b strings.Builder
@@ -966,29 +1110,52 @@ func (m Model) viewConfirmScreen() string {
 		return BoxStyle.Render(b.String())
 	}
 
-	comp := selected[0] // Single component
-	icon := m.getIconForType(comp.Type + "s")
-
 	b.WriteString(TitleStyle.Render("Confirm Installation") + "\n\n")
 
-	b.WriteString(fmt.Sprintf("Are you sure you want to install:\n\n"))
-	b.WriteString(fmt.Sprintf("  %s %s", icon, StatusInfoStyle.Render(comp.Name)))
-	if comp.Category != "root" && comp.Category != "" {
-		b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
-	}
-	b.WriteString("\n")
+	if len(selected) == 1 {
+		// Single component
+		comp := selected[0]
+		icon := m.getIconForType(comp.Type + "s")
 
-	// Show current installation status
-	if comp.InstalledGlobal || comp.InstalledProject {
-		b.WriteString("\n")
-		b.WriteString(StatusWarningStyle.Render("Already installed:"))
-		if comp.InstalledGlobal {
-			b.WriteString(" [Global]")
-		}
-		if comp.InstalledProject {
-			b.WriteString(" [Project]")
+		b.WriteString(fmt.Sprintf("Are you sure you want to install:\n\n"))
+		b.WriteString(fmt.Sprintf("  %s %s", icon, StatusInfoStyle.Render(comp.Name)))
+		if comp.Category != "root" && comp.Category != "" {
+			b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
 		}
 		b.WriteString("\n")
+
+		// Show current installation status
+		if comp.InstalledGlobal || comp.InstalledProject {
+			b.WriteString("\n")
+			b.WriteString(StatusWarningStyle.Render("Already installed:"))
+			if comp.InstalledGlobal {
+				b.WriteString(" [Global]")
+			}
+			if comp.InstalledProject {
+				b.WriteString(" [Project]")
+			}
+			b.WriteString("\n")
+		}
+	} else {
+		// Multiple components
+		b.WriteString(fmt.Sprintf("Are you sure you want to install %d components?\n\n", len(selected)))
+		for _, comp := range selected {
+			icon := m.getIconForType(comp.Type + "s")
+			b.WriteString(fmt.Sprintf("  %s %s", icon, comp.Name))
+			if comp.Category != "root" && comp.Category != "" {
+				b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
+			}
+			// Show if already installed
+			var indicators string
+			if comp.InstalledGlobal {
+				indicators += InstalledIndicatorStyle.Render(" [G]")
+			}
+			if comp.InstalledProject {
+				indicators += InstalledIndicatorStyle.Render(" [P]")
+			}
+			b.WriteString(indicators)
+			b.WriteString("\n")
+		}
 	}
 
 	b.WriteString("\n")
@@ -996,7 +1163,16 @@ func (m Model) viewConfirmScreen() string {
 
 	b.WriteString(HelpStyle.Render("Y/Enter: Install • N/Esc: Cancel"))
 
-	return BoxStyle.Render(b.String())
+	content := BoxStyle.Render(b.String())
+
+	// Place content in the terminal, filling the available space
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // viewInstallingScreen renders the installing screen
@@ -1006,7 +1182,16 @@ func (m Model) viewInstallingScreen() string {
 	b.WriteString(TitleStyle.Render("Installing Components") + "\n\n")
 	b.WriteString(m.spinner.View() + " Installing components, please wait...\n")
 
-	return BoxStyle.Render(b.String())
+	content := BoxStyle.Render(b.String())
+
+	// Place content in the terminal, filling the available space
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // viewConfirmRemoveScreen renders the removal confirmation screen
@@ -1019,34 +1204,71 @@ func (m Model) viewConfirmRemoveScreen() string {
 		return BoxStyle.Render(b.String())
 	}
 
-	comp := selected[0] // Single component
-	icon := m.getIconForType(comp.Type + "s")
-
 	b.WriteString(TitleStyle.Render("Confirm Removal") + "\n\n")
 
-	b.WriteString(fmt.Sprintf("Are you sure you want to remove:\n\n"))
-	b.WriteString(fmt.Sprintf("  %s %s", icon, StatusWarningStyle.Render(comp.Name)))
-	if comp.Category != "root" && comp.Category != "" {
-		b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
-	}
-	b.WriteString("\n")
+	if len(selected) == 1 {
+		// Single component
+		comp := selected[0]
+		icon := m.getIconForType(comp.Type + "s")
 
-	// Show installation locations
-	b.WriteString("\n")
-	b.WriteString(StatusInfoStyle.Render("Installed in:"))
-	if comp.InstalledGlobal {
-		b.WriteString(" [Global]")
-	}
-	if comp.InstalledProject {
-		b.WriteString(" [Project]")
-	}
-	b.WriteString("\n\n")
+		b.WriteString(fmt.Sprintf("Are you sure you want to remove:\n\n"))
+		b.WriteString(fmt.Sprintf("  %s %s", icon, StatusWarningStyle.Render(comp.Name)))
+		if comp.Category != "root" && comp.Category != "" {
+			b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
+		}
+		b.WriteString("\n")
 
-	b.WriteString(StatusWarningStyle.Render("⚠️  This will remove the component from your system.") + "\n\n")
+		// Show installation locations
+		b.WriteString("\n")
+		b.WriteString(StatusInfoStyle.Render("Installed in:"))
+		if comp.InstalledGlobal {
+			b.WriteString(" [Global]")
+		}
+		if comp.InstalledProject {
+			b.WriteString(" [Project]")
+		}
+		b.WriteString("\n\n")
+	} else {
+		// Multiple components
+		b.WriteString(fmt.Sprintf("Are you sure you want to remove %d components?\n\n", len(selected)))
+		for _, comp := range selected {
+			icon := m.getIconForType(comp.Type + "s")
+			b.WriteString(fmt.Sprintf("  %s %s", icon, StatusWarningStyle.Render(comp.Name)))
+			if comp.Category != "root" && comp.Category != "" {
+				b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
+			}
+			// Show installation status
+			var indicators string
+			if comp.InstalledGlobal {
+				indicators += InstalledIndicatorStyle.Render(" [G]")
+			}
+			if comp.InstalledProject {
+				indicators += InstalledIndicatorStyle.Render(" [P]")
+			}
+			if indicators == "" {
+				indicators = StatusInfoStyle.Render(" [Not Installed]")
+			}
+			b.WriteString(indicators)
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+
+	b.WriteString(StatusWarningStyle.Render("⚠️  This will remove the components from your system.") + "\n")
+	b.WriteString(SubtitleStyle.Render("(Non-installed items will be skipped)") + "\n\n")
 
 	b.WriteString(HelpStyle.Render("Y/Enter: Remove • N/Esc: Cancel"))
 
-	return BoxStyle.Render(b.String())
+	content := BoxStyle.Render(b.String())
+
+	// Place content in the terminal, filling the available space
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // viewRemovingScreen renders the removing screen
@@ -1056,46 +1278,83 @@ func (m Model) viewRemovingScreen() string {
 	b.WriteString(TitleStyle.Render("Removing Components") + "\n\n")
 	b.WriteString(m.spinner.View() + " Removing components, please wait...\n")
 
-	return BoxStyle.Render(b.String())
+	content := BoxStyle.Render(b.String())
+
+	// Place content in the terminal, filling the available space
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // viewCompleteScreen renders the completion screen
 func (m Model) viewCompleteScreen() string {
 	var b strings.Builder
 
-	if m.installError != nil {
-		b.WriteString(StatusErrorStyle.Render("Installation Error") + "\n\n")
-		b.WriteString(m.installError.Error() + "\n")
-	} else if len(m.installFailed) > 0 {
-		b.WriteString(StatusSuccessStyle.Render("Partial Installation Complete") + "\n\n")
-	} else {
-		b.WriteString(StatusSuccessStyle.Render("Installation Complete!") + "\n\n")
+	// Determine operation verb based on lastOperation
+	operationVerb := "installed"
+	operationNoun := "installation"
+	if m.lastOperation == "remove" {
+		operationVerb = "removed"
+		operationNoun = "removal"
 	}
 
+	// Title
+	if m.installError != nil {
+		titleText := "Installation Error"
+		if m.lastOperation == "remove" {
+			titleText = "Removal Error"
+		}
+		b.WriteString(StatusErrorStyle.Render(titleText) + "\n\n")
+		b.WriteString(m.installError.Error() + "\n")
+	} else if len(m.installFailed) > 0 {
+		titleText := fmt.Sprintf("Partial %s Complete", strings.Title(operationNoun))
+		b.WriteString(StatusSuccessStyle.Render(titleText) + "\n\n")
+	} else {
+		titleText := fmt.Sprintf("%s Complete!", strings.Title(operationNoun))
+		b.WriteString(StatusSuccessStyle.Render(titleText) + "\n\n")
+	}
+
+	// Success list
 	if len(m.installSuccess) > 0 {
-		b.WriteString(StatusSuccessStyle.Render(fmt.Sprintf("Successfully installed %d component(s):", len(m.installSuccess))) + "\n")
+		successText := fmt.Sprintf("Successfully %s %d component(s):", operationVerb, len(m.installSuccess))
+		b.WriteString(StatusSuccessStyle.Render(successText) + "\n")
 		for _, name := range m.installSuccess {
 			b.WriteString(fmt.Sprintf("  ✓ %s\n", name))
 		}
 		b.WriteString("\n")
 	}
 
+	// Failure list
 	if len(m.installFailed) > 0 {
-		b.WriteString(StatusErrorStyle.Render(fmt.Sprintf("Failed to install %d component(s):", len(m.installFailed))) + "\n")
+		failText := fmt.Sprintf("Failed to %s %d component(s):", strings.TrimSuffix(operationVerb, "d"), len(m.installFailed))
+		b.WriteString(StatusErrorStyle.Render(failText) + "\n")
 		for _, name := range m.installFailed {
 			b.WriteString(fmt.Sprintf("  ✗ %s\n", name))
 		}
 		b.WriteString("\n")
 	}
 
-	// Add Launch Claude option if available
+	// Help text
 	if IsClaudeAvailable() {
 		b.WriteString(HelpStyle.Render("Enter/Esc: Back to List • C: Launch Claude • R: Main Menu • Q: Quit"))
 	} else {
 		b.WriteString(HelpStyle.Render("Enter/Esc: Back to List • R: Main Menu • Q: Quit"))
 	}
 
-	return BoxStyle.Render(b.String())
+	content := BoxStyle.Render(b.String())
+
+	// Place content in the terminal, filling the available space to clear previous content
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 // Helper methods

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // MCPScope represents where the MCP configuration should be stored
@@ -60,10 +61,26 @@ func LoadMCPConfig(configPath string) (*ClaudeConfig, error) {
 
 // SaveMCPConfig saves an MCP configuration file to the given path
 func SaveMCPConfig(configPath string, config *ClaudeConfig) error {
-	// Ensure the directory exists
+	// Ensure the directory exists first
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// If the config is empty (no MCP servers), handle specially
+	if config.MCPServers == nil || len(config.MCPServers) == 0 {
+		// For .mcp.json files (project scope), delete the file if it exists
+		if filepath.Base(configPath) == ".mcp.json" {
+			if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("failed to remove empty config file: %w", err)
+			}
+			return nil
+		}
+		// For other config files (like ~/.claude/config.json), ensure empty map exists
+		// This maintains valid JSON structure
+		if config.MCPServers == nil {
+			config.MCPServers = make(map[string]MCPServerConfig)
+		}
 	}
 
 	// Marshal with indentation for readability
@@ -179,12 +196,14 @@ func RemoveMCPServers(scope MCPScope, projectDir string, mcpName string) ([]stri
 	// Track removed server names
 	removed := []string{}
 
-	// Remove servers that contain the MCP name
+	// Remove servers that contain the MCP name (case-insensitive)
 	// This handles cases where MCP name might be part of the server name
+	mcpNameLower := strings.ToLower(mcpName)
 	for serverName := range config.MCPServers {
-		// Simple matching: if server name contains the MCP name, remove it
-		// This works for most cases where MCP name is "github" and server name is "github" or "github-mcp"
-		if serverName == mcpName || contains(serverName, mcpName) {
+		// Case-insensitive matching: if server name contains the MCP name, remove it
+		// This works for most cases where MCP name is "github" and server name is "GitHub" or "github-mcp"
+		serverNameLower := strings.ToLower(serverName)
+		if strings.Contains(serverNameLower, mcpNameLower) {
 			delete(config.MCPServers, serverName)
 			removed = append(removed, serverName)
 		}
@@ -200,8 +219,40 @@ func RemoveMCPServers(scope MCPScope, projectDir string, mcpName string) ([]stri
 	return removed, nil
 }
 
-// contains checks if s contains substr (case-insensitive)
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr ||
-		(len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr)))
+// RemoveMCPServersByContent removes MCP servers by parsing the MCP JSON content
+// and removing the exact servers defined in that content from the config
+func RemoveMCPServersByContent(scope MCPScope, projectDir string, mcpJSONContent string) ([]string, error) {
+	// Parse the MCP JSON file to get server names
+	var mcpConfig ClaudeConfig
+	if err := json.Unmarshal([]byte(mcpJSONContent), &mcpConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse MCP JSON: %w", err)
+	}
+
+	configPath := GetMCPConfigPath(scope, projectDir)
+
+	// Load current config
+	config, err := LoadMCPConfig(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Track removed server names
+	removed := []string{}
+
+	// Remove exact servers from the MCP file
+	for serverName := range mcpConfig.MCPServers {
+		if _, exists := config.MCPServers[serverName]; exists {
+			delete(config.MCPServers, serverName)
+			removed = append(removed, serverName)
+		}
+	}
+
+	// Save updated config if any servers were removed
+	if len(removed) > 0 {
+		if err := SaveMCPConfig(configPath, config); err != nil {
+			return removed, fmt.Errorf("failed to save config: %w", err)
+		}
+	}
+
+	return removed, nil
 }
