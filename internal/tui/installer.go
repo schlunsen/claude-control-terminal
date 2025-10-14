@@ -215,9 +215,15 @@ Success:
 	}
 
 	// Register the MCP servers in .mcp.json
-	_, err = fileops.MergeMCPServersFromJSON(fileops.MCPScopeProject, targetDir, content)
+	serverKeys, err := fileops.MergeMCPServersFromJSON(fileops.MCPScopeProject, targetDir, content)
 	if err != nil {
 		return fmt.Errorf("failed to register MCP in .mcp.json: %w", err)
+	}
+
+	// Record installation metadata
+	if err := fileops.AddMCPInstallation(fileops.MCPScopeProject, targetDir, mcpName, serverKeys, githubPath); err != nil {
+		// Log warning but don't fail installation
+		fmt.Printf("Warning: Failed to save installation metadata: %v\n", err)
 	}
 
 	return nil
@@ -340,28 +346,57 @@ func (ci *CommandInstallerForTUI) RemoveCommand(commandName, targetDir string) e
 // RemoveMCP removes an installed MCP
 // Returns nil if the MCP is not installed (silently skips)
 func (mi *MCPInstallerForTUI) RemoveMCP(mcpName, targetDir string) error {
-	// Check if MCP JSON file exists in .claude/mcp directory
-	mcpFile := filepath.Join(targetDir, ".claude", "mcp", mcpName+".json")
-	content, err := os.ReadFile(mcpFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// MCP not installed, silently skip
-			return nil
+	// Strategy 1: Try to use metadata for exact match
+	installation, metadataErr := fileops.GetMCPInstallation(fileops.MCPScopeProject, targetDir, mcpName)
+	if metadataErr == nil && installation != nil {
+		// Found in metadata - remove exact server keys from .mcp.json
+		configPath := fileops.GetMCPConfigPath(fileops.MCPScopeProject, targetDir)
+		config, err := fileops.LoadMCPConfig(configPath)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
 		}
-		return fmt.Errorf("failed to read MCP file: %w", err)
+
+		// Remove each server key from the installation
+		for _, serverKey := range installation.ServerKeys {
+			delete(config.MCPServers, serverKey)
+		}
+
+		// Save updated config
+		if err := fileops.SaveMCPConfig(configPath, config); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+
+		// Remove metadata entry
+		if err := fileops.RemoveMCPInstallation(fileops.MCPScopeProject, targetDir, mcpName); err != nil {
+			// Log warning but don't fail
+			fmt.Printf("Warning: Failed to remove metadata: %v\n", err)
+		}
+	} else {
+		// Strategy 2: Fallback to file-based removal (legacy support)
+		// Check if MCP JSON file exists in .claude/mcp directory
+		mcpFile := filepath.Join(targetDir, ".claude", "mcp", mcpName+".json")
+		content, err := os.ReadFile(mcpFile)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// MCP not installed, silently skip
+				return nil
+			}
+			return fmt.Errorf("failed to read MCP file: %w", err)
+		}
+
+		// Remove servers from .mcp.json by reading the exact servers from the MCP file
+		removed, err := fileops.RemoveMCPServersByContent(fileops.MCPScopeProject, targetDir, string(content))
+		if err != nil {
+			return fmt.Errorf("failed to remove MCP from config: %w", err)
+		}
+
+		// If no servers were removed, the MCP might not be in .mcp.json (but file exists)
+		// This is okay, we'll still remove the file
+		_ = removed
 	}
 
-	// Remove servers from .mcp.json by reading the exact servers from the MCP file
-	removed, err := fileops.RemoveMCPServersByContent(fileops.MCPScopeProject, targetDir, string(content))
-	if err != nil {
-		return fmt.Errorf("failed to remove MCP from config: %w", err)
-	}
-
-	// If no servers were removed, the MCP might not be in .mcp.json (but file exists)
-	// This is okay, we'll still remove the file
-	_ = removed
-
-	// Remove the MCP JSON file from .claude/mcp directory
+	// Remove the MCP JSON file from .claude/mcp directory (if it exists)
+	mcpFile := filepath.Join(targetDir, ".claude", "mcp", mcpName+".json")
 	if err := os.Remove(mcpFile); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to remove MCP file: %w", err)
 	}

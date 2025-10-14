@@ -196,14 +196,16 @@ func RemoveMCPServers(scope MCPScope, projectDir string, mcpName string) ([]stri
 	// Track removed server names
 	removed := []string{}
 
-	// Remove servers that contain the MCP name (case-insensitive)
-	// This handles cases where MCP name might be part of the server name
+	// Remove servers that match the MCP name using bidirectional matching
 	mcpNameLower := strings.ToLower(mcpName)
 	for serverName := range config.MCPServers {
-		// Case-insensitive matching: if server name contains the MCP name, remove it
-		// This works for most cases where MCP name is "github" and server name is "GitHub" or "github-mcp"
 		serverNameLower := strings.ToLower(serverName)
-		if strings.Contains(serverNameLower, mcpNameLower) {
+
+		// Bidirectional substring matching:
+		// - "postgresql-integration" matches "postgresql"
+		// - "postgresql" matches "postgresql-integration"
+		// - "github" matches "GitHub"
+		if mcpNamesMatch(mcpNameLower, serverNameLower) {
 			delete(config.MCPServers, serverName)
 			removed = append(removed, serverName)
 		}
@@ -217,6 +219,21 @@ func RemoveMCPServers(scope MCPScope, projectDir string, mcpName string) ([]stri
 	}
 
 	return removed, nil
+}
+
+// mcpNamesMatch checks if an MCP name matches a server name using bidirectional substring matching
+func mcpNamesMatch(mcpName, serverName string) bool {
+	// Exact match
+	if mcpName == serverName {
+		return true
+	}
+
+	// Bidirectional substring matching
+	if strings.Contains(serverName, mcpName) || strings.Contains(mcpName, serverName) {
+		return true
+	}
+
+	return false
 }
 
 // RemoveMCPServersByContent removes MCP servers by parsing the MCP JSON content
