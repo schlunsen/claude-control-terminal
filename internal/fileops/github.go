@@ -39,9 +39,12 @@ type GitHubFile struct {
 // DownloadCache stores downloaded files to avoid repeated downloads
 var downloadCache = make(map[string]string)
 
+// defaultTimeout is the default timeout for HTTP requests
+var defaultTimeout = 30 * time.Second
+
 // httpClient is a shared HTTP client with timeout configuration
 var httpClient = &http.Client{
-	Timeout: 30 * time.Second,
+	Timeout: defaultTimeout,
 	Transport: &http.Transport{
 		MaxIdleConns:        10,
 		IdleConnTimeout:     90 * time.Second,
@@ -49,9 +52,30 @@ var httpClient = &http.Client{
 	},
 }
 
+// SetHTTPTimeout allows changing the HTTP client timeout (useful for testing)
+func SetHTTPTimeout(timeout time.Duration) {
+	httpClient.Timeout = timeout
+	if httpClient.Transport != nil {
+		if transport, ok := httpClient.Transport.(*http.Transport); ok {
+			transport.TLSHandshakeTimeout = timeout / 3
+		}
+	}
+}
+
+// downloadFunc is the actual download function, can be overridden for testing
+var downloadFunc func(config *GitHubConfig, filePath string, retryCount int) (string, error)
+
 // DownloadFileFromGitHub downloads a single file from GitHub with retry logic and timeout.
 // It uses exponential backoff for retries and caches successful downloads.
 func DownloadFileFromGitHub(config *GitHubConfig, filePath string, retryCount int) (string, error) {
+	if downloadFunc != nil {
+		return downloadFunc(config, filePath, retryCount)
+	}
+	return defaultDownloadFileFromGitHub(config, filePath, retryCount)
+}
+
+// defaultDownloadFileFromGitHub is the actual implementation
+func defaultDownloadFileFromGitHub(config *GitHubConfig, filePath string, retryCount int) (string, error) {
 	// Check cache first
 	if content, exists := downloadCache[filePath]; exists {
 		return content, nil
@@ -64,8 +88,8 @@ func DownloadFileFromGitHub(config *GitHubConfig, filePath string, retryCount in
 	githubURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s/%s",
 		config.Owner, config.Repo, config.Branch, config.TemplatesPath, filePath)
 
-	// Create request with context and timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Create request with context and timeout (use the client's timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), httpClient.Timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", githubURL, nil)
@@ -123,8 +147,8 @@ func DownloadDirectoryFromGitHub(config *GitHubConfig, dirPath string, retryCoun
 	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s/%s?ref=%s",
 		config.Owner, config.Repo, config.TemplatesPath, dirPath, config.Branch)
 
-	// Create request with context and timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Create request with context and timeout (use the client's timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), httpClient.Timeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
@@ -219,4 +243,9 @@ func DownloadDirectoryFromGitHub(config *GitHubConfig, dirPath string, retryCoun
 // ClearDownloadCache clears the download cache to force fresh downloads.
 func ClearDownloadCache() {
 	downloadCache = make(map[string]string)
+}
+
+// MockDownloadFunc allows tests to override the download function
+func MockDownloadFunc(mockFunc func(config *GitHubConfig, filePath string, retryCount int) (string, error)) {
+	downloadFunc = mockFunc
 }

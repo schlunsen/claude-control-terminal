@@ -1,9 +1,12 @@
 package components
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/schlunsen/claude-control-terminal/internal/fileops"
 )
 
 func TestNewAgentInstaller(t *testing.T) {
@@ -149,10 +152,16 @@ func TestRemoveAgentWithCategory(t *testing.T) {
 }
 
 func TestInstallMultipleAgentsAllFail(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewAgentInstaller()
 	tempDir := t.TempDir()
 
-	// These agents don't exist on GitHub (hopefully!)
+	// These agents don't exist on GitHub
 	agentNames := []string{
 		"nonexistent-agent-xyz-123",
 		"another-fake-agent-abc-456",
@@ -170,6 +179,12 @@ func TestInstallMultipleAgentsAllFail(t *testing.T) {
 }
 
 func TestPreviewMultipleAgentsAllFail(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewAgentInstaller()
 
 	// These agents don't exist
@@ -260,13 +275,18 @@ func TestRemoveAgentGlobalAndProject(t *testing.T) {
 }
 
 func TestInstallAgentInvalidTarget(t *testing.T) {
+	// Mock the download function to simulate failures without making real HTTP calls
+	fileops.MockDownloadFunc(func(config *fileops.GitHubConfig, filePath string, retryCount int) (string, error) {
+		return "", fmt.Errorf("file not found: %s (404)", filePath)
+	})
+	defer fileops.MockDownloadFunc(nil) // Restore default
+
 	installer := NewAgentInstaller()
 
-	// Try to install to invalid directory (no write permissions)
+	// Try to install to invalid directory - should fail with file not found
 	err := installer.InstallAgent("test-agent", "/root/impossible", true)
 
 	if err == nil {
-		t.Log("Installation might have succeeded or failed with network error (expected)")
+		t.Error("expected error when agent not found")
 	}
-	// We can't easily test this without mocking the download
 }
