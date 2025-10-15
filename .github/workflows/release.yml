@@ -182,10 +182,18 @@ jobs:
               -e "s/{{SHA256_LINUX_ARM64}}/${{ steps.checksums.outputs.sha256_linux_arm64 }}/g" \
               .github/homebrew-formula.rb.template > dist/cct.rb
 
+      - name: Get release name from tag
+        id: release_name
+        run: |
+          # Get the tag annotation message which contains the release name
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${GITHUB_REF#refs/tags/})
+          echo "tag_message=$TAG_MESSAGE" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: dist/*
+          name: ${{ steps.release_name.outputs.tag_message }}
           generate_release_notes: true
           draft: false
           prerelease: false

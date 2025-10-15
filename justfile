@@ -147,11 +147,11 @@ dev: fmt build test
     @echo "✅ Development checks passed"
 
 # Create a new release (tags, builds, updates Homebrew formula)
-release version:
+release version release_name:
     #!/usr/bin/env bash
     set -euo pipefail
     \
-    echo "🚀 Creating release v{{version}}..."; \
+    echo "🚀 Creating release v{{version}} - {{release_name}}..."; \
     \
     if [[ "{{version}}" != v* ]]; then \
         VERSION="v{{version}}"; \
@@ -168,7 +168,7 @@ release version:
     \
     TODAY=$(date +%Y-%m-%d); \
     echo "🤖 Starting Claude agent to update version and create git commit..."; \
-    claude --auto-edit "Please perform the following release tasks for version $VERSION_NUM: 1) Update the version constant in internal/cmd/root.go to $VERSION_NUM. 2) Update CHANGELOG.md by moving content from [Unreleased] section to a new [$VERSION_NUM] section with today's date ($TODAY), and ensure the version comparison links at the bottom are updated. 3) Create a git commit with message 'chore: bump version to $VERSION_NUM'. 4) Create a git tag $VERSION. 5) Push both the commit and tag to origin."; \
+    claude --auto-edit "Please perform the following release tasks for version $VERSION_NUM with release name '{{release_name}}': 1) Update the version constant in internal/cmd/root.go to $VERSION_NUM. 2) Update CHANGELOG.md by moving content from [Unreleased] section to a new [$VERSION_NUM] - {{release_name}} section with today's date ($TODAY), and ensure the version comparison links at the bottom are updated. The format should be: ## [$VERSION_NUM] - {{release_name}} - $TODAY. 3) Create a git commit with message 'chore: bump version to $VERSION_NUM'. 4) Create a git tag $VERSION with the message '$VERSION - {{release_name}}'. 5) Push both the commit and tag to origin."; \
     \
     echo "✅ Version updated and tagged by Claude agent"; \
     \
