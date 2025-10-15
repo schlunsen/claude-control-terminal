@@ -884,19 +884,12 @@
             ws.onmessage = (event) => {
                 console.log('WebSocket message:', event.data);
 
-                // Parse message to see if it's a notification event
-                try {
-                    const msg = JSON.parse(event.data);
-                    if (msg.event === 'notification_recorded' || msg.event === 'notifications_cleared') {
-                        loadActivityHistory();
-                        loadNotificationStats();
-                    }
-                } catch (e) {
-                    // Not JSON, just regular update
-                }
-
+                // Refresh all data on any WebSocket event
                 loadData();
                 loadBackgroundShells();
+                loadAvailableSessions();
+                loadActivityHistory();
+                loadNotificationStats();
             };
 
             ws.onerror = (error) => {
@@ -1269,7 +1262,7 @@
             }
         }
 
-        // Initialize
+        // Initialize - load data once on page load
         loadData();
         loadBackgroundShells();
         loadAvailableSessions();
@@ -1277,14 +1270,7 @@
         loadNotificationStats();
         connectWebSocket();
 
-        // Refresh every 30 seconds
-        setInterval(() => {
-            loadData();
-            loadBackgroundShells();
-            loadAvailableSessions();
-            loadActivityHistory();
-            loadNotificationStats();
-        }, 30000);
+        // No more polling - updates come via WebSocket events only
     </script>
 </body>
 </html>
