@@ -20,6 +20,64 @@
       class="search-input"
     />
 
+    <!-- Session Selector -->
+    <div class="session-selector" v-if="uniqueSessions.length > 0">
+      <button
+        class="session-trigger"
+        @click="toggleSessionDropdown"
+        :class="{ active: isSessionDropdownOpen }"
+      >
+        <div class="session-trigger-content">
+          <img
+            v-if="selectedSession"
+            :src="useCharacterAvatar(selectedSession).avatar"
+            :alt="useCharacterAvatar(selectedSession).name"
+            class="trigger-avatar"
+          />
+          <svg v-else class="trigger-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+          </svg>
+          <span class="trigger-text">
+            {{ selectedSession || 'All Sessions' }}
+          </span>
+        </div>
+        <svg class="trigger-chevron" :class="{ open: isSessionDropdownOpen }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      <div v-if="isSessionDropdownOpen" class="session-dropdown">
+        <div class="session-option" @click="clearSessionFilter">
+          <svg class="session-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
+          </svg>
+          <span class="session-name">All Sessions</span>
+          <span v-if="!selectedSession" class="session-check">✓</span>
+        </div>
+        <div class="session-divider"></div>
+        <div
+          v-for="session in uniqueSessions"
+          :key="session.name"
+          class="session-option"
+          :class="{ selected: selectedSession === session.name }"
+          @click="selectSession(session.name)"
+        >
+          <img
+            :src="useCharacterAvatar(session.name).avatar"
+            :alt="useCharacterAvatar(session.name).name"
+            class="session-avatar"
+          />
+          <div class="session-info">
+            <span class="session-name">{{ session.name }}</span>
+            <span v-if="session.id" class="session-id">{{ session.id }}</span>
+          </div>
+          <span v-if="selectedSession === session.name" class="session-check">✓</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Filter tabs -->
     <div class="filter-tabs">
       <button
@@ -80,6 +138,8 @@ import type { ActivityItem } from '~/types/analytics'
 const history = ref<ActivityItem[]>([])
 const filter = ref<'all' | 'shell' | 'claude' | 'prompt' | 'notification' | 'command'>('all')
 const searchTerm = ref('')
+const selectedSession = ref<string>('')
+const isSessionDropdownOpen = ref(false)
 
 // WebSocket integration
 const { connected, on } = useWebSocket()
@@ -150,11 +210,30 @@ on('onHistoryCleared', () => {
   history.value = []
 })
 
+// Get unique sessions from history with conversation IDs
+const uniqueSessions = computed(() => {
+  const sessions = new Map<string, { name: string, id: string }>()
+  history.value.forEach(item => {
+    if (item.session_name) {
+      sessions.set(item.session_name, {
+        name: item.session_name,
+        id: item.conversation_id || ''
+      })
+    }
+  })
+  return Array.from(sessions.values()).sort((a, b) => a.name.localeCompare(b.name))
+})
+
 // Computed filtered history
 const filteredHistory = computed(() => {
   return history.value.filter(item => {
     // Filter by type
     if (filter.value !== 'all' && item.type !== filter.value) {
+      return false
+    }
+
+    // Filter by session
+    if (selectedSession.value && item.session_name !== selectedSession.value) {
       return false
     }
 
@@ -175,6 +254,31 @@ const filteredHistory = computed(() => {
     return true
   })
 })
+
+// Toggle session dropdown
+function toggleSessionDropdown() {
+  isSessionDropdownOpen.value = !isSessionDropdownOpen.value
+}
+
+// Select session
+function selectSession(session: string) {
+  selectedSession.value = session
+  isSessionDropdownOpen.value = false
+}
+
+// Clear session filter
+function clearSessionFilter() {
+  selectedSession.value = ''
+  isSessionDropdownOpen.value = false
+}
+
+// Close dropdown when clicking outside
+const handleClickOutside = (event: MouseEvent) => {
+  const target = event.target as HTMLElement
+  if (!target.closest('.session-selector')) {
+    isSessionDropdownOpen.value = false
+  }
+}
 
 // Helper functions
 function getItemClass(item: ActivityItem): string {
@@ -248,6 +352,10 @@ function formatTime(timestamp: Date | string): string {
 
 // Initial load from API
 onMounted(async () => {
+  // Add click outside listener
+  document.addEventListener('click', handleClickOutside)
+
+  // Load initial data
   try {
     const { data } = await useFetch<any>('/api/history/all?limit=100')
     if (data.value?.history) {
@@ -261,6 +369,10 @@ onMounted(async () => {
   } catch (error) {
     // Error loading activity history
   }
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
 })
 </script>
 
@@ -485,6 +597,168 @@ onMounted(async () => {
 .meta-item.error {
   color: var(--status-error);
   font-weight: 600;
+}
+
+/* Session Selector Styles */
+.session-selector {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.session-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.session-trigger:hover {
+  background: var(--card-hover);
+  border-color: var(--accent-purple);
+}
+
+.session-trigger.active {
+  border-color: var(--accent-purple);
+  background: var(--card-hover);
+}
+
+.session-trigger-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.trigger-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.trigger-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}
+
+.trigger-text {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.trigger-chevron {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.trigger-chevron.open {
+  transform: rotate(180deg);
+}
+
+.session-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 100;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.session-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.session-option:hover {
+  background: var(--card-hover);
+}
+
+.session-option.selected {
+  background: var(--bg-secondary);
+}
+
+.session-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-color);
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+
+.session-icon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.session-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.session-id {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
+}
+
+.session-check {
+  color: var(--accent-purple);
+  font-weight: 600;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.session-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
 }
 
 @media (max-width: 768px) {
