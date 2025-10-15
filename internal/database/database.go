@@ -359,5 +359,55 @@ func runMigrations(db *sql.DB) error {
 		}
 	}
 
+	// Migration 7: Add model_provider and model_name columns to all tables
+	tables := []string{"shell_commands", "claude_commands", "conversations", "user_messages", "notifications"}
+	for _, table := range tables {
+		// Check if model_provider exists
+		var modelProviderExists bool
+		providerQuery := fmt.Sprintf(`
+			SELECT COUNT(*) > 0
+			FROM pragma_table_info('%s')
+			WHERE name='model_provider'
+		`, table)
+		if err := db.QueryRow(providerQuery).Scan(&modelProviderExists); err == nil {
+			if !modelProviderExists {
+				alterQuery := fmt.Sprintf("ALTER TABLE %s ADD COLUMN model_provider TEXT", table)
+				if _, err := db.Exec(alterQuery); err != nil {
+					return fmt.Errorf("failed to add model_provider column to %s: %w", table, err)
+				}
+			}
+		}
+
+		// Check if model_name exists
+		var modelNameExists bool
+		nameQuery := fmt.Sprintf(`
+			SELECT COUNT(*) > 0
+			FROM pragma_table_info('%s')
+			WHERE name='model_name'
+		`, table)
+		if err := db.QueryRow(nameQuery).Scan(&modelNameExists); err == nil {
+			if !modelNameExists {
+				alterQuery := fmt.Sprintf("ALTER TABLE %s ADD COLUMN model_name TEXT", table)
+				if _, err := db.Exec(alterQuery); err != nil {
+					return fmt.Errorf("failed to add model_name column to %s: %w", table, err)
+				}
+			}
+		}
+	}
+
+	// Create indexes for model columns if they don't exist
+	indexes := []string{
+		"CREATE INDEX IF NOT EXISTS idx_shell_commands_model ON shell_commands(model_provider, model_name)",
+		"CREATE INDEX IF NOT EXISTS idx_claude_commands_model ON claude_commands(model_provider, model_name)",
+		"CREATE INDEX IF NOT EXISTS idx_user_messages_model ON user_messages(model_provider, model_name)",
+		"CREATE INDEX IF NOT EXISTS idx_notifications_model ON notifications(model_provider, model_name)",
+		"CREATE INDEX IF NOT EXISTS idx_conversations_model ON conversations(model_provider, model_name)",
+	}
+	for _, indexSQL := range indexes {
+		if _, err := db.Exec(indexSQL); err != nil {
+			return fmt.Errorf("failed to create index: %w", err)
+		}
+	}
+
 	return nil
 }

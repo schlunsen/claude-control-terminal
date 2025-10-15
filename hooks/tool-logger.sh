@@ -95,6 +95,10 @@ fi
 
 SESSION_NAME="${SESSION_NAMES[$INDEX]}"
 
+# Extract model information from environment variables
+MODEL_NAME="${ANTHROPIC_MODEL:-}"
+MODEL_PROVIDER="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
+
 # Analytics server endpoints
 SHELL_ENDPOINT="http://localhost:3333/api/commands/shell"
 CLAUDE_ENDPOINT="http://localhost:3333/api/commands/claude"
@@ -130,6 +134,8 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
             --arg description "$DESCRIPTION" \
             --arg cwd "$CWD" \
             --arg branch "$GIT_BRANCH" \
+            --arg modelProvider "$MODEL_PROVIDER" \
+            --arg modelName "$MODEL_NAME" \
             --argjson exitCode "$EXIT_CODE" \
             --arg stdout "$STDOUT" \
             --arg stderr "$STDERR" \
@@ -141,6 +147,8 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
                 description: $description,
                 cwd: $cwd,
                 branch: $branch,
+                model_provider: $modelProvider,
+                model_name: $modelName,
                 exit_code: $exitCode,
                 stdout: $stdout,
                 stderr: $stderr,
@@ -156,6 +164,8 @@ if [[ "$TOOL_NAME" == "Bash" ]]; then
   "description": "$DESCRIPTION",
   "cwd": "$CWD",
   "branch": "$GIT_BRANCH",
+  "model_provider": "$MODEL_PROVIDER",
+  "model_name": "$MODEL_NAME",
   "exit_code": $EXIT_CODE,
   "stdout": "$STDOUT",
   "stderr": "$STDERR",
@@ -199,6 +209,8 @@ else
             --argjson result "$RESULT" \
             --arg cwd "$CWD" \
             --arg branch "$GIT_BRANCH" \
+            --arg modelProvider "$MODEL_PROVIDER" \
+            --arg modelName "$MODEL_NAME" \
             --argjson success "$SUCCESS_BOOL" \
             --arg errorMessage "$ERROR_MESSAGE" \
             --argjson durationMs "$DURATION_MS" \
@@ -210,6 +222,8 @@ else
                 result: ($result | tostring),
                 cwd: $cwd,
                 branch: $branch,
+                model_provider: $modelProvider,
+                model_name: $modelName,
                 success: $success,
                 error_message: $errorMessage,
                 duration_ms: $durationMs
@@ -225,6 +239,8 @@ else
   "result": "$RESULT",
   "cwd": "$CWD",
   "branch": "$GIT_BRANCH",
+  "model_provider": "$MODEL_PROVIDER",
+  "model_name": "$MODEL_NAME",
   "success": $SUCCESS_BOOL,
   "error_message": "$ERROR_MESSAGE",
   "duration_ms": $DURATION_MS

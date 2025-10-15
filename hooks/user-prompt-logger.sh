@@ -85,6 +85,10 @@ fi
 
 SESSION_NAME="${SESSION_NAMES[$INDEX]}"
 
+# Extract model information from environment variables
+MODEL_NAME="${ANTHROPIC_MODEL:-}"
+MODEL_PROVIDER="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
+
 # Analytics server endpoint (default port)
 ANALYTICS_URL="http://localhost:3333/api/prompts"
 
@@ -97,7 +101,9 @@ if command -v jq &> /dev/null; then
         --arg prompt "$PROMPT" \
         --arg cwd "$CWD" \
         --arg branch "$GIT_BRANCH" \
-        '{session_id: $session, session_name: $sessionName, prompt: $prompt, cwd: $cwd, branch: $branch}')
+        --arg modelProvider "$MODEL_PROVIDER" \
+        --arg modelName "$MODEL_NAME" \
+        '{session_id: $session, session_name: $sessionName, prompt: $prompt, cwd: $cwd, branch: $branch, model_provider: $modelProvider, model_name: $modelName}')
 else
     # Fallback: basic JSON (less robust, but works for most cases)
     # Note: This doesn't escape special characters properly
@@ -107,7 +113,9 @@ else
   "session_name": "$SESSION_NAME",
   "prompt": "$PROMPT",
   "cwd": "$CWD",
-  "branch": "$GIT_BRANCH"
+  "branch": "$GIT_BRANCH",
+  "model_provider": "$MODEL_PROVIDER",
+  "model_name": "$MODEL_NAME"
 }
 EOF
 )

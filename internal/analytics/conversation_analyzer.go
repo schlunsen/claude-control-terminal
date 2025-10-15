@@ -23,6 +23,8 @@ type Conversation struct {
 	Project          string    `json:"project"`
 	Status           string    `json:"status"`
 	ConversationState string   `json:"conversationState"`
+	ModelProvider    string    `json:"modelProvider,omitempty"`
+	ModelName        string    `json:"modelName,omitempty"`
 }
 
 // ConversationAnalyzer handles conversation data loading and analysis
@@ -104,6 +106,9 @@ func (ca *ConversationAnalyzer) parseConversationFile(filePath string, stateCalc
 	status := stateCalc.DetermineConversationStatus(messages, info.ModTime())
 	state := stateCalc.DetermineConversationState(messages, info.ModTime(), nil)
 
+	// Get model information
+	modelInfo := GetModelInfo()
+
 	conv := Conversation{
 		ID:                filepath.Base(filePath[:len(filePath)-6]), // Remove .jsonl
 		Filename:          filepath.Base(filePath),
@@ -116,6 +121,8 @@ func (ca *ConversationAnalyzer) parseConversationFile(filePath string, stateCalc
 		Project:           project,
 		Status:            status,
 		ConversationState: state,
+		ModelProvider:     modelInfo.Provider,
+		ModelName:         modelInfo.Name,
 	}
 
 	return conv, nil

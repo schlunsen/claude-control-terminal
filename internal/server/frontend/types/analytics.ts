@@ -8,6 +8,8 @@ export interface ActivityItem {
   conversation_id?: string
   git_branch?: string
   working_directory?: string
+  model_provider?: string
+  model_name?: string
 
   // Shell command fields
   command?: string
