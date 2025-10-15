@@ -71,8 +71,10 @@
           />
           <div class="session-info">
             <span class="session-name">{{ session.name }}</span>
-            <span v-if="session.id" class="session-id">{{ session.id }}</span>
-            <span v-if="session.startTime" class="session-time">Started {{ formatSessionTime(session.startTime) }}</span>
+            <div class="session-meta">
+              <span v-if="session.id" class="session-id">{{ session.id }}</span>
+              <span v-if="session.startTime" class="session-time">{{ formatSessionTime(session.startTime) }}</span>
+            </div>
           </div>
           <span v-if="selectedSession === session.name" class="session-check">✓</span>
         </div>
@@ -241,7 +243,12 @@ const uniqueSessions = computed(() => {
     }
   })
 
-  return Array.from(sessions.values()).sort((a, b) => a.name.localeCompare(b.name))
+  // Sort by most recent first (earliest startTime = oldest session, so reverse)
+  return Array.from(sessions.values()).sort((a, b) => {
+    if (!a.startTime) return 1
+    if (!b.startTime) return -1
+    return b.startTime.getTime() - a.startTime.getTime()
+  })
 })
 
 // Computed filtered history
@@ -369,9 +376,8 @@ function formatTime(timestamp: Date | string): string {
   return date.toLocaleTimeString()
 }
 
-function formatSessionTime(timestamp: Date): string {
+function formatSessionTime(date: Date): string {
   const now = new Date()
-  const date = new Date(timestamp)
   const diffMs = now.getTime() - date.getTime()
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMins / 60)
@@ -770,12 +776,18 @@ onUnmounted(() => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .session-name {
   font-weight: 500;
   color: var(--text-primary);
+}
+
+.session-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .session-id {
@@ -785,7 +797,7 @@ onUnmounted(() => {
 }
 
 .session-time {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--accent-cyan);
   font-weight: 500;
 }
