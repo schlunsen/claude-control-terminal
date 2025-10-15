@@ -44,7 +44,7 @@ async function loadShells() {
       shells.value = data.value.shells
     }
   } catch (error) {
-    console.error('Error loading background shells:', error)
+    // Error loading background shells
   }
 }
 

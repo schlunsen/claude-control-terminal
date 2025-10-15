@@ -42,7 +42,7 @@ async function loadProcesses() {
       processes.value = data.value.processes
     }
   } catch (error) {
-    console.error('Error loading Claude processes:', error)
+    // Error loading Claude processes
   }
 }
 

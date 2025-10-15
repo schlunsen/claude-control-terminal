@@ -48,7 +48,7 @@ async function loadStats() {
       stats.value = data.value
     }
   } catch (error) {
-    console.error('Error loading notification stats:', error)
+    // Error loading notification stats
   }
 }
 
