@@ -536,6 +536,20 @@ func (s *Server) handleGetCommandStats(c *fiber.Ctx) error {
 	})
 }
 
+// formatBytes converts bytes to human readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
 // Handler: Get database statistics
 func (s *Server) handleGetDBStats(c *fiber.Ctx) error {
 	stats, err := s.db.Stats()
@@ -543,6 +557,11 @@ func (s *Server) handleGetDBStats(c *fiber.Ctx) error {
 		return c.Status(500).JSON(fiber.Map{
 			"error": err.Error(),
 		})
+	}
+
+	// Add human-readable size if db_size_bytes exists
+	if sizeBytes, ok := stats["db_size_bytes"].(int64); ok {
+		stats["db_size_human"] = formatBytes(sizeBytes)
 	}
 
 	return c.JSON(fiber.Map{
