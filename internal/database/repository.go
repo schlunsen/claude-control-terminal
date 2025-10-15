@@ -744,12 +744,12 @@ func (r *Repository) DeleteAllClaudeCommands() error {
 	return nil
 }
 
-// DeleteAllHistory removes all history records (user messages, shell commands, and claude commands)
+// DeleteAllHistory removes all history records (user messages, shell commands, claude commands, and notifications)
 func (r *Repository) DeleteAllHistory() error {
 	r.db.mu.Lock()
 	defer r.db.mu.Unlock()
 
-	// Delete from all three tables in a transaction
+	// Delete from all four tables in a transaction
 	tx, err := r.db.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -768,6 +768,10 @@ func (r *Repository) DeleteAllHistory() error {
 		return fmt.Errorf("failed to delete claude commands: %w", err)
 	}
 
+	if _, err := tx.Exec("DELETE FROM notifications"); err != nil {
+		return fmt.Errorf("failed to delete notifications: %w", err)
+	}
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -775,12 +779,12 @@ func (r *Repository) DeleteAllHistory() error {
 	return nil
 }
 
-// GetUniqueSessions retrieves all unique session IDs and names from all tables (user_messages, shell_commands, claude_commands)
+// GetUniqueSessions retrieves all unique session IDs and names from all tables (user_messages, shell_commands, claude_commands, notifications)
 func (r *Repository) GetUniqueSessions() ([]map[string]string, error) {
 	r.db.mu.RLock()
 	defer r.db.mu.RUnlock()
 
-	// Union all three tables to get unique sessions
+	// Union all four tables to get unique sessions
 	query := `
 		SELECT conversation_id, session_name, MAX(last_activity) as last_activity
 		FROM (
@@ -794,6 +798,10 @@ func (r *Repository) GetUniqueSessions() ([]map[string]string, error) {
 			UNION ALL
 			SELECT conversation_id, COALESCE(session_name, '') as session_name, executed_at as last_activity
 			FROM claude_commands
+			WHERE conversation_id != '' AND conversation_id IS NOT NULL
+			UNION ALL
+			SELECT conversation_id, COALESCE(session_name, '') as session_name, notified_at as last_activity
+			FROM notifications
 			WHERE conversation_id != '' AND conversation_id IS NOT NULL
 		)
 		GROUP BY conversation_id, session_name
@@ -820,4 +828,172 @@ func (r *Repository) GetUniqueSessions() ([]map[string]string, error) {
 	}
 
 	return sessions, nil
+}
+
+// RecordNotification saves a notification event
+func (r *Repository) RecordNotification(notif *Notification) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := `
+		INSERT INTO notifications (
+			conversation_id, session_name, notification_type, message, tool_name,
+			working_directory, git_branch, notified_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	result, err := r.db.db.Exec(
+		query,
+		notif.ConversationID,
+		notif.SessionName,
+		notif.NotificationType,
+		notif.Message,
+		notif.ToolName,
+		notif.WorkingDirectory,
+		notif.GitBranch,
+		notif.NotifiedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to record notification: %w", err)
+	}
+
+	id, _ := result.LastInsertId()
+	notif.ID = id
+
+	return nil
+}
+
+// GetNotifications retrieves notifications with optional filters
+func (r *Repository) GetNotifications(query *CommandHistoryQuery) ([]*Notification, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	sql := `
+		SELECT id, conversation_id, COALESCE(session_name, '') as session_name,
+		       notification_type, message, COALESCE(tool_name, '') as tool_name,
+		       working_directory, git_branch, notified_at, created_at
+		FROM notifications
+		WHERE 1=1
+	`
+
+	args := []interface{}{}
+
+	if query.ConversationID != "" {
+		sql += " AND conversation_id = ?"
+		args = append(args, query.ConversationID)
+	}
+
+	if query.StartDate != nil {
+		sql += " AND notified_at >= ?"
+		args = append(args, query.StartDate)
+	}
+
+	if query.EndDate != nil {
+		sql += " AND notified_at <= ?"
+		args = append(args, query.EndDate)
+	}
+
+	sql += " ORDER BY notified_at DESC"
+
+	if query.Limit > 0 {
+		sql += " LIMIT ?"
+		args = append(args, query.Limit)
+	}
+
+	if query.Offset > 0 {
+		sql += " OFFSET ?"
+		args = append(args, query.Offset)
+	}
+
+	rows, err := r.db.db.Query(sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query notifications: %w", err)
+	}
+	defer rows.Close()
+
+	var notifications []*Notification
+	for rows.Next() {
+		notif := &Notification{}
+		err := rows.Scan(
+			&notif.ID,
+			&notif.ConversationID,
+			&notif.SessionName,
+			&notif.NotificationType,
+			&notif.Message,
+			&notif.ToolName,
+			&notif.WorkingDirectory,
+			&notif.GitBranch,
+			&notif.NotifiedAt,
+			&notif.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan notification: %w", err)
+		}
+		notifications = append(notifications, notif)
+	}
+
+	return notifications, nil
+}
+
+// GetNotificationStats retrieves aggregated notification statistics
+func (r *Repository) GetNotificationStats() (*NotificationStats, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	stats := &NotificationStats{}
+
+	// Get total counts by type
+	query := `
+		SELECT
+			COUNT(*) as total,
+			SUM(CASE WHEN notification_type = 'permission_request' THEN 1 ELSE 0 END) as permission_requests,
+			SUM(CASE WHEN notification_type = 'idle_alert' THEN 1 ELSE 0 END) as idle_alerts,
+			SUM(CASE WHEN notification_type = 'other' THEN 1 ELSE 0 END) as other_notifications
+		FROM notifications
+	`
+
+	err := r.db.db.QueryRow(query).Scan(
+		&stats.TotalNotifications,
+		&stats.PermissionRequests,
+		&stats.IdleAlerts,
+		&stats.OtherNotifications,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get notification stats: %w", err)
+	}
+
+	// Get most requested tool
+	toolQuery := `
+		SELECT tool_name, COUNT(*) as count
+		FROM notifications
+		WHERE notification_type = 'permission_request' AND tool_name IS NOT NULL AND tool_name != ''
+		GROUP BY tool_name
+		ORDER BY count DESC
+		LIMIT 1
+	`
+
+	err = r.db.db.QueryRow(toolQuery).Scan(&stats.MostRequestedTool, &stats.MostRequestedToolCount)
+	if err != nil {
+		// If no tools found, that's ok - leave fields empty/zero
+		stats.MostRequestedTool = ""
+		stats.MostRequestedToolCount = 0
+	}
+
+	return stats, nil
+}
+
+// DeleteAllNotifications removes all notifications
+func (r *Repository) DeleteAllNotifications() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM notifications"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all notifications: %w", err)
+	}
+
+	return nil
 }

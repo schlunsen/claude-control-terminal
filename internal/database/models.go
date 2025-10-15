@@ -101,3 +101,27 @@ type ProviderConfig struct {
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
+
+// Notification represents a notification event (permission requests, idle alerts)
+type Notification struct {
+	ID               int64     `json:"id"`
+	ConversationID   string    `json:"conversation_id"`
+	SessionName      string    `json:"session_name,omitempty"`
+	NotificationType string    `json:"notification_type"` // 'permission_request', 'idle_alert', 'other'
+	Message          string    `json:"message"`
+	ToolName         string    `json:"tool_name,omitempty"`
+	WorkingDirectory string    `json:"working_directory,omitempty"`
+	GitBranch        string    `json:"git_branch,omitempty"`
+	NotifiedAt       time.Time `json:"notified_at"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+// NotificationStats represents aggregated notification statistics
+type NotificationStats struct {
+	TotalNotifications     int64  `json:"total_notifications"`
+	PermissionRequests     int64  `json:"permission_requests"`
+	IdleAlerts             int64  `json:"idle_alerts"`
+	OtherNotifications     int64  `json:"other_notifications"`
+	MostRequestedTool      string `json:"most_requested_tool"`
+	MostRequestedToolCount int64  `json:"most_requested_tool_count"`
+}
