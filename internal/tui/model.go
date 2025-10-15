@@ -3,7 +3,9 @@ package tui
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -462,6 +464,12 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h", "H":
 		// Toggle all logging hooks (user-prompt, tool, notification)
 		return m, toggleHookCmd(m.hookLoggerEnabled, m.hookToolLoggerEnabled, m.hookNotificationEnabled)
+	case "o", "O":
+		// Open analytics dashboard in browser
+		if m.analyticsEnabled {
+			openBrowser("http://localhost:3333")
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -893,7 +901,11 @@ func (m Model) viewMainScreen() string {
 	b.WriteString(SubtitleStyle.Render(details) + "\n")
 
 	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Logging Hooks • Q/Esc: Quit"))
+	if m.analyticsEnabled {
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • O: Open Dashboard • H: Hooks • Q/Esc: Quit"))
+	} else {
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Logging Hooks • Q/Esc: Quit"))
+	}
 
 	content := BoxStyle.Render(b.String())
 
@@ -1670,4 +1682,20 @@ func toggleHookCmd(userPromptEnabled, toolEnabled, notificationEnabled bool) tea
 			}
 		}
 	}
+}
+
+// openBrowser opens the specified URL in the default browser
+func openBrowser(url string) error {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", url)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default: // linux, freebsd, openbsd, netbsd
+		cmd = exec.Command("xdg-open", url)
+	}
+
+	return cmd.Start()
 }

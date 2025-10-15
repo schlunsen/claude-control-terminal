@@ -49,7 +49,13 @@
         </div>
         <div class="activity-content">{{ getDisplayText(item) }}</div>
         <div class="activity-meta">
-          <span v-if="item.session_name" class="meta-item">
+          <span v-if="item.session_name" class="meta-item session-item">
+            <img
+              :src="useCharacterAvatar(item.session_name).avatar"
+              :alt="useCharacterAvatar(item.session_name).name"
+              :title="useCharacterAvatar(item.session_name).name"
+              class="session-avatar"
+            />
             <span class="meta-label">Session:</span> {{ item.session_name }}
           </span>
           <span v-if="item.git_branch" class="meta-item">
@@ -446,6 +452,27 @@ onMounted(async () => {
   gap: 4px;
 }
 
+.meta-item.session-item {
+  gap: 8px;
+}
+
+.session-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: var(--bg-primary);
+  object-fit: cover;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.session-avatar:hover {
+  transform: scale(1.1);
+  border-color: var(--accent-purple);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 .meta-label {
   color: var(--text-muted);
 }
@@ -482,6 +509,11 @@ onMounted(async () => {
 
   .activity-item {
     padding: 12px;
+  }
+
+  .session-avatar {
+    width: 28px;
+    height: 28px;
   }
 }
 </style>
