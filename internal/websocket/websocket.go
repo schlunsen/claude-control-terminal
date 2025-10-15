@@ -5,6 +5,7 @@ package websocket
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -167,10 +168,31 @@ func (h *Hub) HandleWebSocket() func(*websocket.Conn) {
 
 // SendUpdate sends an update notification to all clients.
 // This is a convenience method that formats the update as JSON.
+// Deprecated: Use BroadcastData for sending updates with data payloads.
 func (h *Hub) SendUpdate(updateType string, data interface{}) {
 	// Note: data parameter is currently unused for simplicity
 	// In production, consider proper JSON marshaling with encoding/json
 	_ = data
 	message := []byte(fmt.Sprintf(`{"type":"%s","time":"%s"}`, updateType, time.Now().Format(time.RFC3339)))
 	h.Broadcast(message)
+}
+
+// BroadcastData sends a structured event with data payload to all connected clients.
+// It marshals the data into JSON and includes the event type and timestamp.
+// This is the preferred method for sending real-time updates with actual data.
+func (h *Hub) BroadcastData(eventType string, data interface{}) {
+	payload := map[string]interface{}{
+		"event":     eventType,
+		"data":      data,
+		"timestamp": time.Now().Format(time.RFC3339),
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		// Log error but don't block - WebSocket updates are non-critical
+		fmt.Printf("Error marshaling WebSocket data: %v\n", err)
+		return
+	}
+
+	h.Broadcast(jsonData)
 }

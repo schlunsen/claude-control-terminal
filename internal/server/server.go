@@ -298,8 +298,11 @@ func (s *Server) handleResetArchive(c *fiber.Ctx) error {
 	s.processDetector.ClearCache()
 	s.shellDetector.ClearCache()
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"archive"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("reset_archive", fiber.Map{
+		"action": "archive",
+		"message": "All conversations have been archived",
+	})
 
 	return c.JSON(fiber.Map{
 		"status":  "archived",
@@ -326,8 +329,11 @@ func (s *Server) handleResetClear(c *fiber.Ctx) error {
 	// Clear any soft reset
 	s.resetTracker.ClearResetPoint()
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"clear"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("reset_clear", fiber.Map{
+		"action": "clear",
+		"message": "All conversations have been permanently deleted",
+	})
 
 	return c.JSON(fiber.Map{
 		"status":  "cleared",
@@ -360,8 +366,13 @@ func (s *Server) handleResetSoft(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"soft"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("reset_soft", fiber.Map{
+		"action": "soft",
+		"message": "Soft reset applied",
+		"previousTokens": totalTokens,
+		"previousConversations": len(conversations),
+	})
 
 	return c.JSON(fiber.Map{
 		"status":         "reset",
@@ -387,8 +398,11 @@ func (s *Server) handleClearReset(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"cleared"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("reset_cleared", fiber.Map{
+		"action": "cleared",
+		"message": "Reset point cleared - showing original counts",
+	})
 
 	return c.JSON(fiber.Map{
 		"status":  "cleared",
@@ -671,8 +685,8 @@ func (s *Server) handleRecordUserPrompt(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"prompt_recorded"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("prompt_recorded", msg)
 
 	return c.JSON(fiber.Map{
 		"status":  "recorded",
@@ -692,8 +706,10 @@ func (s *Server) handleClearAllHistory(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"history_cleared"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("history_cleared", fiber.Map{
+		"message": "All history deleted",
+	})
 
 	return c.JSON(fiber.Map{
 		"status":  "cleared",
@@ -753,8 +769,11 @@ func (s *Server) handleRecordShellCommand(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"command_recorded","type":"shell"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("command_recorded", fiber.Map{
+		"type": "shell",
+		"data": cmd,
+	})
 
 	return c.JSON(fiber.Map{
 		"status": "recorded",
@@ -814,8 +833,11 @@ func (s *Server) handleRecordClaudeCommand(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"command_recorded","type":"claude"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("command_recorded", fiber.Map{
+		"type": "claude",
+		"data": cmd,
+	})
 
 	return c.JSON(fiber.Map{
 		"status": "recorded",
@@ -999,8 +1021,8 @@ func (s *Server) handleRecordNotification(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"notification_recorded","type":"` + req.NotificationType + `"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("notification_recorded", notif)
 
 	return c.JSON(fiber.Map{
 		"status": "recorded",
@@ -1053,8 +1075,10 @@ func (s *Server) handleClearNotifications(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"notifications_cleared"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("notifications_cleared", fiber.Map{
+		"message": "All notifications deleted",
+	})
 
 	return c.JSON(fiber.Map{
 		"status":  "cleared",
