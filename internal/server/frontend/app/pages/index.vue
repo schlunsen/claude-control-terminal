@@ -37,22 +37,23 @@
         <ResetControls />
       </section>
 
-      <!-- Activity History -->
-      <ActivityHistory />
-
-      <!-- Claude Processes and Background Shells (side-by-side) -->
-      <div class="grid-2">
-        <ClaudeProcesses />
-        <BackgroundShells />
+      <!-- Main Dashboard Grid -->
+      <div class="dashboard-grid">
+        <!-- Left Column -->
+        <div class="dashboard-column">
+          <ActivityHistory />
+          <NotificationStats />
+        </div>
+        
+        <!-- Right Column -->
+        <div class="dashboard-column">
+          <!-- Claude Processes and Background Shells -->
+          <div class="processes-grid">
+            <ClaudeProcesses />
+            <BackgroundShells />
+          </div>
+        </div>
       </div>
-
-      
-
-      <!-- Notification Stats -->
-      <NotificationStats />
-
-      <!-- API Endpoints -->
-      <ApiEndpoints />
 
       <!-- Footer -->
       <footer class="footer">
@@ -116,19 +117,20 @@ onMounted(() => {
 
 <style scoped>
 .dashboard {
-  padding: 40px 20px;
+  padding: 20px;
   background: var(--bg-primary);
   min-height: calc(100vh - 60px);
   transition: background-color 0.3s ease;
 }
 
 .container {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 header {
-  margin-bottom: 60px;
+  margin-bottom: 40px;
 }
 
 header h1 {
@@ -218,11 +220,24 @@ header h1 {
   font-weight: 400;
 }
 
-.grid-2 {
+/* Dashboard Layout */
+.dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
   margin-bottom: 24px;
+}
+
+.dashboard-column {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.processes-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
 }
 
 .footer {
@@ -234,13 +249,24 @@ header h1 {
   font-size: 0.8125rem;
 }
 
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .processes-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+}
+
 @media (max-width: 768px) {
   .dashboard {
-    padding: 20px 10px;
+    padding: 15px;
   }
 
   header {
-    margin-bottom: 40px;
+    margin-bottom: 30px;
   }
 
   header h1 {
@@ -252,8 +278,14 @@ header h1 {
     gap: 16px;
   }
 
-  .grid-2 {
+  .dashboard-grid {
     grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .processes-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   .section {

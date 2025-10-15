@@ -219,8 +219,8 @@ onMounted(async () => {
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 32px;
-  margin-bottom: 24px;
+  padding: 24px;
+  height: fit-content;
   transition: all 0.3s ease;
 }
 
@@ -320,7 +320,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-height: 600px;
+  max-height: 70vh;
   overflow-y: auto;
   padding-right: 8px;
 }

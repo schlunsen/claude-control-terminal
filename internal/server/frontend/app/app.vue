@@ -41,9 +41,8 @@ const { isDark } = useDarkMode()
 }
 
 .navbar-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 2rem;
+  width: 100%;
+  padding: 0 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -77,7 +76,7 @@ const { isDark } = useDarkMode()
   }
 
   .navbar-container {
-    padding: 0 1rem;
+    padding: 0 15px;
   }
 
   .nav-brand {
@@ -95,7 +94,7 @@ const { isDark } = useDarkMode()
 
 @media (max-width: 480px) {
   .navbar-container {
-    padding: 0 0.75rem;
+    padding: 0 15px;
   }
 }
 </style>
