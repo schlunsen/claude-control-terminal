@@ -120,6 +120,10 @@ fi
 
 SESSION_NAME="${SESSION_NAMES[$INDEX]}"
 
+# Extract model information from environment variables
+MODEL_NAME="${ANTHROPIC_MODEL:-}"
+MODEL_PROVIDER="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
+
 # Analytics server endpoint
 NOTIFICATION_ENDPOINT="http://localhost:3333/api/notifications"
 
@@ -134,6 +138,8 @@ if command -v jq &> /dev/null; then
         --arg commandDetails "$COMMAND_DETAILS" \
         --arg cwd "$CWD" \
         --arg branch "$GIT_BRANCH" \
+        --arg modelProvider "$MODEL_PROVIDER" \
+        --arg modelName "$MODEL_NAME" \
         '{
             session_id: $session,
             session_name: $sessionName,
@@ -142,7 +148,9 @@ if command -v jq &> /dev/null; then
             tool_name: $toolName,
             command_details: $commandDetails,
             cwd: $cwd,
-            branch: $branch
+            branch: $branch,
+            model_provider: $modelProvider,
+            model_name: $modelName
         }')
 else
     # Fallback: basic JSON (escape issues possible)
@@ -155,7 +163,9 @@ else
   "tool_name": "$TOOL_NAME",
   "command_details": "$COMMAND_DETAILS",
   "cwd": "$CWD",
-  "branch": "$GIT_BRANCH"
+  "branch": "$GIT_BRANCH",
+  "model_provider": "$MODEL_PROVIDER",
+  "model_name": "$MODEL_NAME"
 }
 EOF
 )

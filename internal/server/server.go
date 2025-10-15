@@ -30,6 +30,7 @@ type Server struct {
 	fileWatcher          *analytics.FileWatcher
 	wsHub                *ws.Hub
 	resetTracker         *analytics.ResetTracker
+	modelProviderLookup  *analytics.ModelProviderLookup
 	db                   *database.Database
 	repo                 *database.Repository
 	claudeDir            string
@@ -84,6 +85,7 @@ func (s *Server) Setup() error {
 	s.processDetector = analytics.NewProcessDetector()
 	s.shellDetector = analytics.NewShellDetector()
 	s.resetTracker = analytics.NewResetTracker(s.claudeDir)
+	s.modelProviderLookup = analytics.NewModelProviderLookup()
 
 	// Initialize WebSocket hub
 	s.wsHub = ws.NewHub()
@@ -683,6 +685,8 @@ func (s *Server) handleRecordUserPrompt(c *fiber.Ctx) error {
 		Prompt           string `json:"prompt"`
 		WorkingDirectory string `json:"cwd"`
 		GitBranch        string `json:"branch"`
+		ModelProvider    string `json:"model_provider"`
+		ModelName        string `json:"model_name"`
 	}
 
 	var req RecordPromptRequest
@@ -699,6 +703,21 @@ func (s *Server) handleRecordUserPrompt(c *fiber.Ctx) error {
 		})
 	}
 
+	// Use model info from request, fallback to Unknown if not provided
+	modelProvider := req.ModelProvider
+	modelName := req.ModelName
+	if modelProvider == "" {
+		modelProvider = "Unknown"
+	}
+	if modelName == "" {
+		modelName = "Unknown"
+	}
+
+	// Translate URL-based provider to human-readable name
+	if s.modelProviderLookup != nil {
+		modelProvider = s.modelProviderLookup.GetProviderNameFromModelInfo(modelProvider, modelName)
+	}
+
 	// Create user message record
 	msg := &database.UserMessage{
 		ConversationID:   req.SessionID,
@@ -706,6 +725,8 @@ func (s *Server) handleRecordUserPrompt(c *fiber.Ctx) error {
 		Message:          req.Prompt,
 		WorkingDirectory: req.WorkingDirectory,
 		GitBranch:        req.GitBranch,
+		ModelProvider:    modelProvider,
+		ModelName:        modelName,
 		MessageLength:    len(req.Prompt),
 		SubmittedAt:      time.Now(),
 	}
@@ -790,6 +811,8 @@ func (s *Server) handleRecordShellCommand(c *fiber.Ctx) error {
 		Description      string `json:"description"`
 		WorkingDirectory string `json:"cwd"`
 		GitBranch        string `json:"branch"`
+		ModelProvider    string `json:"model_provider"`
+		ModelName        string `json:"model_name"`
 		ExitCode         *int   `json:"exit_code"`
 		Stdout           string `json:"stdout"`
 		Stderr           string `json:"stderr"`
@@ -810,6 +833,21 @@ func (s *Server) handleRecordShellCommand(c *fiber.Ctx) error {
 		})
 	}
 
+	// Use model info from request, fallback to Unknown if not provided
+	modelProvider := req.ModelProvider
+	modelName := req.ModelName
+	if modelProvider == "" {
+		modelProvider = "Unknown"
+	}
+	if modelName == "" {
+		modelName = "Unknown"
+	}
+
+	// Translate URL-based provider to human-readable name
+	if s.modelProviderLookup != nil {
+		modelProvider = s.modelProviderLookup.GetProviderNameFromModelInfo(modelProvider, modelName)
+	}
+
 	// Create shell command record
 	cmd := &database.ShellCommand{
 		ConversationID:   req.SessionID,
@@ -818,6 +856,8 @@ func (s *Server) handleRecordShellCommand(c *fiber.Ctx) error {
 		Description:      req.Description,
 		WorkingDirectory: req.WorkingDirectory,
 		GitBranch:        req.GitBranch,
+		ModelProvider:    modelProvider,
+		ModelName:        modelName,
 		ExitCode:         req.ExitCode,
 		Stdout:           req.Stdout,
 		Stderr:           req.Stderr,
@@ -855,6 +895,8 @@ func (s *Server) handleRecordClaudeCommand(c *fiber.Ctx) error {
 		Result           string `json:"result"`
 		WorkingDirectory string `json:"cwd"`
 		GitBranch        string `json:"branch"`
+		ModelProvider    string `json:"model_provider"`
+		ModelName        string `json:"model_name"`
 		Success          bool   `json:"success"`
 		ErrorMessage     string `json:"error_message"`
 		DurationMs       *int   `json:"duration_ms"`
@@ -874,6 +916,21 @@ func (s *Server) handleRecordClaudeCommand(c *fiber.Ctx) error {
 		})
 	}
 
+	// Use model info from request, fallback to Unknown if not provided
+	modelProvider := req.ModelProvider
+	modelName := req.ModelName
+	if modelProvider == "" {
+		modelProvider = "Unknown"
+	}
+	if modelName == "" {
+		modelName = "Unknown"
+	}
+
+	// Translate URL-based provider to human-readable name
+	if s.modelProviderLookup != nil {
+		modelProvider = s.modelProviderLookup.GetProviderNameFromModelInfo(modelProvider, modelName)
+	}
+
 	// Create Claude command record
 	cmd := &database.ClaudeCommand{
 		ConversationID:   req.SessionID,
@@ -883,6 +940,8 @@ func (s *Server) handleRecordClaudeCommand(c *fiber.Ctx) error {
 		Result:           req.Result,
 		WorkingDirectory: req.WorkingDirectory,
 		GitBranch:        req.GitBranch,
+		ModelProvider:    modelProvider,
+		ModelName:        modelName,
 		Success:          req.Success,
 		ErrorMessage:     req.ErrorMessage,
 		DurationMs:       req.DurationMs,
@@ -1048,6 +1107,8 @@ func (s *Server) handleRecordNotification(c *fiber.Ctx) error {
 		CommandDetails   string `json:"command_details"`
 		WorkingDirectory string `json:"cwd"`
 		GitBranch        string `json:"branch"`
+		ModelProvider    string `json:"model_provider"`
+		ModelName        string `json:"model_name"`
 	}
 
 	var req RecordNotificationRequest
@@ -1064,6 +1125,21 @@ func (s *Server) handleRecordNotification(c *fiber.Ctx) error {
 		})
 	}
 
+	// Use model info from request, fallback to Unknown if not provided
+	modelProvider := req.ModelProvider
+	modelName := req.ModelName
+	if modelProvider == "" {
+		modelProvider = "Unknown"
+	}
+	if modelName == "" {
+		modelName = "Unknown"
+	}
+
+	// Translate URL-based provider to human-readable name
+	if s.modelProviderLookup != nil {
+		modelProvider = s.modelProviderLookup.GetProviderNameFromModelInfo(modelProvider, modelName)
+	}
+
 	// Create notification record
 	notif := &database.Notification{
 		ConversationID:   req.SessionID,
@@ -1074,6 +1150,8 @@ func (s *Server) handleRecordNotification(c *fiber.Ctx) error {
 		CommandDetails:   req.CommandDetails,
 		WorkingDirectory: req.WorkingDirectory,
 		GitBranch:        req.GitBranch,
+		ModelProvider:    modelProvider,
+		ModelName:        modelName,
 		NotifiedAt:       time.Now(),
 	}
 

@@ -119,6 +119,11 @@
             />
             <span class="meta-label">Session:</span> {{ item.session_name }}
           </span>
+          <span v-if="item.model_provider"
+                :class="['model-badge', `model-${item.model_provider.toLowerCase()}`]"
+                :title="`Model: ${item.model_name || 'Unknown'}`">
+            {{ item.model_provider }}
+          </span>
           <span v-if="item.git_branch" class="meta-item">
             <span class="meta-label">Branch:</span> {{ item.git_branch }}
           </span>
@@ -154,6 +159,8 @@ on('onNotification', (data: any) => {
     type: 'notification',
     ...data,
     notification_type: data.notification_type,
+    model_provider: data.model_provider,
+    model_name: data.model_name,
     timestamp: new Date(data.notified_at || data.timestamp)
   })
 })
@@ -167,6 +174,8 @@ on('onPrompt', (data: any) => {
     git_branch: data.git_branch,
     conversation_id: data.conversation_id,
     working_directory: data.working_directory,
+    model_provider: data.model_provider,
+    model_name: data.model_name,
     timestamp: new Date(data.submitted_at || data.timestamp)
   })
 })
@@ -197,6 +206,8 @@ on('onCommand', (message: any) => {
     git_branch: cmd.git_branch,
     conversation_id: cmd.conversation_id,
     working_directory: cmd.working_directory,
+    model_provider: cmd.model_provider,
+    model_name: cmd.model_name,
     exit_code: cmd.exit_code,
     success: cmd.success,
     description: cmd.description,
@@ -639,6 +650,162 @@ onUnmounted(() => {
 .meta-item.error {
   color: var(--status-error);
   font-weight: 600;
+}
+
+/* Model Badge Styles - Using CCT website color palette */
+.model-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
+  background: transparent;
+  cursor: help;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+
+/* Anthropic (Claude) - Purple (#a78bfa) */
+.model-badge.model-anthropic {
+  color: #a78bfa;
+  border: 1.5px solid #a78bfa;
+}
+
+.model-badge.model-anthropic:hover {
+  background: #a78bfa;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(167, 139, 250, 0.3);
+  border-color: transparent;
+}
+
+/* OpenAI - Green (#4ade80) */
+.model-badge.model-openai {
+  color: #4ade80;
+  border: 1.5px solid #4ade80;
+}
+
+.model-badge.model-openai:hover {
+  background: #4ade80;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
+  border-color: transparent;
+}
+
+/* DeepSeek - Cyan (#67e8f9) */
+.model-badge.model-deepseek {
+  color: #67e8f9;
+  border: 1.5px solid #67e8f9;
+}
+
+.model-badge.model-deepseek:hover {
+  background: #67e8f9;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(103, 232, 249, 0.3);
+  border-color: transparent;
+}
+
+/* Google (Gemini) - Yellow (#fbbf24) */
+.model-badge.model-google {
+  color: #fbbf24;
+  border: 1.5px solid #fbbf24;
+}
+
+.model-badge.model-google:hover {
+  background: #fbbf24;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.3);
+  border-color: transparent;
+}
+
+/* Mistral - Purple (alt shade) */
+.model-badge.model-mistral {
+  color: #c084fc;
+  border: 1.5px solid #c084fc;
+}
+
+.model-badge.model-mistral:hover {
+  background: #c084fc;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(192, 132, 252, 0.3);
+  border-color: transparent;
+}
+
+/* Cohere - Purple (lighter) */
+.model-badge.model-cohere {
+  color: #d8b4fe;
+  border: 1.5px solid #d8b4fe;
+}
+
+.model-badge.model-cohere:hover {
+  background: #d8b4fe;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(216, 180, 254, 0.3);
+  border-color: transparent;
+}
+
+/* Meta (Llama) - Cyan (darker) */
+.model-badge.model-meta {
+  color: #06b6d4;
+  border: 1.5px solid #06b6d4;
+}
+
+.model-badge.model-meta:hover {
+  background: #06b6d4;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
+  border-color: transparent;
+}
+
+/* xAI (Grok) - Green (darker) */
+.model-badge.model-xai {
+  color: #22c55e;
+  border: 1.5px solid #22c55e;
+}
+
+.model-badge.model-xai:hover {
+  background: #22c55e;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+  border-color: transparent;
+}
+
+/* Kimi - Yellow (darker) */
+.model-badge.model-kimi {
+  color: #f59e0b;
+  border: 1.5px solid #f59e0b;
+}
+
+.model-badge.model-kimi:hover {
+  background: #f59e0b;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+  border-color: transparent;
+}
+
+/* Default fallback - Cyan (#67e8f9) */
+.model-badge:not([class*="model-"]) {
+  color: #67e8f9;
+  border: 1.5px solid #67e8f9;
+}
+
+.model-badge:not([class*="model-"]):hover {
+  background: #67e8f9;
+  color: var(--bg-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(103, 232, 249, 0.3);
+  border-color: transparent;
 }
 
 /* Session Selector Styles */

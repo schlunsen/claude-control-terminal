@@ -14,6 +14,8 @@ type ShellCommand struct {
 	Description      string    `json:"description,omitempty"`
 	WorkingDirectory string    `json:"working_directory,omitempty"`
 	GitBranch        string    `json:"git_branch,omitempty"`
+	ModelProvider    string    `json:"model_provider,omitempty"`
+	ModelName        string    `json:"model_name,omitempty"`
 	ExitCode         *int      `json:"exit_code,omitempty"`
 	Stdout           string    `json:"stdout,omitempty"`
 	Stderr           string    `json:"stderr,omitempty"`
@@ -32,6 +34,8 @@ type ClaudeCommand struct {
 	Result           string    `json:"result,omitempty"`     // JSON string
 	WorkingDirectory string    `json:"working_directory,omitempty"`
 	GitBranch        string    `json:"git_branch,omitempty"`
+	ModelProvider    string    `json:"model_provider,omitempty"`
+	ModelName        string    `json:"model_name,omitempty"`
 	Success          bool      `json:"success"`
 	ErrorMessage     string    `json:"error_message,omitempty"`
 	DurationMs       *int      `json:"duration_ms,omitempty"`
@@ -49,6 +53,8 @@ type Conversation struct {
 	TotalShellCommands  int       `json:"total_shell_commands"`
 	TotalTokens         int       `json:"total_tokens"`
 	Status              string    `json:"status"`
+	ModelProvider       string    `json:"model_provider,omitempty"`
+	ModelName           string    `json:"model_name,omitempty"`
 	CreatedAt           time.Time `json:"created_at"`
 	UpdatedAt           time.Time `json:"updated_at"`
 }
@@ -86,6 +92,8 @@ type UserMessage struct {
 	Message          string    `json:"message"`
 	WorkingDirectory string    `json:"working_directory,omitempty"`
 	GitBranch        string    `json:"git_branch,omitempty"`
+	ModelProvider    string    `json:"model_provider,omitempty"`
+	ModelName        string    `json:"model_name,omitempty"`
 	MessageLength    int       `json:"message_length"`
 	SubmittedAt      time.Time `json:"submitted_at"`
 	CreatedAt        time.Time `json:"created_at"`
@@ -113,6 +121,8 @@ type Notification struct {
 	CommandDetails   string    `json:"command_details,omitempty"` // Actual command/parameters that required permission
 	WorkingDirectory string    `json:"working_directory,omitempty"`
 	GitBranch        string    `json:"git_branch,omitempty"`
+	ModelProvider    string    `json:"model_provider,omitempty"`
+	ModelName        string    `json:"model_name,omitempty"`
 	NotifiedAt       time.Time `json:"notified_at"`
 	CreatedAt        time.Time `json:"created_at"`
 }
