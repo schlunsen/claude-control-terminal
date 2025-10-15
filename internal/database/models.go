@@ -9,6 +9,7 @@ import "time"
 type ShellCommand struct {
 	ID               int64     `json:"id"`
 	ConversationID   string    `json:"conversation_id"`
+	SessionName      string    `json:"session_name,omitempty"`
 	Command          string    `json:"command"`
 	Description      string    `json:"description,omitempty"`
 	WorkingDirectory string    `json:"working_directory,omitempty"`
@@ -25,6 +26,7 @@ type ShellCommand struct {
 type ClaudeCommand struct {
 	ID               int64     `json:"id"`
 	ConversationID   string    `json:"conversation_id"`
+	SessionName      string    `json:"session_name,omitempty"`
 	ToolName         string    `json:"tool_name"`
 	Parameters       string    `json:"parameters,omitempty"` // JSON string
 	Result           string    `json:"result,omitempty"`     // JSON string
@@ -80,6 +82,7 @@ type CommandHistoryQuery struct {
 type UserMessage struct {
 	ID               int64     `json:"id"`
 	ConversationID   string    `json:"conversation_id,omitempty"`
+	SessionName      string    `json:"session_name,omitempty"`
 	Message          string    `json:"message"`
 	WorkingDirectory string    `json:"working_directory,omitempty"`
 	GitBranch        string    `json:"git_branch,omitempty"`
@@ -97,4 +100,29 @@ type ProviderConfig struct {
 	IsCurrent  bool      `json:"is_current"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// Notification represents a notification event (permission requests, idle alerts)
+type Notification struct {
+	ID               int64     `json:"id"`
+	ConversationID   string    `json:"conversation_id"`
+	SessionName      string    `json:"session_name,omitempty"`
+	NotificationType string    `json:"notification_type"` // 'permission_request', 'idle_alert', 'other'
+	Message          string    `json:"message"`
+	ToolName         string    `json:"tool_name,omitempty"`
+	CommandDetails   string    `json:"command_details,omitempty"` // Actual command/parameters that required permission
+	WorkingDirectory string    `json:"working_directory,omitempty"`
+	GitBranch        string    `json:"git_branch,omitempty"`
+	NotifiedAt       time.Time `json:"notified_at"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+// NotificationStats represents aggregated notification statistics
+type NotificationStats struct {
+	TotalNotifications     int64  `json:"total_notifications"`
+	PermissionRequests     int64  `json:"permission_requests"`
+	IdleAlerts             int64  `json:"idle_alerts"`
+	OtherNotifications     int64  `json:"other_notifications"`
+	MostRequestedTool      string `json:"most_requested_tool"`
+	MostRequestedToolCount int64  `json:"most_requested_tool_count"`
 }

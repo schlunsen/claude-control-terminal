@@ -19,6 +19,27 @@ run:
 analytics:
     @go run ./cmd/cct --analytics
 
+# Frontend development commands
+# Run Nuxt frontend in development mode
+frontend-dev:
+    @echo "Starting Nuxt development server..."
+    @cd internal/server/frontend && npm run dev
+
+# Build Nuxt frontend for production
+frontend-build:
+    @echo "Building Nuxt frontend..."
+    @cd internal/server/frontend && npm run build
+    @echo "✅ Frontend build complete"
+
+# Install Nuxt frontend dependencies
+frontend-install:
+    @echo "Installing frontend dependencies..."
+    @cd internal/server/frontend && npm install
+    @echo "✅ Frontend dependencies installed"
+
+# Full development workflow: build frontend then start analytics
+dev-full: frontend-build build analytics
+
 # Run with agents flag
 agents:
     @go run ./cmd/cct --agents

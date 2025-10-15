@@ -202,6 +202,30 @@ func (d *Database) Stats() (map[string]interface{}, error) {
 	return stats, nil
 }
 
+// Vacuum reclaims unused disk space by rebuilding the database file
+func (d *Database) Vacuum() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// First, run VACUUM to rebuild the database
+	_, err := d.db.Exec("VACUUM")
+	if err != nil {
+		return fmt.Errorf("failed to vacuum database: %w", err)
+	}
+
+	// Then checkpoint the WAL to ensure all data is written to main DB file
+	_, err = d.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+	if err != nil {
+		return fmt.Errorf("failed to checkpoint WAL after vacuum: %w", err)
+	}
+
+	return nil
+}
+
 // runMigrations runs database migrations for existing databases
 func runMigrations(db *sql.DB) error {
 	// Migration 1: Add model_name column to providers table if it doesn't exist
@@ -221,6 +245,117 @@ func runMigrations(db *sql.DB) error {
 		_, err := db.Exec("ALTER TABLE providers ADD COLUMN model_name TEXT")
 		if err != nil {
 			return fmt.Errorf("failed to add model_name column: %w", err)
+		}
+	}
+
+	// Migration 2: Add session_name column to user_messages table if it doesn't exist
+	var sessionNameExists bool
+	sessionQuery := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('user_messages')
+		WHERE name='session_name'
+	`
+	if err := db.QueryRow(sessionQuery).Scan(&sessionNameExists); err != nil {
+		// If the user_messages table doesn't exist yet, that's fine - it will be created by schema.sql
+		return nil
+	}
+
+	if !sessionNameExists {
+		// Add the session_name column
+		_, err := db.Exec("ALTER TABLE user_messages ADD COLUMN session_name TEXT")
+		if err != nil {
+			return fmt.Errorf("failed to add session_name column to user_messages: %w", err)
+		}
+	}
+
+	// Migration 3: Add session_name column to shell_commands table if it doesn't exist
+	var shellSessionNameExists bool
+	shellSessionQuery := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('shell_commands')
+		WHERE name='session_name'
+	`
+	if err := db.QueryRow(shellSessionQuery).Scan(&shellSessionNameExists); err == nil {
+		if !shellSessionNameExists {
+			_, err := db.Exec("ALTER TABLE shell_commands ADD COLUMN session_name TEXT")
+			if err != nil {
+				return fmt.Errorf("failed to add session_name column to shell_commands: %w", err)
+			}
+		}
+	}
+
+	// Migration 4: Add session_name column to claude_commands table if it doesn't exist
+	var claudeSessionNameExists bool
+	claudeSessionQuery := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('claude_commands')
+		WHERE name='session_name'
+	`
+	if err := db.QueryRow(claudeSessionQuery).Scan(&claudeSessionNameExists); err == nil {
+		if !claudeSessionNameExists {
+			_, err := db.Exec("ALTER TABLE claude_commands ADD COLUMN session_name TEXT")
+			if err != nil {
+				return fmt.Errorf("failed to add session_name column to claude_commands: %w", err)
+			}
+		}
+	}
+
+	// Migration 5: Create notifications table if it doesn't exist
+	var notificationsTableExists bool
+	notificationsQuery := `
+		SELECT COUNT(*) > 0
+		FROM sqlite_master
+		WHERE type='table' AND name='notifications'
+	`
+	if err := db.QueryRow(notificationsQuery).Scan(&notificationsTableExists); err == nil {
+		if !notificationsTableExists {
+			createNotificationsTable := `
+				CREATE TABLE IF NOT EXISTS notifications (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					conversation_id TEXT NOT NULL,
+					session_name TEXT,
+					notification_type TEXT NOT NULL,
+					message TEXT NOT NULL,
+					tool_name TEXT,
+					command_details TEXT,
+					working_directory TEXT,
+					git_branch TEXT,
+					notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+				);
+
+				CREATE INDEX IF NOT EXISTS idx_notifications_conversation
+					ON notifications(conversation_id, notified_at DESC);
+
+				CREATE INDEX IF NOT EXISTS idx_notifications_notified_at
+					ON notifications(notified_at DESC);
+
+				CREATE INDEX IF NOT EXISTS idx_notifications_type
+					ON notifications(notification_type, notified_at DESC);
+
+				CREATE INDEX IF NOT EXISTS idx_notifications_tool
+					ON notifications(tool_name, notified_at DESC) WHERE tool_name IS NOT NULL;
+			`
+			_, err := db.Exec(createNotificationsTable)
+			if err != nil {
+				return fmt.Errorf("failed to create notifications table: %w", err)
+			}
+		}
+	}
+
+	// Migration 6: Add command_details column to notifications table if it doesn't exist
+	var commandDetailsExists bool
+	commandDetailsQuery := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('notifications')
+		WHERE name='command_details'
+	`
+	if err := db.QueryRow(commandDetailsQuery).Scan(&commandDetailsExists); err == nil {
+		if !commandDetailsExists {
+			_, err := db.Exec("ALTER TABLE notifications ADD COLUMN command_details TEXT")
+			if err != nil {
+				return fmt.Errorf("failed to add command_details column to notifications: %w", err)
+			}
 		}
 	}
 

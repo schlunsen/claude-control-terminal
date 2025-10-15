@@ -4,13 +4,13 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"time"
 
 	"github.com/schlunsen/claude-control-terminal/internal/analytics"
 	"github.com/schlunsen/claude-control-terminal/internal/database"
+	"github.com/schlunsen/claude-control-terminal/internal/version"
 	ws "github.com/schlunsen/claude-control-terminal/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -35,9 +35,6 @@ type Server struct {
 	claudeDir            string
 	port                 int
 	quiet                bool // Suppress output when running in TUI
-	lastParsedTime       time.Time
-	parsingCancel        context.CancelFunc
-	parsingDone          chan struct{}
 }
 
 // NewServer creates a new Fiber server instance
@@ -92,17 +89,7 @@ func (s *Server) Setup() error {
 	s.wsHub = ws.NewHub()
 	go s.wsHub.Run()
 
-	// Parse existing conversations on startup (synchronously to ensure data loads before server starts)
-	if !s.quiet {
-		fmt.Println("📝 Parsing conversation history...")
-	}
-	s.parseConversations()
-
-	// Start periodic conversation parsing (asynchronously)
-	ctx, cancel := context.WithCancel(context.Background())
-	s.parsingCancel = cancel
-	s.parsingDone = make(chan struct{})
-	go s.periodicConversationParsing(ctx)
+	// File watcher removed - WebSocket updates triggered by database operations only
 
 	// Setup API routes
 	s.setupRoutes()
@@ -119,6 +106,9 @@ func (s *Server) setupRoutes() {
 
 	// Health check
 	api.Get("/health", s.handleHealth)
+
+	// Version info
+	api.Get("/version", s.handleGetVersion)
 
 	// Data endpoints
 	api.Get("/data", s.handleGetData)
@@ -138,10 +128,27 @@ func (s *Server) setupRoutes() {
 	api.Get("/reset/status", s.handleResetStatus)
 
 	// Command history endpoints
+	api.Get("/history/all", s.handleGetAllHistory)
 	api.Get("/history/shell", s.handleGetShellHistory)
 	api.Get("/history/claude", s.handleGetClaudeHistory)
 	api.Get("/history/stats", s.handleGetCommandStats)
+	api.Post("/commands/shell", s.handleRecordShellCommand)
+	api.Post("/commands/claude", s.handleRecordClaudeCommand)
+	api.Delete("/history", s.handleClearAllHistory)
 	api.Get("/db/stats", s.handleGetDBStats)
+
+	// User prompts endpoints
+	api.Get("/prompts", s.handleGetUserPrompts)
+	api.Get("/prompts/stats", s.handleGetPromptStats)
+	api.Get("/prompts/sessions", s.handleGetUniqueSessions)
+	api.Post("/prompts", s.handleRecordUserPrompt)
+	api.Delete("/prompts", s.handleClearAllHistory) // Alias for backward compatibility
+
+	// Notification endpoints
+	api.Post("/notifications", s.handleRecordNotification)
+	api.Get("/notifications", s.handleGetNotifications)
+	api.Get("/notifications/stats", s.handleGetNotificationStats)
+	api.Delete("/notifications", s.handleClearNotifications)
 
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
@@ -152,6 +159,15 @@ func (s *Server) handleHealth(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status": "ok",
 		"time":   time.Now(),
+	})
+}
+
+// Handler: Get version info
+func (s *Server) handleGetVersion(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"version": version.Version,
+		"name":    version.Name,
+		"time":    time.Now(),
 	})
 }
 
@@ -295,8 +311,11 @@ func (s *Server) handleResetArchive(c *fiber.Ctx) error {
 	s.processDetector.ClearCache()
 	s.shellDetector.ClearCache()
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"archive"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("reset_archive", fiber.Map{
+		"action": "archive",
+		"message": "All conversations have been archived",
+	})
 
 	return c.JSON(fiber.Map{
 		"status":  "archived",
@@ -323,8 +342,11 @@ func (s *Server) handleResetClear(c *fiber.Ctx) error {
 	// Clear any soft reset
 	s.resetTracker.ClearResetPoint()
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"clear"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("reset_clear", fiber.Map{
+		"action": "clear",
+		"message": "All conversations have been permanently deleted",
+	})
 
 	return c.JSON(fiber.Map{
 		"status":  "cleared",
@@ -357,8 +379,13 @@ func (s *Server) handleResetSoft(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"soft"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("reset_soft", fiber.Map{
+		"action": "soft",
+		"message": "Soft reset applied",
+		"previousTokens": totalTokens,
+		"previousConversations": len(conversations),
+	})
 
 	return c.JSON(fiber.Map{
 		"status":         "reset",
@@ -384,8 +411,11 @@ func (s *Server) handleClearReset(c *fiber.Ctx) error {
 		})
 	}
 
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"reset","action":"cleared"}`))
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("reset_cleared", fiber.Map{
+		"action": "cleared",
+		"message": "Reset point cleared - showing original counts",
+	})
 
 	return c.JSON(fiber.Map{
 		"status":  "cleared",
@@ -425,25 +455,10 @@ func (s *Server) Start() error {
 }
 
 // Shutdown gracefully shuts down the server and all its components.
-// It stops the file watcher, parsing goroutine, WebSocket hub, and closes the database.
+// It stops the file watcher, WebSocket hub, and closes the database.
 func (s *Server) Shutdown() error {
 	if !s.quiet {
 		fmt.Println("🛑 Shutting down server...")
-	}
-
-	// Stop periodic conversation parsing
-	if s.parsingCancel != nil {
-		s.parsingCancel()
-	}
-	if s.parsingDone != nil {
-		select {
-		case <-s.parsingDone:
-			// Parsing goroutine exited cleanly
-		case <-time.After(3 * time.Second):
-			if !s.quiet {
-				fmt.Println("⚠️  Warning: parsing goroutine did not exit cleanly")
-			}
-		}
 	}
 
 	// Stop file watcher
@@ -534,6 +549,20 @@ func (s *Server) handleGetCommandStats(c *fiber.Ctx) error {
 	})
 }
 
+// formatBytes converts bytes to human readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
 // Handler: Get database statistics
 func (s *Server) handleGetDBStats(c *fiber.Ctx) error {
 	stats, err := s.db.Stats()
@@ -543,6 +572,11 @@ func (s *Server) handleGetDBStats(c *fiber.Ctx) error {
 		})
 	}
 
+	// Add human-readable size if db_size_bytes exists
+	if sizeBytes, ok := stats["db_size_bytes"].(int64); ok {
+		stats["db_size_human"] = formatBytes(sizeBytes)
+	}
+
 	return c.JSON(fiber.Map{
 		"stats":     stats,
 		"db_path":   s.db.Path(),
@@ -550,40 +584,568 @@ func (s *Server) handleGetDBStats(c *fiber.Ctx) error {
 	})
 }
 
-// parseConversations parses all conversations and records tool usage
-func (s *Server) parseConversations() {
-	count, err := s.conversationParser.ParseAllConversations(s.claudeDir)
+
+// Handler: Get user prompts
+func (s *Server) handleGetUserPrompts(c *fiber.Ctx) error {
+	query := &database.CommandHistoryQuery{
+		ConversationID: c.Query("conversation_id"),
+		Limit:          c.QueryInt("limit", 100),
+		Offset:         c.QueryInt("offset", 0),
+	}
+
+	messages, err := s.repo.GetUserMessages(query)
 	if err != nil {
-		if !s.quiet {
-			fmt.Printf("⚠️  Error parsing conversations: %v\n", err)
-		}
-		return
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
 	}
 
-	if !s.quiet {
-		fmt.Printf("✅ Parsed %d conversation files\n", count)
-	}
-
-	s.lastParsedTime = time.Now()
-
-	// Broadcast update to WebSocket clients
-	s.wsHub.Broadcast([]byte(`{"event":"history_updated"}`))
+	return c.JSON(fiber.Map{
+		"prompts": messages,
+		"count":   len(messages),
+		"query":   query,
+	})
 }
 
-// periodicConversationParsing periodically parses new conversations every 5 minutes.
-// It runs until the context is cancelled via Shutdown().
-func (s *Server) periodicConversationParsing(ctx context.Context) {
-	defer close(s.parsingDone)
+// Handler: Get prompt statistics
+func (s *Server) handleGetPromptStats(c *fiber.Ctx) error {
+	// Get total count of prompts
+	allPrompts, err := s.repo.GetUserMessages(&database.CommandHistoryQuery{
+		Limit: 0, // No limit to get accurate count
+	})
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
 
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
+	totalPrompts := len(allPrompts)
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.parseConversations()
+	// Calculate average prompt length
+	totalLength := 0
+	if totalPrompts > 0 {
+		for _, msg := range allPrompts {
+			totalLength += msg.MessageLength
 		}
 	}
+
+	avgLength := 0
+	if totalPrompts > 0 {
+		avgLength = totalLength / totalPrompts
+	}
+
+	// Get unique conversations
+	conversationSet := make(map[string]bool)
+	for _, msg := range allPrompts {
+		if msg.ConversationID != "" {
+			conversationSet[msg.ConversationID] = true
+		}
+	}
+
+	// Get unique branches
+	branchSet := make(map[string]bool)
+	for _, msg := range allPrompts {
+		if msg.GitBranch != "" {
+			branchSet[msg.GitBranch] = true
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"total_prompts":      totalPrompts,
+		"avg_prompt_length":  avgLength,
+		"unique_conversations": len(conversationSet),
+		"unique_branches":    len(branchSet),
+		"timestamp":          time.Now(),
+	})
+}
+
+// Handler: Get unique sessions from user prompts
+func (s *Server) handleGetUniqueSessions(c *fiber.Ctx) error {
+	sessions, err := s.repo.GetUniqueSessions()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"sessions": sessions,
+		"count":    len(sessions),
+	})
+}
+
+// Handler: Record a new user prompt
+func (s *Server) handleRecordUserPrompt(c *fiber.Ctx) error {
+	// Parse request body
+	type RecordPromptRequest struct{
+		SessionID        string `json:"session_id"`
+		SessionName      string `json:"session_name"`
+		Prompt           string `json:"prompt"`
+		WorkingDirectory string `json:"cwd"`
+		GitBranch        string `json:"branch"`
+	}
+
+	var req RecordPromptRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.SessionID == "" || req.Prompt == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id and prompt are required",
+		})
+	}
+
+	// Create user message record
+	msg := &database.UserMessage{
+		ConversationID:   req.SessionID,
+		SessionName:      req.SessionName,
+		Message:          req.Prompt,
+		WorkingDirectory: req.WorkingDirectory,
+		GitBranch:        req.GitBranch,
+		MessageLength:    len(req.Prompt),
+		SubmittedAt:      time.Now(),
+	}
+
+	// Record the message
+	if err := s.repo.RecordUserMessage(msg); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to record prompt: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("prompt_recorded", msg)
+
+	return c.JSON(fiber.Map{
+		"status":  "recorded",
+		"id":      msg.ID,
+		"length":  msg.MessageLength,
+		"time":    msg.SubmittedAt,
+	})
+}
+
+// Handler: Clear all history (user prompts, shell commands, and claude commands)
+func (s *Server) handleClearAllHistory(c *fiber.Ctx) error {
+	// Get database size before clearing
+	var sizeBefore int64
+	if stats, err := s.db.Stats(); err == nil {
+		if size, ok := stats["db_size_bytes"].(int64); ok {
+			sizeBefore = size
+		}
+	}
+
+	err := s.repo.DeleteAllHistory()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":  err.Error(),
+			"status": "failed",
+		})
+	}
+
+	// Vacuum database to reclaim disk space
+	if !s.quiet {
+		fmt.Printf("🗑️  Vacuuming database to reclaim disk space (size before: %s)...\n", formatBytes(sizeBefore))
+	}
+	if err := s.db.Vacuum(); err != nil {
+		// Log the error but don't fail the request since data was deleted successfully
+		if !s.quiet {
+			fmt.Printf("⚠️  Warning: Failed to vacuum database after clearing history: %v\n", err)
+		}
+	} else {
+		// Get database size after vacuum
+		var sizeAfter int64
+		if stats, err := s.db.Stats(); err == nil {
+			if size, ok := stats["db_size_bytes"].(int64); ok {
+				sizeAfter = size
+			}
+		}
+		if !s.quiet {
+			fmt.Printf("✅ Database vacuum completed successfully (size after: %s, reduced by: %s)\n", 
+				formatBytes(sizeAfter), formatBytes(sizeBefore-sizeAfter))
+		}
+	}
+
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("history_cleared", fiber.Map{
+		"message": "All history deleted and database vacuumed",
+	})
+
+	return c.JSON(fiber.Map{
+		"status":  "cleared",
+		"message": "All history (prompts, shell commands, and Claude commands) have been deleted and database vacuumed",
+		"time":    time.Now(),
+	})
+}
+
+// Handler: Record a shell command
+func (s *Server) handleRecordShellCommand(c *fiber.Ctx) error {
+	type RecordShellCommandRequest struct {
+		SessionID        string `json:"session_id"`
+		SessionName      string `json:"session_name"`
+		Command          string `json:"command"`
+		Description      string `json:"description"`
+		WorkingDirectory string `json:"cwd"`
+		GitBranch        string `json:"branch"`
+		ExitCode         *int   `json:"exit_code"`
+		Stdout           string `json:"stdout"`
+		Stderr           string `json:"stderr"`
+		DurationMs       *int   `json:"duration_ms"`
+	}
+
+	var req RecordShellCommandRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.SessionID == "" || req.Command == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id and command are required",
+		})
+	}
+
+	// Create shell command record
+	cmd := &database.ShellCommand{
+		ConversationID:   req.SessionID,
+		SessionName:      req.SessionName,
+		Command:          req.Command,
+		Description:      req.Description,
+		WorkingDirectory: req.WorkingDirectory,
+		GitBranch:        req.GitBranch,
+		ExitCode:         req.ExitCode,
+		Stdout:           req.Stdout,
+		Stderr:           req.Stderr,
+		DurationMs:       req.DurationMs,
+		ExecutedAt:       time.Now(),
+	}
+
+	// Record the command
+	if err := s.repo.RecordShellCommand(cmd); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to record shell command: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("command_recorded", fiber.Map{
+		"type": "shell",
+		"data": cmd,
+	})
+
+	return c.JSON(fiber.Map{
+		"status": "recorded",
+		"id":     cmd.ID,
+		"time":   cmd.ExecutedAt,
+	})
+}
+
+// Handler: Record a Claude command
+func (s *Server) handleRecordClaudeCommand(c *fiber.Ctx) error {
+	type RecordClaudeCommandRequest struct {
+		SessionID        string `json:"session_id"`
+		SessionName      string `json:"session_name"`
+		ToolName         string `json:"tool_name"`
+		Parameters       string `json:"parameters"`
+		Result           string `json:"result"`
+		WorkingDirectory string `json:"cwd"`
+		GitBranch        string `json:"branch"`
+		Success          bool   `json:"success"`
+		ErrorMessage     string `json:"error_message"`
+		DurationMs       *int   `json:"duration_ms"`
+	}
+
+	var req RecordClaudeCommandRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.SessionID == "" || req.ToolName == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id and tool_name are required",
+		})
+	}
+
+	// Create Claude command record
+	cmd := &database.ClaudeCommand{
+		ConversationID:   req.SessionID,
+		SessionName:      req.SessionName,
+		ToolName:         req.ToolName,
+		Parameters:       req.Parameters,
+		Result:           req.Result,
+		WorkingDirectory: req.WorkingDirectory,
+		GitBranch:        req.GitBranch,
+		Success:          req.Success,
+		ErrorMessage:     req.ErrorMessage,
+		DurationMs:       req.DurationMs,
+		ExecutedAt:       time.Now(),
+	}
+
+	// Record the command
+	if err := s.repo.RecordClaudeCommand(cmd); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to record claude command: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("command_recorded", fiber.Map{
+		"type": "claude",
+		"data": cmd,
+	})
+
+	return c.JSON(fiber.Map{
+		"status": "recorded",
+		"id":     cmd.ID,
+		"time":   cmd.ExecutedAt,
+	})
+}
+
+// Handler: Get all history (unified endpoint for shell commands, claude commands, and user prompts)
+func (s *Server) handleGetAllHistory(c *fiber.Ctx) error {
+	conversationID := c.Query("conversation_id")
+	limit := c.QueryInt("limit", 100)
+	offset := c.QueryInt("offset", 0)
+
+	query := &database.CommandHistoryQuery{
+		ConversationID: conversationID,
+		Limit:          limit,
+		Offset:         offset,
+	}
+
+	// Fetch all four types
+	shellCommands, err := s.repo.GetShellCommands(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get shell commands: %v", err),
+		})
+	}
+
+	claudeCommands, err := s.repo.GetClaudeCommands(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get claude commands: %v", err),
+		})
+	}
+
+	userMessages, err := s.repo.GetUserMessages(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get user messages: %v", err),
+		})
+	}
+
+	notifications, err := s.repo.GetNotifications(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get notifications: %v", err),
+		})
+	}
+
+	// Combine into unified response with type field
+	type HistoryItem struct {
+		Type             string      `json:"type"`
+		ID               int64       `json:"id"`
+		ConversationID   string      `json:"conversation_id"`
+		SessionName      string      `json:"session_name,omitempty"`
+		Timestamp        time.Time   `json:"timestamp"`
+		WorkingDirectory string      `json:"working_directory,omitempty"`
+		GitBranch        string      `json:"git_branch,omitempty"`
+		Content          interface{} `json:"content"`
+	}
+
+	var allHistory []HistoryItem
+
+	// Add shell commands
+	for _, cmd := range shellCommands {
+		allHistory = append(allHistory, HistoryItem{
+			Type:             "shell",
+			ID:               cmd.ID,
+			ConversationID:   cmd.ConversationID,
+			SessionName:      cmd.SessionName,
+			Timestamp:        cmd.ExecutedAt,
+			WorkingDirectory: cmd.WorkingDirectory,
+			GitBranch:        cmd.GitBranch,
+			Content:          cmd,
+		})
+	}
+
+	// Add claude commands
+	for _, cmd := range claudeCommands {
+		allHistory = append(allHistory, HistoryItem{
+			Type:             "claude",
+			ID:               cmd.ID,
+			ConversationID:   cmd.ConversationID,
+			SessionName:      cmd.SessionName,
+			Timestamp:        cmd.ExecutedAt,
+			WorkingDirectory: cmd.WorkingDirectory,
+			GitBranch:        cmd.GitBranch,
+			Content:          cmd,
+		})
+	}
+
+	// Add user messages
+	for _, msg := range userMessages {
+		allHistory = append(allHistory, HistoryItem{
+			Type:             "prompt",
+			ID:               msg.ID,
+			ConversationID:   msg.ConversationID,
+			SessionName:      msg.SessionName,
+			Timestamp:        msg.SubmittedAt,
+			WorkingDirectory: msg.WorkingDirectory,
+			GitBranch:        msg.GitBranch,
+			Content:          msg,
+		})
+	}
+
+	// Add notifications
+	for _, notif := range notifications {
+		allHistory = append(allHistory, HistoryItem{
+			Type:             "notification",
+			ID:               notif.ID,
+			ConversationID:   notif.ConversationID,
+			SessionName:      notif.SessionName,
+			Timestamp:        notif.NotifiedAt,
+			WorkingDirectory: notif.WorkingDirectory,
+			GitBranch:        notif.GitBranch,
+			Content:          notif,
+		})
+	}
+
+	// Sort by timestamp descending
+	// Simple bubble sort since we're dealing with already sorted slices
+	for i := 0; i < len(allHistory)-1; i++ {
+		for j := i + 1; j < len(allHistory); j++ {
+			if allHistory[i].Timestamp.Before(allHistory[j].Timestamp) {
+				allHistory[i], allHistory[j] = allHistory[j], allHistory[i]
+			}
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"history": allHistory,
+		"count":   len(allHistory),
+		"query":   query,
+	})
+}
+
+// Handler: Record a notification
+func (s *Server) handleRecordNotification(c *fiber.Ctx) error {
+	type RecordNotificationRequest struct {
+		SessionID        string `json:"session_id"`
+		SessionName      string `json:"session_name"`
+		NotificationType string `json:"notification_type"`
+		Message          string `json:"message"`
+		ToolName         string `json:"tool_name"`
+		CommandDetails   string `json:"command_details"`
+		WorkingDirectory string `json:"cwd"`
+		GitBranch        string `json:"branch"`
+	}
+
+	var req RecordNotificationRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.SessionID == "" || req.Message == "" || req.NotificationType == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id, message, and notification_type are required",
+		})
+	}
+
+	// Create notification record
+	notif := &database.Notification{
+		ConversationID:   req.SessionID,
+		SessionName:      req.SessionName,
+		NotificationType: req.NotificationType,
+		Message:          req.Message,
+		ToolName:         req.ToolName,
+		CommandDetails:   req.CommandDetails,
+		WorkingDirectory: req.WorkingDirectory,
+		GitBranch:        req.GitBranch,
+		NotifiedAt:       time.Now(),
+	}
+
+	// Record the notification
+	if err := s.repo.RecordNotification(notif); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to record notification: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("notification_recorded", notif)
+
+	return c.JSON(fiber.Map{
+		"status": "recorded",
+		"id":     notif.ID,
+		"time":   notif.NotifiedAt,
+	})
+}
+
+// Handler: Get notifications
+func (s *Server) handleGetNotifications(c *fiber.Ctx) error {
+	query := &database.CommandHistoryQuery{
+		ConversationID: c.Query("conversation_id"),
+		Limit:          c.QueryInt("limit", 100),
+		Offset:         c.QueryInt("offset", 0),
+	}
+
+	notifications, err := s.repo.GetNotifications(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"notifications": notifications,
+		"count":         len(notifications),
+		"query":         query,
+	})
+}
+
+// Handler: Get notification statistics
+func (s *Server) handleGetNotificationStats(c *fiber.Ctx) error {
+	stats, err := s.repo.GetNotificationStats()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(stats)
+}
+
+// Handler: Clear all notifications
+func (s *Server) handleClearNotifications(c *fiber.Ctx) error {
+	err := s.repo.DeleteAllNotifications()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":  err.Error(),
+			"status": "failed",
+		})
+	}
+
+	// Broadcast update to WebSocket clients with data
+	s.wsHub.BroadcastData("notifications_cleared", fiber.Map{
+		"message": "All notifications deleted",
+	})
+
+	return c.JSON(fiber.Map{
+		"status":  "cleared",
+		"message": "All notifications have been deleted",
+		"time":    time.Now(),
+	})
 }

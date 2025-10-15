@@ -25,14 +25,15 @@ func (r *Repository) RecordShellCommand(cmd *ShellCommand) error {
 
 	query := `
 		INSERT INTO shell_commands (
-			conversation_id, command, description, working_directory, git_branch,
+			conversation_id, session_name, command, description, working_directory, git_branch,
 			exit_code, stdout, stderr, duration_ms, executed_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
 		query,
 		cmd.ConversationID,
+		cmd.SessionName,
 		cmd.Command,
 		cmd.Description,
 		cmd.WorkingDirectory,
@@ -65,14 +66,15 @@ func (r *Repository) RecordClaudeCommand(cmd *ClaudeCommand) error {
 
 	query := `
 		INSERT INTO claude_commands (
-			conversation_id, tool_name, parameters, result, working_directory, git_branch,
+			conversation_id, session_name, tool_name, parameters, result, working_directory, git_branch,
 			success, error_message, duration_ms, executed_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
 		query,
 		cmd.ConversationID,
+		cmd.SessionName,
 		cmd.ToolName,
 		cmd.Parameters,
 		cmd.Result,
@@ -116,6 +118,7 @@ func (r *Repository) GetShellCommands(query *CommandHistoryQuery) ([]*ShellComma
 		err := rows.Scan(
 			&cmd.ID,
 			&cmd.ConversationID,
+			&cmd.SessionName,
 			&cmd.Command,
 			&cmd.Description,
 			&cmd.WorkingDirectory,
@@ -154,6 +157,7 @@ func (r *Repository) GetClaudeCommands(query *CommandHistoryQuery) ([]*ClaudeCom
 		err := rows.Scan(
 			&cmd.ID,
 			&cmd.ConversationID,
+			&cmd.SessionName,
 			&cmd.ToolName,
 			&cmd.Parameters,
 			&cmd.Result,
@@ -273,7 +277,7 @@ func (r *Repository) UpsertConversation(conv *Conversation) error {
 
 func (r *Repository) buildShellCommandQuery(query *CommandHistoryQuery) (string, []interface{}) {
 	sql := `
-		SELECT id, conversation_id, command, description, working_directory, git_branch,
+		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, command, description, working_directory, git_branch,
 		       exit_code, stdout, stderr, duration_ms, executed_at, created_at
 		FROM shell_commands
 		WHERE 1=1
@@ -313,7 +317,7 @@ func (r *Repository) buildShellCommandQuery(query *CommandHistoryQuery) (string,
 
 func (r *Repository) buildClaudeCommandQuery(query *CommandHistoryQuery) (string, []interface{}) {
 	sql := `
-		SELECT id, conversation_id, tool_name, parameters, result, working_directory, git_branch,
+		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, tool_name, parameters, result, working_directory, git_branch,
 		       success, error_message, duration_ms, executed_at, created_at
 		FROM claude_commands
 		WHERE 1=1
@@ -431,14 +435,15 @@ func (r *Repository) RecordUserMessage(msg *UserMessage) error {
 
 	query := `
 		INSERT INTO user_messages (
-			conversation_id, message, working_directory, git_branch,
+			conversation_id, session_name, message, working_directory, git_branch,
 			message_length, submitted_at
-		) VALUES (?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
 		query,
 		msg.ConversationID,
+		msg.SessionName,
 		msg.Message,
 		msg.WorkingDirectory,
 		msg.GitBranch,
@@ -462,7 +467,7 @@ func (r *Repository) GetUserMessages(query *CommandHistoryQuery) ([]*UserMessage
 	defer r.db.mu.RUnlock()
 
 	sql := `
-		SELECT id, conversation_id, message, working_directory, git_branch,
+		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, message, working_directory, git_branch,
 		       message_length, submitted_at, created_at
 		FROM user_messages
 		WHERE 1=1
@@ -509,6 +514,7 @@ func (r *Repository) GetUserMessages(query *CommandHistoryQuery) ([]*UserMessage
 		err := rows.Scan(
 			&msg.ID,
 			&msg.ConversationID,
+			&msg.SessionName,
 			&msg.Message,
 			&msg.WorkingDirectory,
 			&msg.GitBranch,
@@ -691,6 +697,305 @@ func (r *Repository) DeleteAllProviders() error {
 	_, err := r.db.db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to delete all providers: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllUserMessages removes all user messages
+func (r *Repository) DeleteAllUserMessages() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM user_messages"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all user messages: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllShellCommands removes all shell commands
+func (r *Repository) DeleteAllShellCommands() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM shell_commands"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all shell commands: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllClaudeCommands removes all claude commands
+func (r *Repository) DeleteAllClaudeCommands() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM claude_commands"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all claude commands: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteAllHistory removes all history records (user messages, shell commands, claude commands, and notifications)
+func (r *Repository) DeleteAllHistory() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	// Delete from all four tables in a transaction
+	tx, err := r.db.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM user_messages"); err != nil {
+		return fmt.Errorf("failed to delete user messages: %w", err)
+	}
+
+	if _, err := tx.Exec("DELETE FROM shell_commands"); err != nil {
+		return fmt.Errorf("failed to delete shell commands: %w", err)
+	}
+
+	if _, err := tx.Exec("DELETE FROM claude_commands"); err != nil {
+		return fmt.Errorf("failed to delete claude commands: %w", err)
+	}
+
+	if _, err := tx.Exec("DELETE FROM notifications"); err != nil {
+		return fmt.Errorf("failed to delete notifications: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// GetUniqueSessions retrieves all unique session IDs and names from all tables (user_messages, shell_commands, claude_commands, notifications)
+func (r *Repository) GetUniqueSessions() ([]map[string]string, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	// Union all four tables to get unique sessions
+	query := `
+		SELECT conversation_id, session_name, MAX(last_activity) as last_activity
+		FROM (
+			SELECT conversation_id, COALESCE(session_name, '') as session_name, submitted_at as last_activity
+			FROM user_messages
+			WHERE conversation_id != '' AND conversation_id IS NOT NULL
+			UNION ALL
+			SELECT conversation_id, COALESCE(session_name, '') as session_name, executed_at as last_activity
+			FROM shell_commands
+			WHERE conversation_id != '' AND conversation_id IS NOT NULL
+			UNION ALL
+			SELECT conversation_id, COALESCE(session_name, '') as session_name, executed_at as last_activity
+			FROM claude_commands
+			WHERE conversation_id != '' AND conversation_id IS NOT NULL
+			UNION ALL
+			SELECT conversation_id, COALESCE(session_name, '') as session_name, notified_at as last_activity
+			FROM notifications
+			WHERE conversation_id != '' AND conversation_id IS NOT NULL
+		)
+		GROUP BY conversation_id, session_name
+		ORDER BY last_activity DESC
+	`
+
+	rows, err := r.db.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unique sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []map[string]string
+	for rows.Next() {
+		var conversationID, sessionName, lastActivity string
+		err := rows.Scan(&conversationID, &sessionName, &lastActivity)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan session: %w", err)
+		}
+		sessions = append(sessions, map[string]string{
+			"conversation_id": conversationID,
+			"session_name":    sessionName,
+		})
+	}
+
+	return sessions, nil
+}
+
+// RecordNotification saves a notification event
+func (r *Repository) RecordNotification(notif *Notification) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := `
+		INSERT INTO notifications (
+			conversation_id, session_name, notification_type, message, tool_name, command_details,
+			working_directory, git_branch, notified_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	result, err := r.db.db.Exec(
+		query,
+		notif.ConversationID,
+		notif.SessionName,
+		notif.NotificationType,
+		notif.Message,
+		notif.ToolName,
+		notif.CommandDetails,
+		notif.WorkingDirectory,
+		notif.GitBranch,
+		notif.NotifiedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to record notification: %w", err)
+	}
+
+	id, _ := result.LastInsertId()
+	notif.ID = id
+
+	return nil
+}
+
+// GetNotifications retrieves notifications with optional filters
+func (r *Repository) GetNotifications(query *CommandHistoryQuery) ([]*Notification, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	sql := `
+		SELECT id, conversation_id, COALESCE(session_name, '') as session_name,
+		       notification_type, message, COALESCE(tool_name, '') as tool_name,
+		       COALESCE(command_details, '') as command_details,
+		       working_directory, git_branch, notified_at, created_at
+		FROM notifications
+		WHERE 1=1
+	`
+
+	args := []interface{}{}
+
+	if query.ConversationID != "" {
+		sql += " AND conversation_id = ?"
+		args = append(args, query.ConversationID)
+	}
+
+	if query.StartDate != nil {
+		sql += " AND notified_at >= ?"
+		args = append(args, query.StartDate)
+	}
+
+	if query.EndDate != nil {
+		sql += " AND notified_at <= ?"
+		args = append(args, query.EndDate)
+	}
+
+	sql += " ORDER BY notified_at DESC"
+
+	if query.Limit > 0 {
+		sql += " LIMIT ?"
+		args = append(args, query.Limit)
+	}
+
+	if query.Offset > 0 {
+		sql += " OFFSET ?"
+		args = append(args, query.Offset)
+	}
+
+	rows, err := r.db.db.Query(sql, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query notifications: %w", err)
+	}
+	defer rows.Close()
+
+	var notifications []*Notification
+	for rows.Next() {
+		notif := &Notification{}
+		err := rows.Scan(
+			&notif.ID,
+			&notif.ConversationID,
+			&notif.SessionName,
+			&notif.NotificationType,
+			&notif.Message,
+			&notif.ToolName,
+			&notif.CommandDetails,
+			&notif.WorkingDirectory,
+			&notif.GitBranch,
+			&notif.NotifiedAt,
+			&notif.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan notification: %w", err)
+		}
+		notifications = append(notifications, notif)
+	}
+
+	return notifications, nil
+}
+
+// GetNotificationStats retrieves aggregated notification statistics
+func (r *Repository) GetNotificationStats() (*NotificationStats, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	stats := &NotificationStats{}
+
+	// Get total counts by type
+	query := `
+		SELECT
+			COUNT(*) as total,
+			SUM(CASE WHEN notification_type = 'permission_request' THEN 1 ELSE 0 END) as permission_requests,
+			SUM(CASE WHEN notification_type = 'idle_alert' THEN 1 ELSE 0 END) as idle_alerts,
+			SUM(CASE WHEN notification_type = 'other' THEN 1 ELSE 0 END) as other_notifications
+		FROM notifications
+	`
+
+	err := r.db.db.QueryRow(query).Scan(
+		&stats.TotalNotifications,
+		&stats.PermissionRequests,
+		&stats.IdleAlerts,
+		&stats.OtherNotifications,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get notification stats: %w", err)
+	}
+
+	// Get most requested tool
+	toolQuery := `
+		SELECT tool_name, COUNT(*) as count
+		FROM notifications
+		WHERE notification_type = 'permission_request' AND tool_name IS NOT NULL AND tool_name != ''
+		GROUP BY tool_name
+		ORDER BY count DESC
+		LIMIT 1
+	`
+
+	err = r.db.db.QueryRow(toolQuery).Scan(&stats.MostRequestedTool, &stats.MostRequestedToolCount)
+	if err != nil {
+		// If no tools found, that's ok - leave fields empty/zero
+		stats.MostRequestedTool = ""
+		stats.MostRequestedToolCount = 0
+	}
+
+	return stats, nil
+}
+
+// DeleteAllNotifications removes all notifications
+func (r *Repository) DeleteAllNotifications() error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM notifications"
+	_, err := r.db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to delete all notifications: %w", err)
 	}
 
 	return nil
