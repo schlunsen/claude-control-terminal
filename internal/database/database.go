@@ -276,5 +276,47 @@ func runMigrations(db *sql.DB) error {
 		}
 	}
 
+	// Migration 5: Create notifications table if it doesn't exist
+	var notificationsTableExists bool
+	notificationsQuery := `
+		SELECT COUNT(*) > 0
+		FROM sqlite_master
+		WHERE type='table' AND name='notifications'
+	`
+	if err := db.QueryRow(notificationsQuery).Scan(&notificationsTableExists); err == nil {
+		if !notificationsTableExists {
+			createNotificationsTable := `
+				CREATE TABLE IF NOT EXISTS notifications (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					conversation_id TEXT NOT NULL,
+					session_name TEXT,
+					notification_type TEXT NOT NULL,
+					message TEXT NOT NULL,
+					tool_name TEXT,
+					working_directory TEXT,
+					git_branch TEXT,
+					notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+					created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+				);
+
+				CREATE INDEX IF NOT EXISTS idx_notifications_conversation
+					ON notifications(conversation_id, notified_at DESC);
+
+				CREATE INDEX IF NOT EXISTS idx_notifications_notified_at
+					ON notifications(notified_at DESC);
+
+				CREATE INDEX IF NOT EXISTS idx_notifications_type
+					ON notifications(notification_type, notified_at DESC);
+
+				CREATE INDEX IF NOT EXISTS idx_notifications_tool
+					ON notifications(tool_name, notified_at DESC) WHERE tool_name IS NOT NULL;
+			`
+			_, err := db.Exec(createNotificationsTable)
+			if err != nil {
+				return fmt.Errorf("failed to create notifications table: %w", err)
+			}
+		}
+	}
+
 	return nil
 }

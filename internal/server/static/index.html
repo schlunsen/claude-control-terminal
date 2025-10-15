@@ -455,6 +455,25 @@
             color: #c53030;
         }
 
+        .command-warning {
+            color: #d97706;
+        }
+
+        .notification-item {
+            background: #fffbf0;
+            border-left: 4px solid #f59e0b;
+        }
+
+        .notification-permission {
+            background: #fef2f2;
+            border-left: 4px solid #ef4444;
+        }
+
+        .notification-idle {
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+        }
+
         .load-more {
             text-align: center;
             padding: 16px;
@@ -555,6 +574,7 @@
                 <button class="filter-tab" data-type="shell" onclick="filterHistory('shell')">Shell</button>
                 <button class="filter-tab" data-type="claude" onclick="filterHistory('claude')">Claude</button>
                 <button class="filter-tab" data-type="prompt" onclick="filterHistory('prompt')">Prompts</button>
+                <button class="filter-tab" data-type="notification" onclick="filterHistory('notification')">Notifications</button>
             </div>
 
             <div class="actions">
@@ -571,6 +591,28 @@
         </div>
 
         <div class="section">
+            <h2 class="section-title">Notification Insights</h2>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="permission-requests">—</div>
+                    <div class="stat-label">Permission Requests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="idle-alerts">—</div>
+                    <div class="stat-label">Idle Alerts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-notifications">—</div>
+                    <div class="stat-label">Total Notifications</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="most-requested-tool">—</div>
+                    <div class="stat-label">Most Requested Tool</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
             <h2 class="section-title">API Endpoints</h2>
             <div class="endpoints">
                 <div class="endpoint">GET <code>/api/data</code> — Complete analytics data</div>
@@ -583,6 +625,8 @@
                 <div class="endpoint">GET <code>/api/history/stats</code> — Command statistics</div>
                 <div class="endpoint">GET <code>/api/prompts</code> — User prompts history</div>
                 <div class="endpoint">GET <code>/api/prompts/stats</code> — Prompt statistics</div>
+                <div class="endpoint">GET <code>/api/notifications</code> — Notifications history</div>
+                <div class="endpoint">GET <code>/api/notifications/stats</code> — Notification statistics</div>
                 <div class="endpoint">GET <code>/ws</code> — WebSocket real-time updates</div>
             </div>
         </div>
@@ -796,6 +840,25 @@
             return div.innerHTML;
         }
 
+        // Load notification statistics
+        async function loadNotificationStats() {
+            try {
+                const response = await fetch('/api/notifications/stats');
+                const stats = await response.json();
+
+                document.getElementById('permission-requests').textContent = stats.permission_requests || 0;
+                document.getElementById('idle-alerts').textContent = stats.idle_alerts || 0;
+                document.getElementById('total-notifications').textContent = stats.total_notifications || 0;
+                document.getElementById('most-requested-tool').textContent = stats.most_requested_tool || 'None';
+            } catch (error) {
+                console.error('Error loading notification stats:', error);
+                document.getElementById('permission-requests').textContent = '—';
+                document.getElementById('idle-alerts').textContent = '—';
+                document.getElementById('total-notifications').textContent = '—';
+                document.getElementById('most-requested-tool').textContent = '—';
+            }
+        }
+
         // WebSocket connection
         function connectWebSocket() {
             const ws = new WebSocket(`ws://${window.location.host}/ws`);
@@ -806,6 +869,18 @@
 
             ws.onmessage = (event) => {
                 console.log('WebSocket message:', event.data);
+
+                // Parse message to see if it's a notification event
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.event === 'notification_recorded' || msg.event === 'notifications_cleared') {
+                        loadActivityHistory();
+                        loadNotificationStats();
+                    }
+                } catch (e) {
+                    // Not JSON, just regular update
+                }
+
                 loadData();
                 loadBackgroundShells();
             };
@@ -950,7 +1025,8 @@
                         item.tool_name || '',
                         item.message || '',
                         item.git_branch || '',
-                        item.working_directory || ''
+                        item.working_directory || '',
+                        item.notification_type || ''
                     ].join(' ').toLowerCase();
 
                     return searchableText.includes(searchTerm);
@@ -974,10 +1050,11 @@
             }
 
             container.innerHTML = filteredHistory.map(item => {
-                const time = new Date(item.timestamp || item.executed_at || item.submitted_at).toLocaleString();
+                const time = new Date(item.timestamp || item.executed_at || item.submitted_at || item.notified_at).toLocaleString();
                 const isShell = item.type === 'shell';
                 const isClaude = item.type === 'claude';
                 const isPrompt = item.type === 'prompt';
+                const isNotification = item.type === 'notification';
 
                 let metaItems = [];
 
@@ -1031,14 +1108,45 @@
                     </div>`);
                 }
 
+                // Notification-specific metadata
+                if (isNotification) {
+                    if (item.notification_type === 'permission_request' && item.tool_name) {
+                        metaItems.push(`<div class="command-meta-item">
+                            <span class="command-meta-label">Tool:</span>
+                            <span class="command-tool">${escapeHtml(item.tool_name)}</span>
+                        </div>`);
+                    }
+
+                    if (item.notification_type === 'idle_alert') {
+                        metaItems.push(`<div class="command-meta-item command-warning">
+                            ⏱️ Idle
+                        </div>`);
+                    }
+                }
+
                 // Determine tool name/label
                 let toolLabel = '';
+                let notificationClass = '';
                 if (isShell) {
                     toolLabel = 'Bash';
                 } else if (isClaude) {
                     toolLabel = item.tool_name || 'Claude Tool';
                 } else if (isPrompt) {
                     toolLabel = '💬 User Prompt';
+                } else if (isNotification) {
+                    switch(item.notification_type) {
+                        case 'permission_request':
+                            toolLabel = '🔐 Permission Request';
+                            notificationClass = 'notification-permission';
+                            break;
+                        case 'idle_alert':
+                            toolLabel = '⏱️ Idle Alert';
+                            notificationClass = 'notification-idle';
+                            break;
+                        default:
+                            toolLabel = '🔔 Notification';
+                            notificationClass = 'notification-item';
+                    }
                 }
 
                 // Determine display text
@@ -1096,10 +1204,12 @@
                         msg = msg.substring(0, maxLength) + '...\n<em style="color: #999;">(truncated)</em>';
                     }
                     displayText = msg;
+                } else if (isNotification) {
+                    displayText = item.message || '';
                 }
 
                 return `
-                    <div class="command-item">
+                    <div class="command-item ${notificationClass}">
                         <div class="command-header">
                             <div class="command-tool">${escapeHtml(toolLabel)}</div>
                             <div class="command-time">${time}</div>
@@ -1145,6 +1255,7 @@
         loadBackgroundShells();
         loadAvailableSessions();
         loadActivityHistory();
+        loadNotificationStats();
         connectWebSocket();
 
         // Refresh every 30 seconds
@@ -1153,6 +1264,7 @@
             loadBackgroundShells();
             loadAvailableSessions();
             loadActivityHistory();
+            loadNotificationStats();
         }, 30000);
     </script>
 </body>

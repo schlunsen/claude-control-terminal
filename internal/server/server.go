@@ -138,6 +138,12 @@ func (s *Server) setupRoutes() {
 	api.Post("/prompts", s.handleRecordUserPrompt)
 	api.Delete("/prompts", s.handleClearAllHistory) // Alias for backward compatibility
 
+	// Notification endpoints
+	api.Post("/notifications", s.handleRecordNotification)
+	api.Get("/notifications", s.handleGetNotifications)
+	api.Get("/notifications/stats", s.handleGetNotificationStats)
+	api.Delete("/notifications", s.handleClearNotifications)
+
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
 }
@@ -828,7 +834,7 @@ func (s *Server) handleGetAllHistory(c *fiber.Ctx) error {
 		Offset:         offset,
 	}
 
-	// Fetch all three types
+	// Fetch all four types
 	shellCommands, err := s.repo.GetShellCommands(query)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -847,6 +853,13 @@ func (s *Server) handleGetAllHistory(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
 			"error": fmt.Sprintf("failed to get user messages: %v", err),
+		})
+	}
+
+	notifications, err := s.repo.GetNotifications(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get notifications: %v", err),
 		})
 	}
 
@@ -906,6 +919,20 @@ func (s *Server) handleGetAllHistory(c *fiber.Ctx) error {
 		})
 	}
 
+	// Add notifications
+	for _, notif := range notifications {
+		allHistory = append(allHistory, HistoryItem{
+			Type:             "notification",
+			ID:               notif.ID,
+			ConversationID:   notif.ConversationID,
+			SessionName:      notif.SessionName,
+			Timestamp:        notif.NotifiedAt,
+			WorkingDirectory: notif.WorkingDirectory,
+			GitBranch:        notif.GitBranch,
+			Content:          notif,
+		})
+	}
+
 	// Sort by timestamp descending
 	// Simple bubble sort since we're dealing with already sorted slices
 	for i := 0; i < len(allHistory)-1; i++ {
@@ -920,5 +947,114 @@ func (s *Server) handleGetAllHistory(c *fiber.Ctx) error {
 		"history": allHistory,
 		"count":   len(allHistory),
 		"query":   query,
+	})
+}
+
+// Handler: Record a notification
+func (s *Server) handleRecordNotification(c *fiber.Ctx) error {
+	type RecordNotificationRequest struct {
+		SessionID        string `json:"session_id"`
+		SessionName      string `json:"session_name"`
+		NotificationType string `json:"notification_type"`
+		Message          string `json:"message"`
+		ToolName         string `json:"tool_name"`
+		WorkingDirectory string `json:"cwd"`
+		GitBranch        string `json:"branch"`
+	}
+
+	var req RecordNotificationRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Validate required fields
+	if req.SessionID == "" || req.Message == "" || req.NotificationType == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id, message, and notification_type are required",
+		})
+	}
+
+	// Create notification record
+	notif := &database.Notification{
+		ConversationID:   req.SessionID,
+		SessionName:      req.SessionName,
+		NotificationType: req.NotificationType,
+		Message:          req.Message,
+		ToolName:         req.ToolName,
+		WorkingDirectory: req.WorkingDirectory,
+		GitBranch:        req.GitBranch,
+		NotifiedAt:       time.Now(),
+	}
+
+	// Record the notification
+	if err := s.repo.RecordNotification(notif); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to record notification: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"notification_recorded","type":"` + req.NotificationType + `"}`))
+
+	return c.JSON(fiber.Map{
+		"status": "recorded",
+		"id":     notif.ID,
+		"time":   notif.NotifiedAt,
+	})
+}
+
+// Handler: Get notifications
+func (s *Server) handleGetNotifications(c *fiber.Ctx) error {
+	query := &database.CommandHistoryQuery{
+		ConversationID: c.Query("conversation_id"),
+		Limit:          c.QueryInt("limit", 100),
+		Offset:         c.QueryInt("offset", 0),
+	}
+
+	notifications, err := s.repo.GetNotifications(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"notifications": notifications,
+		"count":         len(notifications),
+		"query":         query,
+	})
+}
+
+// Handler: Get notification statistics
+func (s *Server) handleGetNotificationStats(c *fiber.Ctx) error {
+	stats, err := s.repo.GetNotificationStats()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(stats)
+}
+
+// Handler: Clear all notifications
+func (s *Server) handleClearNotifications(c *fiber.Ctx) error {
+	err := s.repo.DeleteAllNotifications()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error":  err.Error(),
+			"status": "failed",
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.Broadcast([]byte(`{"event":"notifications_cleared"}`))
+
+	return c.JSON(fiber.Map{
+		"status":  "cleared",
+		"message": "All notifications have been deleted",
+		"time":    time.Now(),
 	})
 }

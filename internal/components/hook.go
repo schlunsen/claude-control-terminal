@@ -581,7 +581,7 @@ func (hi *HookInstaller) checkToolLoggerInSettingsFile(settingsPath string) (boo
 	return false, nil
 }
 
-// InstallAllHooks installs both user-prompt-logger and tool-logger hooks for current project
+// InstallAllHooks installs all hooks (user-prompt-logger, tool-logger, and notification-logger) for current project
 // Always installs to project's .claude directory, never globally
 func (hi *HookInstaller) InstallAllHooks() error {
 	fmt.Println("📦 Installing All Hooks (project-only)...")
@@ -600,8 +600,15 @@ func (hi *HookInstaller) InstallAllHooks() error {
 	}
 
 	fmt.Println()
+
+	// Install notification logger
+	if err := hi.InstallNotificationLogger(); err != nil {
+		return fmt.Errorf("failed to install notification logger: %w", err)
+	}
+
+	fmt.Println()
 	fmt.Println("✅ All hooks installed successfully!")
-	fmt.Println("   Both hooks are project-specific and will only run in this directory")
+	fmt.Println("   All three hooks are project-specific and will only run in this directory")
 
 	return nil
 }
@@ -624,7 +631,155 @@ func (hi *HookInstaller) UninstallAllHooks() error {
 	}
 
 	fmt.Println()
+
+	// Uninstall notification logger
+	if err := hi.UninstallNotificationLogger(); err != nil {
+		fmt.Printf("   ⚠️  Notification logger: %v\n", err)
+	}
+
+	fmt.Println()
 	fmt.Println("✅ All hooks uninstalled successfully!")
 
 	return nil
+}
+
+// InstallNotificationLogger installs the notification-logger hook for current project only
+// Hooks are always installed in the project's .claude directory, never globally
+func (hi *HookInstaller) InstallNotificationLogger() error {
+	// Get current working directory for project-based installation
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	fmt.Println("🔔 Installing Notification Logger Hook (project-only)...")
+
+	// Project .claude directory
+	settingsDir := filepath.Join(cwd, ".claude")
+	if err := os.MkdirAll(settingsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create project .claude directory: %w", err)
+	}
+
+	// Hooks subdirectory in PROJECT .claude dir (not global)
+	hooksDir := filepath.Join(settingsDir, "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		return fmt.Errorf("failed to create project hooks directory: %w", err)
+	}
+
+	// Copy hook script to PROJECT hooks directory
+	hookName := "notification-logger.sh"
+	if err := hi.copyHookScript(hookName, hooksDir); err != nil {
+		return fmt.Errorf("failed to copy hook script: %w", err)
+	}
+
+	// Update settings.json in project directory with Notification hook (no matcher needed)
+	if err := hi.addHookToSettingsAtPath(settingsDir, hooksDir, hookName, "Notification"); err != nil {
+		return fmt.Errorf("failed to update settings.json: %w", err)
+	}
+
+	fmt.Println("✅ Notification Logger Hook installed successfully!")
+	fmt.Printf("   Project: %s\n", cwd)
+	fmt.Printf("   Hook script: %s\n", filepath.Join(hooksDir, hookName))
+	fmt.Printf("   Settings: %s\n", filepath.Join(settingsDir, "settings.local.json"))
+	fmt.Println("\n💡 This hook will capture permission requests and idle alerts")
+	fmt.Println("   View analytics: cct --analytics")
+
+	return nil
+}
+
+// UninstallNotificationLogger removes the notification-logger hook from current project
+func (hi *HookInstaller) UninstallNotificationLogger() error {
+	fmt.Println("🗑️  Uninstalling Notification Logger Hook...")
+
+	hookName := "notification-logger.sh"
+
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	// Remove from project settings.json
+	projectSettingsDir := filepath.Join(cwd, ".claude")
+	if err := hi.removeHookFromSettingsAtPath(projectSettingsDir, hookName, "Notification"); err != nil {
+		fmt.Printf("   ℹ Project settings: %v\n", err)
+	}
+
+	// Remove the hook script file from project directory
+	hookScriptPath := filepath.Join(projectSettingsDir, "hooks", hookName)
+	if err := os.Remove(hookScriptPath); err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Printf("   ⚠️  Failed to remove hook script: %v\n", err)
+		}
+	} else {
+		fmt.Printf("   ✓ Removed hook script: %s\n", hookScriptPath)
+	}
+
+	fmt.Println("✅ Notification Logger Hook uninstalled successfully!")
+	return nil
+}
+
+// CheckNotificationLoggerInstalled checks if the notification-logger hook is installed in current project
+// Only checks project-based installation, never global
+func (hi *HookInstaller) CheckNotificationLoggerInstalled() (bool, error) {
+	// Check project-based installation only
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false, fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	projectSettingsPath := filepath.Join(cwd, ".claude", "settings.local.json")
+	return hi.checkNotificationLoggerInSettingsFile(projectSettingsPath)
+}
+
+// checkNotificationLoggerInSettingsFile checks if notification-logger hook is installed in specific settings file
+func (hi *HookInstaller) checkNotificationLoggerInSettingsFile(settingsPath string) (bool, error) {
+	content, err := os.ReadFile(settingsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	var rawSettings map[string]interface{}
+	if err := json.Unmarshal(content, &rawSettings); err != nil {
+		return false, err
+	}
+
+	hooksRaw, exists := rawSettings["hooks"]
+	if !exists {
+		return false, nil
+	}
+
+	hooks, ok := hooksRaw.(map[string]interface{})
+	if !ok {
+		return false, nil
+	}
+
+	eventRaw, exists := hooks["Notification"]
+	if !exists {
+		return false, nil
+	}
+
+	eventHooks, ok := eventRaw.([]interface{})
+	if !ok {
+		return false, nil
+	}
+
+	for _, entry := range eventHooks {
+		if entryMap, ok := entry.(map[string]interface{}); ok {
+			if hooksArr, ok := entryMap["hooks"].([]interface{}); ok {
+				for _, h := range hooksArr {
+					if hMap, ok := h.(map[string]interface{}); ok {
+						if cmd, ok := hMap["command"].(string); ok && strings.Contains(cmd, "notification-logger") {
+							return true, nil
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false, nil
 }

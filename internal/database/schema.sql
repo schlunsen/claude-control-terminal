@@ -87,6 +87,20 @@ CREATE TABLE IF NOT EXISTS providers (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Table for notifications (permission requests and idle alerts)
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL,
+    session_name TEXT,
+    notification_type TEXT NOT NULL, -- 'permission_request', 'idle_alert', 'other'
+    message TEXT NOT NULL,
+    tool_name TEXT, -- extracted from permission requests
+    working_directory TEXT,
+    git_branch TEXT,
+    notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_shell_commands_conversation
     ON shell_commands(conversation_id, executed_at DESC);
@@ -117,3 +131,15 @@ CREATE INDEX IF NOT EXISTS idx_user_messages_submitted_at
 
 CREATE INDEX IF NOT EXISTS idx_providers_is_current
     ON providers(is_current) WHERE is_current = 1;
+
+CREATE INDEX IF NOT EXISTS idx_notifications_conversation
+    ON notifications(conversation_id, notified_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_notified_at
+    ON notifications(notified_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_type
+    ON notifications(notification_type, notified_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_tool
+    ON notifications(tool_name, notified_at DESC) WHERE tool_name IS NOT NULL;

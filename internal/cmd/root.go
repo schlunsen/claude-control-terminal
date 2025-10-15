@@ -68,12 +68,14 @@ var (
 	dockerVolumes string
 
 	// Hook management flags
-	installUserPromptHook   bool
-	uninstallUserPromptHook bool
-	installToolHook         bool
-	uninstallToolHook       bool
-	installAllHooks         bool
-	uninstallAllHooks       bool
+	installUserPromptHook     bool
+	uninstallUserPromptHook   bool
+	installToolHook           bool
+	uninstallToolHook         bool
+	installNotificationHook   bool
+	uninstallNotificationHook bool
+	installAllHooks           bool
+	uninstallAllHooks         bool
 
 	// Other flags
 	template   string
@@ -122,6 +124,7 @@ var rootCmd = &cobra.Command{
 			!installClaude &&
 			!installUserPromptHook && !uninstallUserPromptHook &&
 			!installToolHook && !uninstallToolHook &&
+			!installNotificationHook && !uninstallNotificationHook &&
 			!installAllHooks && !uninstallAllHooks
 
 		// If no flags provided, launch TUI
@@ -208,7 +211,9 @@ func init() {
 	rootCmd.Flags().BoolVar(&uninstallUserPromptHook, "uninstall-user-prompt-hook", false, "uninstall user prompt logger hook")
 	rootCmd.Flags().BoolVar(&installToolHook, "install-tool-hook", false, "install tool logger hook (project-only)")
 	rootCmd.Flags().BoolVar(&uninstallToolHook, "uninstall-tool-hook", false, "uninstall tool logger hook")
-	rootCmd.Flags().BoolVar(&installAllHooks, "install-all-hooks", false, "install all hooks (user-prompt + tool loggers, project-only)")
+	rootCmd.Flags().BoolVar(&installNotificationHook, "install-notification-hook", false, "install notification logger hook (project-only)")
+	rootCmd.Flags().BoolVar(&uninstallNotificationHook, "uninstall-notification-hook", false, "uninstall notification logger hook")
+	rootCmd.Flags().BoolVar(&installAllHooks, "install-all-hooks", false, "install all hooks (user-prompt + tool + notification loggers, project-only)")
 	rootCmd.Flags().BoolVar(&uninstallAllHooks, "uninstall-all-hooks", false, "uninstall all hooks")
 
 	// Claude installer flag
@@ -494,6 +499,11 @@ func handleHookInstallation(hookName string) {
 			ShowError(fmt.Sprintf("Failed to install hook: %v", err))
 			return
 		}
+	case "notification-logger":
+		if err := hookInstaller.InstallNotificationLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to install hook: %v", err))
+			return
+		}
 	case "all":
 		if err := hookInstaller.InstallAllHooks(); err != nil {
 			ShowError(fmt.Sprintf("Failed to install hooks: %v", err))
@@ -504,7 +514,8 @@ func handleHookInstallation(hookName string) {
 		ShowInfo("Available hooks:")
 		ShowInfo("  - user-prompt-logger: Capture user prompts for analytics")
 		ShowInfo("  - tool-logger: Capture all tool usage (Bash, Read, Edit, etc.)")
-		ShowInfo("  - all: Install both hooks")
+		ShowInfo("  - notification-logger: Capture permission requests and idle alerts")
+		ShowInfo("  - all: Install all hooks")
 		return
 	}
 }
@@ -562,6 +573,24 @@ func handleHookManagement() {
 	if uninstallToolHook {
 		if err := hookInstaller.UninstallToolLogger(); err != nil {
 			ShowError(fmt.Sprintf("Failed to uninstall tool hook: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Install notification hook
+	if installNotificationHook {
+		if err := hookInstaller.InstallNotificationLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to install notification hook: %v", err))
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Uninstall notification hook
+	if uninstallNotificationHook {
+		if err := hookInstaller.UninstallNotificationLogger(); err != nil {
+			ShowError(fmt.Sprintf("Failed to uninstall notification hook: %v", err))
 			os.Exit(1)
 		}
 		return
