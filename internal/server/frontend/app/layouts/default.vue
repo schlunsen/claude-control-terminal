@@ -85,6 +85,11 @@ async function loadVersion() {
   }
 }
 
+// Open analytics in new tab
+function openAnalytics() {
+  window.open('http://localhost:3333', '_blank')
+}
+
 // Load version on mount
 onMounted(() => {
   loadVersion()
@@ -179,6 +184,7 @@ onUnmounted(() => {
   color: white;
   border-color: var(--accent-purple);
 }
+
 
 .nav-brand {
   display: flex;
