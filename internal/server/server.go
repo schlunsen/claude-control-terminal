@@ -88,6 +88,8 @@ func (s *Server) Setup() error {
 	s.wsHub = ws.NewHub()
 	go s.wsHub.Run()
 
+	// File watcher removed - WebSocket updates triggered by database operations only
+
 	// Setup API routes
 	s.setupRoutes()
 
