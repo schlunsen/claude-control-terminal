@@ -54,10 +54,19 @@ claude-control-terminal/
 │   │   ├── github.go          # GitHub API downloads
 │   │   ├── template.go        # Template processing
 │   │   └── utils.go           # File utilities
-│   ├── server/                 # Web server
+│   ├── server/                 # Web server & Nuxt frontend
 │   │   ├── server.go          # Fiber HTTP server
 │   │   ├── static.go          # Embedded static files
-│   │   └── static/            # Frontend HTML/JS
+│   │   ├── static/            # Legacy static files
+│   │   └── frontend/          # Nuxt 4 SPA frontend
+│   │       ├── app/           # Nuxt app directory (IMPORTANT!)
+│   │       │   ├── app.vue    # Root app component
+│   │       │   ├── pages/     # Vue pages (index.vue)
+│   │       │   └── composables/ # Vue composables (useWebSocket.ts)
+│   │       ├── components/    # Vue components
+│   │       ├── types/         # TypeScript types
+│   │       ├── nuxt.config.ts # Nuxt configuration
+│   │       └── package.json   # Frontend dependencies
 │   └── websocket/              # Real-time updates
 │       └── websocket.go       # WebSocket hub
 ├── pkg/                        # Public libraries (future)
@@ -109,8 +118,10 @@ make install
 
 ### Analytics Dashboard
 
+The analytics dashboard is a Nuxt 4 SPA frontend with a Go Fiber backend.
+
 ```bash
-# Launch analytics server
+# Launch analytics server (backend)
 ./cct --analytics
 # or
 make run-analytics
@@ -126,6 +137,42 @@ curl http://localhost:3333/api/conversations
 curl http://localhost:3333/api/processes
 curl http://localhost:3333/api/stats
 ```
+
+### Frontend Development
+
+```bash
+# Navigate to frontend directory
+cd internal/server/frontend
+
+# Install dependencies
+npm install
+
+# Run Nuxt dev server (development)
+npm run dev
+# Runs on http://localhost:3001 by default
+
+# Build for production
+npm run build
+
+# Generate static files
+npm run generate
+```
+
+**IMPORTANT**: Nuxt 4 requires all application code (pages, composables, etc.) to be inside the `app/` directory:
+
+```text
+internal/server/frontend/
+├── app/                    # Main Nuxt app directory
+│   ├── app.vue            # Root component
+│   ├── pages/             # Vue pages (index.vue)
+│   └── composables/       # Vue composables (useWebSocket.ts)
+├── components/            # Vue components (outside app/)
+├── types/                 # TypeScript types
+├── nuxt.config.ts         # Nuxt configuration
+└── package.json           # Frontend dependencies
+```
+
+The dev server proxies API calls to the Go backend on port 3333.
 
 ### Development Workflow
 

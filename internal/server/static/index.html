@@ -455,6 +455,39 @@
             color: #c53030;
         }
 
+        .command-warning {
+            color: #d97706;
+        }
+
+        .notification-item {
+            background: #fffbf0;
+            border-left: 4px solid #f59e0b;
+        }
+
+        .notification-permission {
+            background: #fef2f2;
+            border-left: 4px solid #ef4444;
+        }
+
+        .notification-idle {
+            background: #f0f9ff;
+            border-left: 4px solid #3b82f6;
+        }
+
+        .command-details-code {
+            display: inline-block;
+            background: #f3f4f6;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            font-size: 13px;
+            color: #1f2937;
+            max-width: 600px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
         .load-more {
             text-align: center;
             padding: 16px;
@@ -538,24 +571,58 @@
         </div>
 
         <div class="section">
-            <h2 class="section-title">Command History</h2>
+            <h2 class="section-title">Activity History</h2>
 
             <div class="search-box">
-                <input type="text" id="search-input" class="search-input" placeholder="Search commands..." oninput="searchCommands()">
+                <input type="text" id="search-input" class="search-input" placeholder="Search activity..." oninput="searchHistory()">
+            </div>
+
+            <div class="search-box">
+                <select id="session-filter" class="search-input" onchange="filterBySession()" style="cursor: pointer;">
+                    <option value="">All Sessions</option>
+                </select>
             </div>
 
             <div class="filter-tabs">
-                <button class="filter-tab active" data-type="all" onclick="filterCommands('all')">All</button>
-                <button class="filter-tab" data-type="shell" onclick="filterCommands('shell')">Shell</button>
-                <button class="filter-tab" data-type="claude" onclick="filterCommands('claude')">Claude</button>
+                <button class="filter-tab active" data-type="all" onclick="filterHistory('all')">All</button>
+                <button class="filter-tab" data-type="shell" onclick="filterHistory('shell')">Shell</button>
+                <button class="filter-tab" data-type="claude" onclick="filterHistory('claude')">Claude</button>
+                <button class="filter-tab" data-type="prompt" onclick="filterHistory('prompt')">Prompts</button>
+                <button class="filter-tab" data-type="notification" onclick="filterHistory('notification')">Notifications</button>
             </div>
 
-            <div class="command-list" id="command-history">
-                <div class="empty-state">No commands in history</div>
+            <div class="actions">
+                <button class="btn btn-danger" onclick="clearAllHistory()">🗑️ Clear All History</button>
+            </div>
+
+            <div class="command-list" id="activity-history">
+                <div class="empty-state">No activity recorded yet</div>
             </div>
 
             <div class="load-more" id="load-more" style="display: none;">
-                <button class="load-more-btn" onclick="loadMoreCommands()">Load More</button>
+                <button class="load-more-btn" onclick="loadMoreHistory()">Load More</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Notification Insights</h2>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="permission-requests">—</div>
+                    <div class="stat-label">Permission Requests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="idle-alerts">—</div>
+                    <div class="stat-label">Idle Alerts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="total-notifications">—</div>
+                    <div class="stat-label">Total Notifications</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="most-requested-tool">—</div>
+                    <div class="stat-label">Most Requested Tool</div>
+                </div>
             </div>
         </div>
 
@@ -570,6 +637,10 @@
                 <div class="endpoint">GET <code>/api/history/shell</code> — Shell command history</div>
                 <div class="endpoint">GET <code>/api/history/claude</code> — Claude command history</div>
                 <div class="endpoint">GET <code>/api/history/stats</code> — Command statistics</div>
+                <div class="endpoint">GET <code>/api/prompts</code> — User prompts history</div>
+                <div class="endpoint">GET <code>/api/prompts/stats</code> — Prompt statistics</div>
+                <div class="endpoint">GET <code>/api/notifications</code> — Notifications history</div>
+                <div class="endpoint">GET <code>/api/notifications/stats</code> — Notification statistics</div>
                 <div class="endpoint">GET <code>/ws</code> — WebSocket real-time updates</div>
             </div>
         </div>
@@ -783,6 +854,25 @@
             return div.innerHTML;
         }
 
+        // Load notification statistics
+        async function loadNotificationStats() {
+            try {
+                const response = await fetch('/api/notifications/stats');
+                const stats = await response.json();
+
+                document.getElementById('permission-requests').textContent = stats.permission_requests || 0;
+                document.getElementById('idle-alerts').textContent = stats.idle_alerts || 0;
+                document.getElementById('total-notifications').textContent = stats.total_notifications || 0;
+                document.getElementById('most-requested-tool').textContent = stats.most_requested_tool || 'None';
+            } catch (error) {
+                console.error('Error loading notification stats:', error);
+                document.getElementById('permission-requests').textContent = '—';
+                document.getElementById('idle-alerts').textContent = '—';
+                document.getElementById('total-notifications').textContent = '—';
+                document.getElementById('most-requested-tool').textContent = '—';
+            }
+        }
+
         // WebSocket connection
         function connectWebSocket() {
             const ws = new WebSocket(`ws://${window.location.host}/ws`);
@@ -793,8 +883,13 @@
 
             ws.onmessage = (event) => {
                 console.log('WebSocket message:', event.data);
+
+                // Refresh all data on any WebSocket event
                 loadData();
                 loadBackgroundShells();
+                loadAvailableSessions();
+                loadActivityHistory();
+                loadNotificationStats();
             };
 
             ws.onerror = (error) => {
@@ -807,87 +902,95 @@
             };
         }
 
-        // Command History State
-        let allCommands = [];
-        let filteredCommands = [];
+        // Unified Activity History State
+        let allHistory = [];
+        let filteredHistory = [];
         let currentFilter = 'all';
+        let currentSessionFilter = '';
         let currentOffset = 0;
-        const COMMANDS_PER_PAGE = 50;
+        let availableSessions = [];
+        const HISTORY_PER_PAGE = 100;
 
-        // Load command history
-        async function loadCommandHistory() {
+        // Load available sessions from all tables
+        async function loadAvailableSessions() {
             try {
-                const [shellResponse, claudeResponse] = await Promise.all([
-                    fetch(`/api/history/shell?limit=${COMMANDS_PER_PAGE}&offset=0`),
-                    fetch(`/api/history/claude?limit=${COMMANDS_PER_PAGE}&offset=0`)
-                ]);
+                const response = await fetch('/api/prompts/sessions');
+                const data = await response.json();
+                availableSessions = data.sessions || [];
 
-                const shellData = await shellResponse.json();
-                const claudeData = await claudeResponse.json();
+                // Populate session filter dropdown
+                const sessionFilter = document.getElementById('session-filter');
+                sessionFilter.innerHTML = '<option value="">All Sessions</option>';
 
-                const shellCommands = (shellData.commands || []).map(cmd => ({
-                    ...cmd,
-                    type: 'shell',
-                    displayCommand: cmd.command,
-                    tool_name: 'Bash'
+                availableSessions.forEach(session => {
+                    const option = document.createElement('option');
+                    option.value = session.conversation_id;
+                    option.textContent = session.session_name ?
+                        `${session.session_name} (${session.conversation_id.substring(0, 8)}...)` :
+                        session.conversation_id.substring(0, 12) + '...';
+                    sessionFilter.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+            }
+        }
+
+        // Load unified activity history
+        async function loadActivityHistory() {
+            try {
+                let url = `/api/history/all?limit=${HISTORY_PER_PAGE}&offset=0`;
+                if (currentSessionFilter) {
+                    url += `&conversation_id=${encodeURIComponent(currentSessionFilter)}`;
+                }
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                allHistory = (data.history || []).map(item => ({
+                    ...item.content,
+                    type: item.type,
+                    timestamp: item.timestamp,
+                    session_name: item.session_name || item.content.session_name
                 }));
-
-                const claudeCommands = (claudeData.commands || []).map(cmd => ({
-                    ...cmd,
-                    type: 'claude',
-                    displayCommand: cmd.tool_name
-                }));
-
-                allCommands = [...shellCommands, ...claudeCommands]
-                    .sort((a, b) => new Date(b.executed_at) - new Date(a.executed_at));
 
                 currentOffset = 0;
                 applyFiltersAndSearch();
             } catch (error) {
-                console.error('Error loading command history:', error);
-                document.getElementById('command-history').innerHTML =
-                    '<div class="empty-state">Error loading command history</div>';
+                console.error('Error loading activity history:', error);
+                document.getElementById('activity-history').innerHTML =
+                    '<div class="empty-state">Error loading activity history</div>';
             }
         }
 
-        // Load more commands
-        async function loadMoreCommands() {
-            currentOffset += COMMANDS_PER_PAGE;
+        // Load more history
+        async function loadMoreHistory() {
+            currentOffset += HISTORY_PER_PAGE;
 
             try {
-                const [shellResponse, claudeResponse] = await Promise.all([
-                    fetch(`/api/history/shell?limit=${COMMANDS_PER_PAGE}&offset=${currentOffset}`),
-                    fetch(`/api/history/claude?limit=${COMMANDS_PER_PAGE}&offset=${currentOffset}`)
-                ]);
+                let url = `/api/history/all?limit=${HISTORY_PER_PAGE}&offset=${currentOffset}`;
+                if (currentSessionFilter) {
+                    url += `&conversation_id=${encodeURIComponent(currentSessionFilter)}`;
+                }
 
-                const shellData = await shellResponse.json();
-                const claudeData = await claudeResponse.json();
+                const response = await fetch(url);
+                const data = await response.json();
 
-                const shellCommands = (shellData.commands || []).map(cmd => ({
-                    ...cmd,
-                    type: 'shell',
-                    displayCommand: cmd.command,
-                    tool_name: 'Bash'
+                const newHistory = (data.history || []).map(item => ({
+                    ...item.content,
+                    type: item.type,
+                    timestamp: item.timestamp,
+                    session_name: item.session_name || item.content.session_name
                 }));
 
-                const claudeCommands = (claudeData.commands || []).map(cmd => ({
-                    ...cmd,
-                    type: 'claude',
-                    displayCommand: cmd.tool_name
-                }));
-
-                const newCommands = [...shellCommands, ...claudeCommands]
-                    .sort((a, b) => new Date(b.executed_at) - new Date(a.executed_at));
-
-                allCommands = [...allCommands, ...newCommands];
+                allHistory = [...allHistory, ...newHistory];
                 applyFiltersAndSearch();
             } catch (error) {
-                console.error('Error loading more commands:', error);
+                console.error('Error loading more history:', error);
             }
         }
 
-        // Filter commands by type
-        function filterCommands(type) {
+        // Filter history by type
+        function filterHistory(type) {
             currentFilter = type;
 
             // Update active tab
@@ -899,8 +1002,16 @@
             applyFiltersAndSearch();
         }
 
-        // Search commands
-        function searchCommands() {
+        // Filter by session
+        function filterBySession() {
+            currentSessionFilter = document.getElementById('session-filter').value;
+            currentOffset = 0;
+            allHistory = [];
+            loadActivityHistory();
+        }
+
+        // Search history
+        function searchHistory() {
             applyFiltersAndSearch();
         }
 
@@ -908,20 +1019,21 @@
         function applyFiltersAndSearch() {
             const searchTerm = document.getElementById('search-input').value.toLowerCase();
 
-            filteredCommands = allCommands.filter(cmd => {
+            filteredHistory = allHistory.filter(item => {
                 // Apply type filter
-                if (currentFilter !== 'all' && cmd.type !== currentFilter) {
+                if (currentFilter !== 'all' && item.type !== currentFilter) {
                     return false;
                 }
 
                 // Apply search filter
                 if (searchTerm) {
                     const searchableText = [
-                        cmd.displayCommand,
-                        cmd.command || '',
-                        cmd.tool_name || '',
-                        cmd.git_branch || '',
-                        cmd.working_directory || ''
+                        item.command || '',
+                        item.tool_name || '',
+                        item.message || '',
+                        item.git_branch || '',
+                        item.working_directory || '',
+                        item.notification_type || ''
                     ].join(' ').toLowerCase();
 
                     return searchableText.includes(searchTerm);
@@ -930,68 +1042,191 @@
                 return true;
             });
 
-            displayCommands();
+            displayHistory();
         }
 
-        // Display commands
-        function displayCommands() {
-            const container = document.getElementById('command-history');
+        // Display history
+        function displayHistory() {
+            const container = document.getElementById('activity-history');
             const loadMore = document.getElementById('load-more');
 
-            if (filteredCommands.length === 0) {
-                container.innerHTML = '<div class="empty-state">No commands found</div>';
+            if (filteredHistory.length === 0) {
+                container.innerHTML = '<div class="empty-state">No activity found</div>';
                 loadMore.style.display = 'none';
                 return;
             }
 
-            container.innerHTML = filteredCommands.map(cmd => {
-                const time = new Date(cmd.executed_at).toLocaleString();
-                const isShell = cmd.type === 'shell';
+            container.innerHTML = filteredHistory.map(item => {
+                const time = new Date(item.timestamp || item.executed_at || item.submitted_at || item.notified_at).toLocaleString();
+                const isShell = item.type === 'shell';
+                const isClaude = item.type === 'claude';
+                const isPrompt = item.type === 'prompt';
+                const isNotification = item.type === 'notification';
 
                 let metaItems = [];
 
-                if (cmd.git_branch) {
+                // Add session name if available
+                if (item.session_name) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Session:</span>
+                        <span>${escapeHtml(item.session_name)}</span>
+                    </div>`);
+                }
+
+                if (item.git_branch) {
                     metaItems.push(`<div class="command-meta-item">
                         <span class="command-meta-label">Branch:</span>
-                        <span class="command-branch">${escapeHtml(cmd.git_branch)}</span>
+                        <span class="command-branch">${escapeHtml(item.git_branch)}</span>
                     </div>`);
                 }
 
-                if (cmd.working_directory) {
+                if (item.working_directory) {
                     metaItems.push(`<div class="command-meta-item">
                         <span class="command-meta-label">Dir:</span>
-                        <span>${escapeHtml(cmd.working_directory)}</span>
+                        <span>${escapeHtml(item.working_directory)}</span>
                     </div>`);
                 }
 
-                if (isShell && cmd.exit_code !== null && cmd.exit_code !== undefined) {
-                    const exitClass = cmd.exit_code === 0 ? 'command-success' : 'command-error';
+                if (isShell && item.exit_code !== null && item.exit_code !== undefined) {
+                    const exitClass = item.exit_code === 0 ? 'command-success' : 'command-error';
                     metaItems.push(`<div class="command-meta-item ${exitClass}">
-                        Exit: ${cmd.exit_code}
+                        Exit: ${item.exit_code}
                     </div>`);
                 }
 
-                if (!isShell) {
-                    const statusClass = cmd.success ? 'command-success' : 'command-error';
-                    const statusText = cmd.success ? 'Success' : 'Error';
+                if (isClaude) {
+                    const statusClass = item.success ? 'command-success' : 'command-error';
+                    const statusText = item.success ? 'Success' : 'Error';
                     metaItems.push(`<div class="command-meta-item ${statusClass}">
                         ${statusText}
                     </div>`);
                 }
 
-                if (cmd.duration_ms) {
+                if (item.duration_ms) {
                     metaItems.push(`<div class="command-meta-item">
-                        ${cmd.duration_ms}ms
+                        ${item.duration_ms}ms
                     </div>`);
                 }
 
+                if (isPrompt && item.message_length) {
+                    metaItems.push(`<div class="command-meta-item">
+                        <span class="command-meta-label">Length:</span>
+                        <span>${item.message_length} chars</span>
+                    </div>`);
+                }
+
+                // Notification-specific metadata
+                if (isNotification) {
+                    if (item.notification_type === 'permission_request' && item.tool_name) {
+                        metaItems.push(`<div class="command-meta-item">
+                            <span class="command-meta-label">Tool:</span>
+                            <span class="command-tool">${escapeHtml(item.tool_name)}</span>
+                        </div>`);
+                    }
+
+                    if (item.notification_type === 'idle_alert') {
+                        metaItems.push(`<div class="command-meta-item command-warning">
+                            ⏱️ Idle
+                        </div>`);
+                    }
+                }
+
+                // Determine tool name/label
+                let toolLabel = '';
+                let notificationClass = '';
+                if (isShell) {
+                    toolLabel = 'Bash';
+                } else if (isClaude) {
+                    toolLabel = item.tool_name || 'Claude Tool';
+                } else if (isPrompt) {
+                    toolLabel = '💬 User Prompt';
+                } else if (isNotification) {
+                    switch(item.notification_type) {
+                        case 'permission_request':
+                            toolLabel = '🔐 Permission Request';
+                            notificationClass = 'notification-permission';
+                            break;
+                        case 'idle_alert':
+                            toolLabel = '⏱️ Idle Alert';
+                            notificationClass = 'notification-idle';
+                            break;
+                        default:
+                            toolLabel = '🔔 Notification';
+                            notificationClass = 'notification-item';
+                    }
+                }
+
+                // Determine display text
+                let displayText = '';
+                if (isShell) {
+                    displayText = item.command || '';
+                } else if (isClaude) {
+                    // Show tool name with key parameter
+                    let toolDisplay = item.tool_name || 'Claude Tool';
+
+                    // Parse parameters to extract key info
+                    try {
+                        const params = JSON.parse(item.parameters || '{}');
+                        let keyParam = '';
+
+                        switch(item.tool_name) {
+                            case 'WebFetch':
+                                keyParam = params.url || '';
+                                break;
+                            case 'Read':
+                            case 'Edit':
+                            case 'Write':
+                                keyParam = params.file_path || '';
+                                break;
+                            case 'Glob':
+                                keyParam = params.pattern || '';
+                                break;
+                            case 'Grep':
+                                keyParam = params.pattern || '';
+                                break;
+                            default:
+                                // For other tools, show first parameter value if available
+                                const values = Object.values(params);
+                                if (values.length > 0 && typeof values[0] === 'string') {
+                                    keyParam = values[0];
+                                }
+                        }
+
+                        if (keyParam) {
+                            // Truncate long parameters
+                            if (keyParam.length > 100) {
+                                keyParam = keyParam.substring(0, 100) + '...';
+                            }
+                            toolDisplay = `${item.tool_name}(${keyParam})`;
+                        }
+                    } catch (e) {
+                        // If JSON parsing fails, just show tool name
+                    }
+
+                    displayText = toolDisplay;
+                } else if (isPrompt) {
+                    let msg = item.message || '';
+                    const maxLength = 500;
+                    if (msg.length > maxLength) {
+                        msg = msg.substring(0, maxLength) + '...\n<em style="color: #999;">(truncated)</em>';
+                    }
+                    displayText = msg;
+                } else if (isNotification) {
+                    // For permission requests, show the actual command if available
+                    if (item.notification_type === 'permission_request' && item.command_details) {
+                        displayText = item.command_details;
+                    } else {
+                        displayText = item.message || '';
+                    }
+                }
+
                 return `
-                    <div class="command-item">
+                    <div class="command-item ${notificationClass}">
                         <div class="command-header">
-                            <div class="command-tool">${escapeHtml(cmd.tool_name || cmd.displayCommand)}</div>
+                            <div class="command-tool">${escapeHtml(toolLabel)}</div>
                             <div class="command-time">${time}</div>
                         </div>
-                        <div class="command-text">${escapeHtml(isShell ? cmd.command : cmd.displayCommand)}</div>
+                        <div class="command-text">${escapeHtml(displayText)}</div>
                         <div class="command-meta">
                             ${metaItems.join('')}
                         </div>
@@ -999,22 +1234,43 @@
                 `;
             }).join('');
 
-            // Show load more button if there might be more commands
-            loadMore.style.display = allCommands.length >= COMMANDS_PER_PAGE ? 'block' : 'none';
+            // Show load more button if there might be more items
+            loadMore.style.display = allHistory.length >= HISTORY_PER_PAGE ? 'block' : 'none';
         }
 
-        // Initialize
+        // Clear all history
+        async function clearAllHistory() {
+            if (!confirm('⚠️ Delete ALL history?\n\nThis action will permanently delete all recorded user prompts, shell commands, and Claude commands from the database. This CANNOT be undone.\n\nAre you sure?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/history', { method: 'DELETE' });
+                const data = await response.json();
+
+                if (data.status === 'cleared') {
+                    alert(`✅ ${data.message}`);
+                    currentSessionFilter = '';
+                    document.getElementById('session-filter').value = '';
+                    loadAvailableSessions();
+                    loadActivityHistory();
+                } else {
+                    alert('❌ Clear failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                alert('❌ Error clearing history: ' + error.message);
+            }
+        }
+
+        // Initialize - load data once on page load
         loadData();
         loadBackgroundShells();
-        loadCommandHistory();
+        loadAvailableSessions();
+        loadActivityHistory();
+        loadNotificationStats();
         connectWebSocket();
 
-        // Refresh every 30 seconds
-        setInterval(() => {
-            loadData();
-            loadBackgroundShells();
-            loadCommandHistory();
-        }, 30000);
+        // No more polling - updates come via WebSocket events only
     </script>
 </body>
 </html>
