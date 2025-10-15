@@ -41,7 +41,7 @@ async function loadResetStatus() {
       resetReason.value = data.value.reason || ''
     }
   } catch (error) {
-    console.error('Error loading reset status:', error)
+    // Error loading reset status
   }
 }
 

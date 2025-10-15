@@ -106,7 +106,7 @@ async function loadStats() {
       stats.value = data.value
     }
   } catch (error) {
-    console.error('Error loading stats:', error)
+    // Error loading stats
   }
 }
 

@@ -80,7 +80,6 @@ const { connected, on } = useWebSocket()
 
 // Handle WebSocket events - prepend new items
 on('onNotification', (data: any) => {
-  console.log('📝 Received notification:', data)
   history.value.unshift({
     id: data.id || Date.now(),
     type: 'notification',
@@ -91,7 +90,6 @@ on('onNotification', (data: any) => {
 })
 
 on('onPrompt', (data: any) => {
-  console.log('📝 Received prompt:', data)
   history.value.unshift({
     id: data.id || Date.now(),
     type: 'prompt',
@@ -105,7 +103,6 @@ on('onPrompt', (data: any) => {
 })
 
 on('onCommand', (message: any) => {
-  console.log('📝 Received command:', message)
   const cmd = message.data || message
   
   // Extract file_path from parameters if it's a file operation
@@ -204,6 +201,19 @@ function getDisplayText(item: ActivityItem): string {
   if (item.type === 'shell') {
     return item.command || ''
   } else if (item.type === 'claude') {
+    // Special handling for TodoWrite to show todo content
+    if (item.tool_name === 'TodoWrite' && item.parameters) {
+      try {
+        const params = typeof item.parameters === 'string' ? JSON.parse(item.parameters) : item.parameters
+        if (params?.todos && Array.isArray(params.todos)) {
+          const todoSummary = params.todos.map((todo: any) => `${todo.status === 'completed' ? '✅' : todo.status === 'in_progress' ? '🔄' : '📝'} ${todo.content}`).join(', ')
+          return `Updated ${params.todos.length} todo${params.todos.length !== 1 ? 's' : ''}: ${todoSummary.length > 150 ? todoSummary.substring(0, 150) + '...' : todoSummary}`
+        }
+      } catch (e) {
+        // Fall back to default behavior if parsing fails
+      }
+    }
+    
     // Show tool name with file path if available, like "Read(/path/to/file)"
     if (item.file_path && item.tool_name) {
       return `${item.tool_name}(${item.file_path})`
@@ -243,7 +253,7 @@ onMounted(async () => {
       }))
     }
   } catch (error) {
-    console.error('Error loading activity history:', error)
+    // Error loading activity history
   }
 })
 </script>

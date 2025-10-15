@@ -31,12 +31,10 @@ export const useWebSocket = () => {
     const host = isDev ? 'localhost:3333' : window.location.host
     const wsUrl = `${protocol}//${host}/ws`
 
-    console.log(`Connecting to WebSocket: ${wsUrl}`)
     ws.value = new WebSocket(wsUrl)
 
     ws.value.onopen = () => {
       connected.value = true
-      console.log('✅ WebSocket connected')
     }
 
     ws.value.onmessage = (event) => {
@@ -82,21 +80,19 @@ export const useWebSocket = () => {
             break
 
           default:
-            console.log('Unknown WebSocket event:', message.event)
+            // Unknown WebSocket event
         }
       } catch (error) {
-        console.error('Error parsing WebSocket message:', error, event.data)
+        // Error parsing WebSocket message
       }
     }
 
     ws.value.onerror = (error) => {
-      console.error('❌ WebSocket error:', error)
       connected.value = false
     }
 
     ws.value.onclose = () => {
       connected.value = false
-      console.log('🔌 WebSocket closed, reconnecting in 5s...')
 
       // Reconnect after 5 seconds
       setTimeout(() => {
