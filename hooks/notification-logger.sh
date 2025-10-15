@@ -55,7 +55,7 @@ elif echo "$MESSAGE" | grep -qi "waiting.*input"; then
 fi
 
 # Generate friendly session name from session_id
-# Use a list of 10 South Park character names and hash the session_id to pick one
+# Use a list of 25 South Park character names and hash the session_id to pick one
 SESSION_NAMES=(
     "Cartman"
     "Stan"
@@ -67,12 +67,27 @@ SESSION_NAMES=(
     "Craig"
     "Token"
     "Wendy"
+    "Sheila"
+    "Sharon"
+    "Chef"
+    "Mr-Garrison"
+    "Mr-Mackey"
+    "Jimmy"
+    "Timmy"
+    "Bebe"
+    "Clyde"
+    "Ike"
+    "PC-Principal"
+    "Towelie"
+    "Mr-Hankey"
+    "Big-Gay-Al"
+    "Satan"
 )
 
-# Generate a numeric hash from session_id to pick a name (modulo 10)
+# Generate a numeric hash from session_id to pick a name (modulo 25)
 if command -v cksum &> /dev/null; then
     HASH=$(echo -n "$SESSION_ID" | cksum | cut -d' ' -f1)
-    INDEX=$((HASH % 10))
+    INDEX=$((HASH % 25))
 else
     # Fallback: use character values
     HASH=0
@@ -81,7 +96,7 @@ else
         ASCII=$(printf '%d' "'$CHAR")
         HASH=$((HASH + ASCII))
     done
-    INDEX=$((HASH % 10))
+    INDEX=$((HASH % 25))
 fi
 
 SESSION_NAME="${SESSION_NAMES[$INDEX]}"
