@@ -10,7 +10,7 @@ import '../assets/css/main.css'
           <span class="nav-logo">CCT</span>
           <span class="nav-separator">|</span>
           <span class="nav-title">Claude Control Terminal</span>
-          <span class="nav-version">v0.3.0</span>
+          <span class="nav-version">v0.3.1</span>
         </div>
         <div class="nav-links">
           <a href="#features">Features</a>
