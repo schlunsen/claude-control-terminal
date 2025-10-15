@@ -124,8 +124,17 @@ SESSION_NAME="${SESSION_NAMES[$INDEX]}"
 MODEL_NAME="${ANTHROPIC_MODEL:-}"
 MODEL_PROVIDER="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
 
-# Analytics server endpoint
-NOTIFICATION_ENDPOINT="http://localhost:3333/api/notifications"
+# Analytics server endpoint (HTTPS by default)
+# Use CCT_ANALYTICS_URL if set, otherwise default to https://localhost:3333
+BASE_URL="${CCT_ANALYTICS_URL:-https://localhost:3333}"
+NOTIFICATION_ENDPOINT="${BASE_URL}/api/notifications"
+
+# Read API key from .secret file if it exists
+API_KEY_FILE="${CCT_API_KEY_FILE:-$HOME/.claude/analytics/.secret}"
+API_KEY=""
+if [[ -f "$API_KEY_FILE" ]]; then
+    API_KEY=$(cat "$API_KEY_FILE")
+fi
 
 # Build JSON payload
 if command -v jq &> /dev/null; then
@@ -173,16 +182,37 @@ fi
 
 # POST to notifications endpoint
 if command -v curl &> /dev/null; then
-    curl -X POST "$NOTIFICATION_ENDPOINT" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD" \
-        &> /dev/null &
+    if [[ -n "$API_KEY" ]]; then
+        curl -X POST "$NOTIFICATION_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_KEY" \
+            -k \
+            -d "$PAYLOAD" \
+            &> /dev/null &
+    else
+        curl -X POST "$NOTIFICATION_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -k \
+            -d "$PAYLOAD" \
+            &> /dev/null &
+    fi
 elif command -v wget &> /dev/null; then
-    wget --quiet --post-data="$PAYLOAD" \
-        --header="Content-Type: application/json" \
-        -O /dev/null \
-        "$NOTIFICATION_ENDPOINT" \
-        &> /dev/null &
+    if [[ -n "$API_KEY" ]]; then
+        wget --quiet --post-data="$PAYLOAD" \
+            --header="Content-Type: application/json" \
+            --header="Authorization: Bearer $API_KEY" \
+            --no-check-certificate \
+            -O /dev/null \
+            "$NOTIFICATION_ENDPOINT" \
+            &> /dev/null &
+    else
+        wget --quiet --post-data="$PAYLOAD" \
+            --header="Content-Type: application/json" \
+            --no-check-certificate \
+            -O /dev/null \
+            "$NOTIFICATION_ENDPOINT" \
+            &> /dev/null &
+    fi
 fi
 
 # Exit successfully (don't block Claude Code)
