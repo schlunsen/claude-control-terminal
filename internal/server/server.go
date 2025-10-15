@@ -6,6 +6,7 @@ package server
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/schlunsen/claude-control-terminal/internal/analytics"
@@ -33,6 +34,9 @@ type Server struct {
 	modelProviderLookup  *analytics.ModelProviderLookup
 	db                   *database.Database
 	repo                 *database.Repository
+	config               *Config
+	tlsConfig            *TLSConfig
+	authMiddleware       *AuthMiddleware
 	claudeDir            string
 	port                 int
 	quiet                bool // Suppress output when running in TUI
@@ -51,14 +55,6 @@ func NewServerWithOptions(claudeDir string, port int, quiet bool) *Server {
 		DisableStartupMessage: quiet, // Suppress Fiber startup banner in quiet mode
 	})
 
-	// Middleware
-	app.Use(cors.New())
-
-	// Only add logger middleware if not in quiet mode
-	if !quiet {
-		app.Use(logger.New())
-	}
-
 	return &Server{
 		app:       app,
 		claudeDir: claudeDir,
@@ -69,6 +65,56 @@ func NewServerWithOptions(claudeDir string, port int, quiet bool) *Server {
 
 // Setup initializes analytics components and routes
 func (s *Server) Setup() error {
+	// Initialize configuration
+	configManager := NewConfigManager(s.claudeDir)
+	config, err := configManager.LoadOrCreateConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+	s.config = config
+
+	// Override port from config if not set
+	if s.port == 0 {
+		s.port = config.Server.Port
+	}
+
+	// Initialize TLS certificates if enabled
+	if config.TLS.Enabled {
+		certManager := NewCertificateManager(s.claudeDir)
+		tlsConfig, err := certManager.EnsureCertificates()
+		if err != nil {
+			return fmt.Errorf("failed to initialize TLS: %w", err)
+		}
+		s.tlsConfig = tlsConfig
+	}
+
+	// Initialize authentication
+	if config.Auth.Enabled {
+		apiKey, err := configManager.EnsureAPIKey()
+		if err != nil {
+			return fmt.Errorf("failed to initialize API key: %w", err)
+		}
+		s.authMiddleware = NewAuthMiddleware(apiKey, true)
+	}
+
+	// Configure CORS middleware
+	corsConfig := cors.Config{
+		AllowOrigins: strings.Join(config.CORS.AllowedOrigins, ","),
+		AllowMethods: "GET,POST,PUT,DELETE,OPTIONS",
+		AllowHeaders: "Origin,Content-Type,Accept,Authorization",
+	}
+	s.app.Use(cors.New(corsConfig))
+
+	// Only add logger middleware if not in quiet mode
+	if !s.quiet {
+		s.app.Use(logger.New())
+	}
+
+	// Apply authentication middleware globally if enabled
+	if s.authMiddleware != nil {
+		s.app.Use(s.authMiddleware.Handler())
+	}
+
 	// Initialize database
 	dataDir := filepath.Join(s.claudeDir, "analytics_data")
 	db, err := database.Initialize(dataDir)
@@ -447,13 +493,41 @@ func (s *Server) handleResetStatus(c *fiber.Ctx) error {
 
 // Start starts the server
 func (s *Server) Start() error {
-	if !s.quiet {
-		fmt.Printf("🚀 Starting server on http://localhost:%d\n", s.port)
-		fmt.Printf("📊 Analytics dashboard: http://localhost:%d/\n", s.port)
-		fmt.Printf("🔗 API endpoint: http://localhost:%d/api/data\n", s.port)
+	// Determine protocol and address
+	protocol := "http"
+	if s.tlsConfig != nil && s.tlsConfig.Enabled {
+		protocol = "https"
 	}
 
-	return s.app.Listen(fmt.Sprintf(":%d", s.port))
+	// Bind address - use from config or default to 127.0.0.1
+	bindHost := "127.0.0.1"
+	if s.config != nil && s.config.Server.Host != "" {
+		bindHost = s.config.Server.Host
+	}
+	addr := fmt.Sprintf("%s:%d", bindHost, s.port)
+
+	if !s.quiet {
+		fmt.Printf("🚀 Starting server on %s://%s\n", protocol, addr)
+		fmt.Printf("📊 Analytics dashboard: %s://localhost:%d/\n", protocol, s.port)
+		fmt.Printf("🔗 API endpoint: %s://localhost:%d/api/data\n", protocol, s.port)
+
+		if s.tlsConfig != nil && s.tlsConfig.Enabled {
+			fmt.Printf("🔒 TLS enabled (self-signed certificate)\n")
+		}
+
+		if s.authMiddleware != nil {
+			configManager := NewConfigManager(s.claudeDir)
+			fmt.Printf("🔑 Authentication enabled (API key in %s)\n", configManager.GetSecretPath())
+		}
+	}
+
+	// Start server with TLS if enabled
+	if s.tlsConfig != nil && s.tlsConfig.Enabled {
+		return s.app.ListenTLS(addr, s.tlsConfig.CertPath, s.tlsConfig.KeyPath)
+	}
+
+	// Start without TLS
+	return s.app.Listen(addr)
 }
 
 // Shutdown gracefully shuts down the server and all its components.

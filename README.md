@@ -478,7 +478,7 @@ cct --docker-init --docker-type analytics
 cct --docker-build
 cct --docker-run --docker-command "cct --analytics"
 
-# Access dashboard at http://localhost:3333
+# Access dashboard at https://localhost:3333 (HTTPS enabled)
 ```
 
 **Example 3: Full Stack with Docker Compose**
@@ -494,16 +494,17 @@ cp .env.example .env
 docker-compose up -d
 
 # Access Claude: docker-compose exec claude claude
-# Access Analytics: http://localhost:3333
+# Access Analytics: https://localhost:3333 (HTTPS enabled)
 ```
 
 ## Analytics Dashboard
 
-Real-time monitoring of Claude Code conversations with WebSocket live updates.
+Real-time monitoring of Claude Code conversations with WebSocket live updates, secured with HTTPS and API key authentication.
 
 ```bash
 cct --analytics
-# Dashboard available at http://localhost:3333
+# Dashboard available at https://localhost:3333 (HTTPS enabled by default)
+# API key automatically generated in ~/.claude/analytics/.secret
 ```
 
 <p align="center">
@@ -512,27 +513,54 @@ cct --analytics
 
 ### Features
 
-- Real-time conversation monitoring with WebSocket updates
+- **Secure by Default**: HTTPS encryption + API key authentication
+- Real-time conversation monitoring with WebSocket (WSS) updates
 - State detection: "Claude Code working...", "Awaiting user input...", etc.
 - Process correlation with running Claude Code instances
 - System statistics: active conversations, total messages, state distribution
 - Auto-refresh every 30 seconds plus instant WebSocket updates
 - Responsive purple-themed gradient UI
 
+### Security Features
+
+**Automatic Setup (First Run)**:
+- Self-signed TLS certificate generated in `~/.claude/analytics/certs/`
+- API key generated in `~/.claude/analytics/.secret`
+- Server binds to `127.0.0.1` (localhost-only) by default
+- Hooks automatically configured to use HTTPS and API key
+
+**Configuration**: Edit `~/.claude/analytics/config.json` to customize TLS, authentication, CORS, and server settings.
+
+**For more details**, see the [Security Features section in CLAUDE.md](CLAUDE.md#security-features).
+
 ### API Endpoints
+
+**Note**: All endpoints use HTTPS. GET requests don't require authentication. POST/DELETE require API key via `Authorization: Bearer <key>` header.
 
 - `GET /api/health` - Health check
 - `GET /api/data` - Complete conversation data
 - `GET /api/conversations` - Conversation list with metadata
 - `GET /api/processes` - Running Claude Code processes
 - `GET /api/stats` - System statistics and metrics
-- `POST /api/refresh` - Force data refresh
-- `POST /api/reset/soft` - Soft reset with delta tracking (recommended)
-- `POST /api/reset/archive` - Archive all conversations (preserves data)
-- `POST /api/reset/clear` - Permanently delete all conversations (use with caution!)
-- `DELETE /api/reset` - Clear soft reset and restore original counts
+- `POST /api/refresh` - Force data refresh (requires auth)
+- `POST /api/reset/soft` - Soft reset with delta tracking (requires auth)
+- `POST /api/reset/archive` - Archive all conversations (requires auth)
+- `POST /api/reset/clear` - Permanently delete all conversations (requires auth)
+- `DELETE /api/reset` - Clear soft reset and restore original counts (requires auth)
 - `GET /api/reset/status` - Get current reset status
-- `GET /ws` - WebSocket connection for real-time updates
+- `GET /wss` - WebSocket connection for real-time updates (secure WebSocket)
+
+**Example API calls**:
+```bash
+# GET requests work without auth (use -k for self-signed cert)
+curl -k https://localhost:3333/api/data
+
+# POST requests require API key
+API_KEY=$(cat ~/.claude/analytics/.secret)
+curl -X POST https://localhost:3333/api/refresh \
+  -H "Authorization: Bearer $API_KEY" \
+  -k
+```
 
 ### Resetting Analytics Counts
 
@@ -540,26 +568,37 @@ You can reset the analytics counts in three ways:
 
 **Option 1: Soft Reset (Recommended) - Delta-Based** 🔄
 ```bash
+# Get your API key
+API_KEY=$(cat ~/.claude/analytics/.secret)
+
 # Resets counts to zero without deleting any data (reversible)
-curl -X POST http://localhost:3333/api/reset/soft
+curl -X POST https://localhost:3333/api/reset/soft \
+  -H "Authorization: Bearer $API_KEY" \
+  -k
 ```
 This applies a delta to make counts appear as if you're starting from zero, while preserving all conversation data. Perfect for tracking usage from a specific date. You can undo this anytime:
 ```bash
 # Restore original counts
-curl -X DELETE http://localhost:3333/api/reset
+curl -X DELETE https://localhost:3333/api/reset \
+  -H "Authorization: Bearer $API_KEY" \
+  -k
 ```
 
 **Option 2: Archive** 📦
 ```bash
 # Archives all conversations to timestamped folder, preserving data
-curl -X POST http://localhost:3333/api/reset/archive
+curl -X POST https://localhost:3333/api/reset/archive \
+  -H "Authorization: Bearer $API_KEY" \
+  -k
 ```
 This moves all `.jsonl` files to `~/.claude/archive/YYYY-MM-DD_HH-MM-SS/`, allowing you to recover them later.
 
 **Option 3: Clear (Permanent)** ⚠️
 ```bash
 # Permanently deletes all conversation files
-curl -X POST http://localhost:3333/api/reset/clear
+curl -X POST https://localhost:3333/api/reset/clear \
+  -H "Authorization: Bearer $API_KEY" \
+  -k
 ```
 This permanently removes all `.jsonl` files (cannot be undone!).
 

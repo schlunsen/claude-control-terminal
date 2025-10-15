@@ -89,8 +89,17 @@ SESSION_NAME="${SESSION_NAMES[$INDEX]}"
 MODEL_NAME="${ANTHROPIC_MODEL:-}"
 MODEL_PROVIDER="${ANTHROPIC_BASE_URL:-https://api.anthropic.com}"
 
-# Analytics server endpoint (default port)
-ANALYTICS_URL="http://localhost:3333/api/prompts"
+# Analytics server endpoint (default port, HTTPS by default)
+# Use CCT_ANALYTICS_URL if set, otherwise default to https://localhost:3333
+ANALYTICS_URL="${CCT_ANALYTICS_URL:-https://localhost:3333/api/prompts}"
+
+# Read API key from .secret file if it exists
+# Default to ~/.claude/analytics/.secret
+API_KEY_FILE="${CCT_API_KEY_FILE:-$HOME/.claude/analytics/.secret}"
+API_KEY=""
+if [[ -f "$API_KEY_FILE" ]]; then
+    API_KEY=$(cat "$API_KEY_FILE")
+fi
 
 # Build JSON payload
 if command -v jq &> /dev/null; then
@@ -124,16 +133,41 @@ fi
 # POST to analytics server (run in background to not slow down Claude Code)
 # Use curl if available, otherwise try wget
 if command -v curl &> /dev/null; then
-    curl -X POST "$ANALYTICS_URL" \
-        -H "Content-Type: application/json" \
-        -d "$PAYLOAD" \
-        &> /dev/null &
+    # Build curl command with authentication if API key exists
+    if [[ -n "$API_KEY" ]]; then
+        curl -X POST "$ANALYTICS_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_KEY" \
+            -k \
+            -d "$PAYLOAD" \
+            &> /dev/null &
+    else
+        # No API key - try without authentication (will fail if auth is enabled)
+        curl -X POST "$ANALYTICS_URL" \
+            -H "Content-Type: application/json" \
+            -k \
+            -d "$PAYLOAD" \
+            &> /dev/null &
+    fi
 elif command -v wget &> /dev/null; then
-    wget --quiet --post-data="$PAYLOAD" \
-        --header="Content-Type: application/json" \
-        -O /dev/null \
-        "$ANALYTICS_URL" \
-        &> /dev/null &
+    # Build wget command with authentication if API key exists
+    if [[ -n "$API_KEY" ]]; then
+        wget --quiet --post-data="$PAYLOAD" \
+            --header="Content-Type: application/json" \
+            --header="Authorization: Bearer $API_KEY" \
+            --no-check-certificate \
+            -O /dev/null \
+            "$ANALYTICS_URL" \
+            &> /dev/null &
+    else
+        # No API key - try without authentication
+        wget --quiet --post-data="$PAYLOAD" \
+            --header="Content-Type: application/json" \
+            --no-check-certificate \
+            -O /dev/null \
+            "$ANALYTICS_URL" \
+            &> /dev/null &
+    fi
 fi
 
 # Exit successfully (don't block Claude Code)

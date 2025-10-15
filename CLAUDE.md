@@ -55,7 +55,10 @@ claude-control-terminal/
 │   │   ├── template.go        # Template processing
 │   │   └── utils.go           # File utilities
 │   ├── server/                 # Web server & Nuxt frontend
-│   │   ├── server.go          # Fiber HTTP server
+│   │   ├── server.go          # Fiber HTTP/HTTPS server
+│   │   ├── config.go          # Configuration management
+│   │   ├── tls.go             # TLS certificate generation
+│   │   ├── auth.go            # API key authentication
 │   │   ├── static.go          # Embedded static files
 │   │   ├── static/            # Legacy static files
 │   │   └── frontend/          # Nuxt 4 SPA frontend
@@ -128,14 +131,14 @@ make run-analytics
 # or
 just analytics
 
-# Access dashboard
-open http://localhost:3333
+# Access dashboard (HTTPS by default)
+open https://localhost:3333
 
-# API endpoints
-curl http://localhost:3333/api/data
-curl http://localhost:3333/api/conversations
-curl http://localhost:3333/api/processes
-curl http://localhost:3333/api/stats
+# API endpoints (use -k to accept self-signed cert)
+curl -k https://localhost:3333/api/data
+curl -k https://localhost:3333/api/conversations
+curl -k https://localhost:3333/api/processes
+curl -k https://localhost:3333/api/stats
 ```
 
 ### Frontend Development
@@ -173,6 +176,183 @@ internal/server/frontend/
 ```
 
 The dev server proxies API calls to the Go backend on port 3333.
+
+### Security Features
+
+The analytics server includes comprehensive security features enabled by default:
+
+#### TLS/HTTPS Encryption
+
+**Automatic Configuration:**
+- Self-signed TLS certificates are automatically generated on first run
+- Certificates stored in `~/.claude/analytics/certs/`
+- Valid for 1 year with automatic expiration warnings
+- Server runs on HTTPS by default
+
+**Certificate Management:**
+```bash
+# Certificates are auto-generated at:
+~/.claude/analytics/certs/server.crt
+~/.claude/analytics/certs/server.key
+
+# The server will warn when certificates expire in < 30 days
+# To regenerate: delete the cert files and restart the server
+rm ~/.claude/analytics/certs/server.*
+./cct --analytics
+```
+
+**Configuration File:**
+```json
+{
+  "tls": {
+    "enabled": true,
+    "cert_path": "",  // Auto-detected if empty
+    "key_path": ""    // Auto-detected if empty
+  }
+}
+```
+
+#### API Key Authentication
+
+**Automatic Setup:**
+- API key automatically generated on first run
+- Stored in `~/.claude/analytics/.secret`
+- Required for all POST/PUT/DELETE/PATCH requests
+- GET requests allowed without authentication (for browser access)
+
+**Hook Integration:**
+- All hooks automatically read API key from `.secret` file
+- Hooks send `Authorization: Bearer <api-key>` header
+- Supports self-signed certificates with `-k` flag (curl) or `--no-check-certificate` (wget)
+
+**Viewing Your API Key:**
+```bash
+# API key location
+cat ~/.claude/analytics/.secret
+
+# Hooks read from this file automatically
+# No manual configuration needed
+```
+
+**Manual API Requests:**
+```bash
+# With authentication
+API_KEY=$(cat ~/.claude/analytics/.secret)
+curl -X POST https://localhost:3333/api/prompts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_KEY" \
+  -k \
+  -d '{"session_id":"123","prompt":"test"}'
+
+# GET requests work without auth
+curl https://localhost:3333/api/data -k
+```
+
+#### Security Configuration
+
+**Config File Location:**
+```bash
+~/.claude/analytics/config.json
+```
+
+**Default Configuration:**
+```json
+{
+  "tls": {
+    "enabled": true
+  },
+  "auth": {
+    "enabled": true,
+    "api_key_path": "~/.claude/analytics/.secret"
+  },
+  "server": {
+    "port": 3333,
+    "host": "127.0.0.1",  // Localhost-only by default
+    "quiet": false
+  },
+  "cors": {
+    "allowed_origins": [
+      "http://localhost:3333",
+      "https://localhost:3333",
+      "http://127.0.0.1:3333",
+      "https://127.0.0.1:3333"
+    ]
+  }
+}
+```
+
+**Disabling Security (Development Only):**
+```json
+{
+  "tls": {
+    "enabled": false  // Use HTTP instead of HTTPS
+  },
+  "auth": {
+    "enabled": false  // Disable API key requirement
+  },
+  "server": {
+    "host": "0.0.0.0"  // Bind to all interfaces (NOT RECOMMENDED)
+  }
+}
+```
+
+**Security Files:**
+```text
+~/.claude/analytics/
+├── config.json          # Server configuration
+├── .secret              # API key (keep private!)
+└── certs/
+    ├── server.crt       # TLS certificate
+    └── server.key       # TLS private key
+```
+
+#### Hook Security
+
+**Hook Environment Variables:**
+- `CCT_ANALYTICS_URL`: Override analytics endpoint (default: `https://localhost:3333`)
+- `CCT_API_KEY_FILE`: Override API key file path (default: `~/.claude/analytics/.secret`)
+
+**Example Custom Configuration:**
+```bash
+# In your shell profile or .env
+export CCT_ANALYTICS_URL="https://analytics.mycompany.com:8443"
+export CCT_API_KEY_FILE="/path/to/custom/.secret"
+```
+
+**Hook Security Features:**
+- Automatic API key authentication
+- Support for self-signed certificates
+- Silent failures (never block Claude Code)
+- Background execution (non-blocking)
+
+#### Security Best Practices
+
+1. **Keep API Key Secret:**
+   - Never commit `.secret` file to version control
+   - Never share in logs or public places
+   - Regenerate if compromised:
+     ```bash
+     rm ~/.claude/analytics/.secret
+     ./cct --analytics  # Will generate new key
+     ```
+
+2. **Certificate Management:**
+   - Self-signed certs are secure for localhost
+   - For remote access, use proper CA-signed certificates
+   - Monitor expiration warnings
+
+3. **Network Security:**
+   - Server binds to `127.0.0.1` by default (localhost-only)
+   - For remote access, use SSH tunneling:
+     ```bash
+     ssh -L 3333:localhost:3333 user@remote-host
+     ```
+   - Or configure proper TLS certificates and update CORS origins
+
+4. **Access Control:**
+   - Browser access allowed via GET (read-only)
+   - Hooks require API key (write access)
+   - Consider IP-based restrictions for production
 
 ### Development Workflow
 
@@ -455,7 +635,8 @@ go clean -cache -modcache -i -r
 2. **WebSocket connection fails**:
    - Check firewall settings
    - Verify CORS configuration
-   - Test with `wscat -c ws://localhost:3333/ws`
+   - Test with `wscat -c wss://localhost:3333/ws --no-check`
+   - For HTTP mode (if TLS disabled): `wscat -c ws://localhost:3333/ws`
 
 3. **Component download fails**:
    - Check internet connection
