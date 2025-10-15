@@ -22,18 +22,6 @@
             <span class="nav-separator">|</span>
             <span class="nav-title">Analytics Dashboard</span>
           </div>
-          <button
-            @click="openAnalytics"
-            class="analytics-button"
-            title="Open Analytics in New Tab"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-              <polyline points="15 3 21 3 21 9"/>
-              <line x1="10" y1="14" x2="21" y2="3"/>
-            </svg>
-            <span class="button-text">Open Dashboard</span>
-          </button>
           <ThemeToggle />
         </div>
       </div>
@@ -73,11 +61,6 @@ async function loadVersion() {
   } catch (error) {
     // Error loading version
   }
-}
-
-// Open analytics in new tab
-function openAnalytics() {
-  window.open('http://localhost:3333', '_blank')
 }
 
 // Load version on mount
@@ -142,31 +125,6 @@ onMounted(() => {
   background: var(--accent-purple);
   color: white;
   border-color: var(--accent-purple);
-}
-
-.analytics-button {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.analytics-button:hover {
-  background: var(--accent-purple);
-  color: white;
-  border-color: var(--accent-purple);
-}
-
-.analytics-button svg {
-  flex-shrink: 0;
 }
 
 .nav-brand {
@@ -243,10 +201,6 @@ onMounted(() => {
   }
 
   .nav-title {
-    display: none;
-  }
-
-  .analytics-button .button-text {
     display: none;
   }
 }
