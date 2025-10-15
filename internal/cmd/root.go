@@ -243,8 +243,6 @@ func handleCommand(cmd *cobra.Command, args []string) {
 		server := createAnalyticsServer(directory)
 
 		spinner.Success("Analytics Dashboard starting!")
-		ShowInfo(fmt.Sprintf("Dashboard: http://localhost:3333"))
-		ShowInfo(fmt.Sprintf("API: http://localhost:3333/api/data"))
 		ShowInfo("Press Ctrl+C to stop")
 
 		if err := server.Setup(); err != nil {
@@ -252,6 +250,7 @@ func handleCommand(cmd *cobra.Command, args []string) {
 			return
 		}
 
+		// Server prints its own startup messages with correct protocol and ports
 		if err := server.Start(); err != nil {
 			ShowError(fmt.Sprintf("Failed to start server: %v", err))
 		}
