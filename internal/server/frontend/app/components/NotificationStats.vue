@@ -60,16 +60,18 @@ onMounted(() => {
 
 <style scoped>
 .notification-stats {
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 32px;
+  margin-bottom: 24px;
+  transition: all 0.3s ease;
 }
 
 .section-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 24px;
   letter-spacing: -0.01em;
 }
@@ -87,20 +89,35 @@ onMounted(() => {
 .stat-value {
   font-size: 2.5rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--accent-cyan);
   margin-bottom: 4px;
   letter-spacing: -0.02em;
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: #666;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
 @media (max-width: 768px) {
+  .notification-stats {
+    padding: 24px;
+  }
+
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .stat-value {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

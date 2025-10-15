@@ -37,14 +37,16 @@
         <ResetControls />
       </section>
 
+      <!-- Activity History -->
+      <ActivityHistory />
+
       <!-- Claude Processes and Background Shells (side-by-side) -->
       <div class="grid-2">
         <ClaudeProcesses />
         <BackgroundShells />
       </div>
 
-      <!-- Activity History -->
-      <ActivityHistory />
+      
 
       <!-- Notification Stats -->
       <NotificationStats />
@@ -115,8 +117,9 @@ onMounted(() => {
 <style scoped>
 .dashboard {
   padding: 40px 20px;
-  background: #f5f5f5;
-  min-height: 100vh;
+  background: var(--bg-primary);
+  min-height: calc(100vh - 60px);
+  transition: background-color 0.3s ease;
 }
 
 .container {
@@ -131,14 +134,14 @@ header {
 header h1 {
   font-size: 2rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 8px;
   letter-spacing: -0.02em;
 }
 
 .subtitle {
   font-size: 0.95rem;
-  color: #666;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
@@ -147,24 +150,25 @@ header h1 {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   font-size: 0.875rem;
-  color: #666;
+  color: var(--text-secondary);
   margin-top: 16px;
+  transition: all 0.3s ease;
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ff9800;
+  background: var(--accent-orange);
   animation: pulse 2s ease-in-out infinite;
 }
 
 .status-connected .status-dot {
-  background: #4caf50;
+  background: var(--status-success);
   animation: none;
 }
 
@@ -174,17 +178,18 @@ header h1 {
 }
 
 .section {
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 32px;
   margin-bottom: 24px;
+  transition: all 0.3s ease;
 }
 
 .section-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 24px;
   letter-spacing: -0.01em;
 }
@@ -202,14 +207,14 @@ header h1 {
 .stat-value {
   font-size: 2.5rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--accent-purple);
   margin-bottom: 4px;
   letter-spacing: -0.02em;
 }
 
 .stat-label {
   font-size: 0.875rem;
-  color: #666;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
@@ -224,17 +229,40 @@ header h1 {
   text-align: center;
   margin-top: 60px;
   padding-top: 32px;
-  border-top: 1px solid #e0e0e0;
-  color: #999;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-muted);
   font-size: 0.8125rem;
 }
 
 @media (max-width: 768px) {
+  .dashboard {
+    padding: 20px 10px;
+  }
+
+  header {
+    margin-bottom: 40px;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+  }
+
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
   }
 
   .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .section {
+    padding: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
     grid-template-columns: 1fr;
   }
 }
