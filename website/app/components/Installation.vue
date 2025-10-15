@@ -129,6 +129,7 @@ make build`
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
+  min-width: 0;
 }
 
 .install-header {
@@ -154,6 +155,10 @@ make build`
   margin-bottom: 1rem;
 }
 
+.install-card pre {
+  overflow-x: auto;
+}
+
 .quick-start {
   margin-top: 4rem;
 }
@@ -168,6 +173,11 @@ make build`
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
+  min-width: 0;
+}
+
+.quick-start-option pre {
+  overflow-x: auto;
 }
 
 .quick-start-option h4 {
@@ -232,17 +242,159 @@ make build`
 }
 
 @media (max-width: 768px) {
+  .section-title {
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .subsection-title {
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .install-grid {
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .install-card {
+    padding: 1.25rem;
+  }
+
+  .install-card h3 {
+    font-size: 1rem;
+  }
+
+  .install-card pre {
+    font-size: 0.8rem;
+    padding: 0.875rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .install-card code {
+    font-size: 0.8rem;
+  }
+
+  .quick-start {
+    margin-top: 2rem;
+  }
+
+  .quick-start-content {
+    gap: 1.5rem;
+  }
+
+  .quick-start-option {
+    padding: 1.25rem;
+  }
+
+  .quick-start-option h4 {
+    font-size: 1rem;
+  }
+
+  .quick-start-option p {
+    font-size: 0.85rem;
+  }
+
+  .quick-start-option pre {
+    font-size: 0.85rem;
+    padding: 1rem;
+    overflow-x: auto;
+  }
+
   .quick-start-features {
     padding: 1.5rem;
+    margin-top: 1.5rem;
+  }
+
+  .quick-start-features h4 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+  }
+
+  .feature-list {
+    gap: 1.25rem;
   }
 
   .feature-list li {
     flex-direction: column;
     gap: 0.5rem;
+    align-items: start;
   }
 
   .feature-icon {
     margin-top: 0;
+  }
+
+  .feature-content strong {
+    font-size: 0.95rem;
+  }
+
+  .feature-content p {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .installation {
+    padding: 2rem 0;
+  }
+
+  .section-title {
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .subsection-title {
+    font-size: 1.1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .install-grid {
+    gap: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .install-card {
+    padding: 1rem;
+  }
+
+  .install-card h3 {
+    font-size: 0.95rem;
+  }
+
+  .install-description {
+    font-size: 0.85rem;
+  }
+
+  .install-card pre {
+    font-size: 0.7rem;
+    padding: 0.75rem;
+  }
+
+  .install-card code {
+    font-size: 0.7rem;
+  }
+
+  .quick-start-option {
+    padding: 1rem;
+  }
+
+  .quick-start-option h4 {
+    font-size: 0.95rem;
+  }
+
+  .quick-start-option pre {
+    font-size: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .quick-start-features {
+    padding: 1.25rem;
+  }
+
+  .quick-start-features h4 {
+    font-size: 1rem;
   }
 }
 </style>

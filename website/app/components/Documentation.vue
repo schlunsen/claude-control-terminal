@@ -222,12 +222,54 @@ const docs = [
 }
 
 @media (max-width: 768px) {
+  .documentation {
+    padding: 2rem 0;
+  }
+
+  .section-title {
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .subsection-title {
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
   .docs-grid {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .doc-card {
+    padding: 1.25rem;
+  }
+
+  .doc-card h3 {
+    font-size: 1.05rem;
+  }
+
+  .doc-card p {
+    font-size: 0.85rem;
+  }
+
+  .doc-card li {
+    font-size: 0.8rem;
+  }
+
+  .resources {
+    margin-top: 2rem;
   }
 
   .resource-links {
     grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .resource-link {
+    padding: 0.875rem;
+    font-size: 0.85rem;
   }
 }
 </style>

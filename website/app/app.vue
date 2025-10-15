@@ -137,17 +137,81 @@ import '../assets/css/main.css'
 }
 
 @media (max-width: 768px) {
+  .navbar {
+    padding: 0.75rem 0;
+  }
+
   .navbar .container {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
+  }
+
+  .nav-brand {
+    gap: 0.5rem;
+  }
+
+  .nav-logo {
+    font-size: 1.1rem;
   }
 
   .nav-links {
     gap: 1rem;
+    font-size: 0.85rem;
+  }
+
+  .nav-links a {
+    font-size: 0.85rem;
   }
 
   .nav-title {
     display: none;
+  }
+
+  .footer {
+    padding: 2rem 0 1.5rem;
+    margin-top: 2rem;
+  }
+
+  .footer-content p {
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .footer-links {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .footer-links a {
+    font-size: 0.85rem;
+  }
+
+  .footer-credit {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar .container {
+    gap: 0.5rem;
+  }
+
+  .nav-links {
+    gap: 0.75rem;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .nav-links a {
+    font-size: 0.8rem;
+  }
+
+  .footer-content p {
+    font-size: 0.8rem;
+  }
+
+  .footer-links a {
+    font-size: 0.8rem;
   }
 }
 </style>
