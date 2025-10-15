@@ -54,16 +54,17 @@ onMounted(() => {
 
 <style scoped>
 .claude-processes {
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 32px;
+  transition: all 0.3s ease;
 }
 
 .section-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 24px;
   letter-spacing: -0.01em;
 }
@@ -76,17 +77,18 @@ onMounted(() => {
 
 .process-item {
   padding: 16px;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .process-item:hover {
-  border-color: #d0d0d0;
+  border-color: var(--accent-purple);
+  background: var(--card-hover);
 }
 
 .process-info {
@@ -94,39 +96,49 @@ onMounted(() => {
 }
 
 .process-pid {
-  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
   font-size: 0.875rem;
-  color: #1a1a1a;
-  font-weight: 500;
+  color: var(--accent-cyan);
+  font-weight: 600;
   margin-bottom: 4px;
 }
 
 .process-command {
   font-size: 0.875rem;
-  color: #666;
+  color: var(--text-secondary);
   margin-bottom: 4px;
   word-break: break-all;
 }
 
 .process-dir {
   font-size: 0.8125rem;
-  color: #999;
+  color: var(--text-muted);
 }
 
 .process-status {
   padding: 4px 10px;
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: var(--status-success);
+  color: var(--bg-primary);
   border-radius: 4px;
   font-size: 0.8125rem;
-  font-weight: 500;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .empty-state {
   text-align: center;
   padding: 40px 20px;
-  color: #999;
+  color: var(--text-muted);
   font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+  .claude-processes {
+    padding: 24px;
+  }
+
+  .process-item {
+    padding: 12px;
+  }
 }
 </style>

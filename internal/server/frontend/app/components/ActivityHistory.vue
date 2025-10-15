@@ -80,6 +80,7 @@ const { connected, on } = useWebSocket()
 
 // Handle WebSocket events - prepend new items
 on('onNotification', (data: any) => {
+  console.log('📝 Received notification:', data)
   history.value.unshift({
     id: data.id || Date.now(),
     type: 'notification',
@@ -90,6 +91,7 @@ on('onNotification', (data: any) => {
 })
 
 on('onPrompt', (data: any) => {
+  console.log('📝 Received prompt:', data)
   history.value.unshift({
     id: data.id || Date.now(),
     type: 'prompt',
@@ -103,6 +105,7 @@ on('onPrompt', (data: any) => {
 })
 
 on('onCommand', (message: any) => {
+  console.log('📝 Received command:', message)
   const cmd = message.data || message
   history.value.unshift({
     id: cmd.id || Date.now(),
@@ -213,10 +216,12 @@ onMounted(async () => {
 
 <style scoped>
 .activity-history {
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 32px;
+  margin-bottom: 24px;
+  transition: all 0.3s ease;
 }
 
 .header {
@@ -230,6 +235,7 @@ onMounted(async () => {
   font-size: 1.1rem;
   font-weight: 600;
   margin: 0;
+  color: var(--text-primary);
 }
 
 .status {
@@ -239,17 +245,17 @@ onMounted(async () => {
   padding: 6px 12px;
   border-radius: 4px;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .status.connected {
-  background: #e8f5e9;
-  color: #2e7d32;
+  background: var(--status-success);
+  color: var(--bg-primary);
 }
 
 .status.disconnected {
-  background: #ffebee;
-  color: #c62828;
+  background: var(--status-error);
+  color: var(--bg-primary);
 }
 
 .status .dot {
@@ -262,22 +268,30 @@ onMounted(async () => {
 .search-input {
   width: 100%;
   padding: 12px 16px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   font-size: 0.875rem;
   margin-bottom: 16px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #666;
+  border-color: var(--accent-purple);
+  background: var(--card-hover);
 }
 
 .filter-tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 24px;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color);
   padding-bottom: 0;
 }
 
@@ -287,19 +301,19 @@ onMounted(async () => {
   border: none;
   border-bottom: 2px solid transparent;
   font-size: 0.875rem;
-  font-weight: 500;
-  color: #666;
+  font-weight: 600;
+  color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .filter-tab:hover {
-  color: #1a1a1a;
+  color: var(--text-secondary);
 }
 
 .filter-tab.active {
-  color: #1a1a1a;
-  border-bottom-color: #1a1a1a;
+  color: var(--accent-purple);
+  border-bottom-color: var(--accent-purple);
 }
 
 .activity-list {
@@ -308,35 +322,37 @@ onMounted(async () => {
   gap: 12px;
   max-height: 600px;
   overflow-y: auto;
+  padding-right: 8px;
 }
 
 .empty-state {
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: var(--text-muted);
   font-size: 0.875rem;
 }
 
 .activity-item {
   padding: 16px;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
-  transition: border-color 0.2s;
+  transition: all 0.2s ease;
 }
 
 .activity-item:hover {
-  border-color: #d0d0d0;
+  border-color: var(--accent-cyan);
+  background: var(--card-hover);
 }
 
 .activity-item.notification-permission_request {
-  background: #fef2f2;
-  border-left: 4px solid #ef4444;
+  background: var(--bg-secondary);
+  border-left: 4px solid var(--status-error);
 }
 
 .activity-item.notification-idle_alert {
-  background: #f0f9ff;
-  border-left: 4px solid #3b82f6;
+  background: var(--bg-secondary);
+  border-left: 4px solid var(--accent-cyan);
 }
 
 .activity-header {
@@ -347,24 +363,24 @@ onMounted(async () => {
 }
 
 .activity-tool {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
   font-size: 0.875rem;
-  color: #1a1a1a;
-  font-weight: 500;
+  color: var(--accent-purple);
+  font-weight: 600;
 }
 
 .activity-time {
   font-size: 0.8125rem;
-  color: #999;
+  color: var(--text-muted);
 }
 
 .activity-content {
-  font-family: 'SF Mono', Monaco, monospace;
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
   font-size: 0.8125rem;
-  color: #1a1a1a;
+  color: var(--text-primary);
   padding: 8px 12px;
-  background: #fff;
-  border: 1px solid #e8e8e8;
+  background: var(--code-bg);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   margin-bottom: 8px;
   word-break: break-all;
@@ -376,7 +392,7 @@ onMounted(async () => {
   gap: 16px;
   flex-wrap: wrap;
   font-size: 0.8125rem;
-  color: #666;
+  color: var(--text-secondary);
 }
 
 .meta-item {
@@ -386,14 +402,41 @@ onMounted(async () => {
 }
 
 .meta-label {
-  color: #999;
+  color: var(--text-muted);
 }
 
 .meta-item.success {
-  color: #2e7d32;
+  color: var(--status-success);
+  font-weight: 600;
 }
 
 .meta-item.error {
-  color: #c53030;
+  color: var(--status-error);
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .activity-history {
+    padding: 24px;
+  }
+
+  .activity-list {
+    max-height: 400px;
+  }
+
+  .filter-tabs {
+    gap: 4px;
+    overflow-x: auto;
+  }
+
+  .filter-tab {
+    padding: 6px 12px;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+
+  .activity-item {
+    padding: 12px;
+  }
 }
 </style>

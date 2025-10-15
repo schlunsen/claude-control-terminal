@@ -52,16 +52,18 @@
 
 <style scoped>
 .api-endpoints {
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 32px;
+  margin-bottom: 24px;
+  transition: all 0.3s ease;
 }
 
 .section-title {
   font-size: 1.1rem;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary);
   margin-bottom: 24px;
   letter-spacing: -0.01em;
 }
@@ -73,16 +75,35 @@
 
 .endpoint {
   padding: 12px 16px;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
-  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
   font-size: 0.8125rem;
-  color: #1a1a1a;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.endpoint:hover {
+  border-color: var(--accent-purple);
+  background: var(--card-hover);
 }
 
 .endpoint code {
-  color: #0066cc;
-  font-weight: 500;
+  color: var(--accent-cyan);
+  font-weight: 600;
+  background: none;
+  padding: 0;
+}
+
+@media (max-width: 768px) {
+  .api-endpoints {
+    padding: 24px;
+  }
+
+  .endpoint {
+    padding: 10px 12px;
+    font-size: 0.75rem;
+  }
 }
 </style>

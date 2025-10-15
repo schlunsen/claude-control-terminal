@@ -103,18 +103,18 @@ onMounted(() => {
 
 .btn {
   padding: 10px 20px;
-  border: none;
+  border: 2px solid;
   border-radius: 6px;
   font-size: 0.875rem;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
   font-family: inherit;
 }
 
 .btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .btn:active {
@@ -122,38 +122,49 @@ onMounted(() => {
 }
 
 .btn-primary {
-  background: #2d3748;
-  color: #f7fafc;
-  border: 1px solid #4a5568;
+  background: transparent;
+  color: var(--accent-purple);
+  border-color: var(--accent-purple);
 }
 
 .btn-primary:hover {
-  background: #1a202c;
-  border-color: #2d3748;
+  background: var(--accent-purple);
+  color: var(--bg-primary);
 }
 
 .btn-secondary {
-  background: #f7fafc;
-  color: #4a5568;
-  border: 1px solid #cbd5e0;
+  background: transparent;
+  color: var(--accent-cyan);
+  border-color: var(--accent-cyan);
 }
 
 .btn-secondary:hover {
-  background: #edf2f7;
-  border-color: #a0aec0;
+  background: var(--accent-cyan);
+  color: var(--bg-primary);
 }
 
 .reset-info {
   margin-top: 16px;
   padding: 12px 16px;
-  background: #fef3c7;
-  border: 1px solid #fbbf24;
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-yellow);
   border-radius: 6px;
   font-size: 0.875rem;
-  color: #92400e;
+  color: var(--text-secondary);
 }
 
 .reset-info strong {
-  color: #78350f;
+  color: var(--accent-yellow);
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .actions {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+  }
 }
 </style>
