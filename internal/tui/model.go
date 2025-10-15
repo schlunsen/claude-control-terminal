@@ -467,7 +467,7 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o", "O":
 		// Open analytics dashboard in browser
 		if m.analyticsEnabled {
-			openBrowser("http://localhost:3333")
+			openBrowser("https://localhost:3333")
 		}
 		return m, nil
 	}
@@ -856,7 +856,7 @@ func (m Model) viewMainScreen() string {
 		analyticsStyle = StatusSuccessStyle
 	}
 	b.WriteString(SubtitleStyle.Render("Analytics: ") + analyticsStyle.Render(analyticsStatus))
-	b.WriteString(SubtitleStyle.Render(" (http://localhost:3333)") + "\n")
+	b.WriteString(SubtitleStyle.Render(" (https://localhost:3333)") + "\n")
 
 	// Provider status
 	if m.hasProviderConfig {

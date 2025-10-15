@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - 2025-10-16
+
+### Added
+- TLS/HTTPS encryption enabled by default for analytics server with auto-generated self-signed certificates
+- API key authentication system protecting write operations to analytics endpoints
+- Automatic API key generation and storage in `~/.claude/analytics/.secret`
+- TLS certificate auto-generation with 1-year validity and expiration warnings
+- Comprehensive security configuration in `~/.claude/analytics/config.json`
+- Enhanced hook scripts with automatic API key authentication and TLS support
+- Security documentation covering TLS, API keys, and best practices
+
+### Changed
+- Analytics server now runs on HTTPS by default (https://localhost:3333)
+- All hooks updated to use API key authentication via Authorization header
+- TUI analytics dashboard URLs updated to use HTTPS protocol
+- Analytics server configuration now supports enabling/disabling TLS and auth independently
+- Hook scripts enhanced with self-signed certificate support (-k flag for curl)
+
+### Security
+- All POST/PUT/DELETE/PATCH requests now require API key authentication
+- GET requests remain unauthenticated for browser access
+- Server binds to localhost (127.0.0.1) by default for security
+- Self-signed certificates stored in `~/.claude/analytics/certs/`
+
+### Fixed
+- Analytics header UI cleaned up by removing non-functional "Open Dashboard" button
+
 ## [0.3.4] - 2025-10-15
 
 ### Added
@@ -471,7 +498,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.4...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.5...HEAD
+[0.3.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.1...v0.3.2
