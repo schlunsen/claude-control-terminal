@@ -5,9 +5,21 @@ BINARY_NAME=cct
 BUILD_DIR=./cmd/cct
 OUTPUT_DIR=.
 
-# Build the application
-build:
+# Build the application (with frontend)
+build: build-frontend
 	@echo "Building $(BINARY_NAME)..."
+	@go build -o $(OUTPUT_DIR)/$(BINARY_NAME) $(BUILD_DIR)
+	@echo "✅ Build complete: ./$(BINARY_NAME)"
+
+# Build frontend only
+build-frontend:
+	@echo "Building Nuxt frontend..."
+	@cd internal/server/frontend && npm run generate
+	@echo "✅ Frontend build complete"
+
+# Build Go binary only (assumes frontend already built)
+build-go:
+	@echo "Building $(BINARY_NAME) (Go only)..."
 	@go build -o $(OUTPUT_DIR)/$(BINARY_NAME) $(BUILD_DIR)
 	@echo "✅ Build complete: ./$(BINARY_NAME)"
 
@@ -103,7 +115,7 @@ coverage-badge:
 	echo "Badge URL: https://img.shields.io/badge/coverage-$$COVERAGE%25%20filtered-$$COLOR"
 
 # Build for multiple platforms
-build-all:
+build-all: build-frontend
 	@echo "Building for multiple platforms..."
 	@mkdir -p dist
 	@GOOS=linux GOARCH=amd64 go build -o dist/$(BINARY_NAME)-linux-amd64 $(BUILD_DIR)

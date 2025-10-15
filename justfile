@@ -5,9 +5,21 @@
 default:
     @just --list
 
-# Build the application
-build:
+# Build the application (with frontend)
+build: build-frontend
     @echo "Building cct..."
+    @go build -o cct ./cmd/cct
+    @echo "✅ Build complete: ./cct"
+
+# Build frontend only
+build-frontend:
+    @echo "Building Nuxt frontend..."
+    @cd internal/server/frontend && npm run generate
+    @echo "✅ Frontend build complete"
+
+# Build Go binary only (assumes frontend already built)
+build-go:
+    @echo "Building cct (Go only)..."
     @go build -o cct ./cmd/cct
     @echo "✅ Build complete: ./cct"
 
@@ -25,11 +37,8 @@ frontend-dev:
     @echo "Starting Nuxt development server..."
     @cd internal/server/frontend && npm run dev
 
-# Build Nuxt frontend for production
-frontend-build:
-    @echo "Building Nuxt frontend..."
-    @cd internal/server/frontend && npm run build
-    @echo "✅ Frontend build complete"
+# Build Nuxt frontend for production (alias for build-frontend)
+frontend-build: build-frontend
 
 # Install Nuxt frontend dependencies
 frontend-install:
@@ -38,7 +47,7 @@ frontend-install:
     @echo "✅ Frontend dependencies installed"
 
 # Full development workflow: build frontend then start analytics
-dev-full: frontend-build build analytics
+dev-full: build-frontend build analytics
 
 # Run with agents flag
 agents:
@@ -96,7 +105,7 @@ test-coverage:
     @echo "   Data: coverage.out"
 
 # Build for all platforms
-build-all:
+build-all: build-frontend
     @echo "Building for multiple platforms..."
     @mkdir -p dist
     @GOOS=linux GOARCH=amd64 go build -o dist/cct-linux-amd64 ./cmd/cct
