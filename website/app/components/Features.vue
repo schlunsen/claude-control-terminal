@@ -296,12 +296,74 @@ const screenshots = [
 }
 
 @media (max-width: 768px) {
+  .section-title {
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .provider-support {
+    padding: 2rem 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .provider-title {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .provider-label {
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .provider-logos {
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .provider-badge img {
+    height: 36px;
+  }
+
+  .provider-note {
+    font-size: 0.9rem;
+  }
+
   .features-grid {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .feature-card {
+    padding: 1.25rem;
+  }
+
+  .feature-icon {
+    font-size: 2rem;
+  }
+
+  .screenshots {
+    margin-top: 2rem;
+  }
+
+  .screenshots-title {
+    font-size: 1.25rem;
+    margin-bottom: 1.5rem;
   }
 
   .screenshots-grid {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .screenshot-item {
+    border-width: 1px;
+  }
+
+  .screenshot-caption {
+    padding: 0.75rem;
+    font-size: 0.85rem;
   }
 }
 </style>
