@@ -26,8 +26,8 @@ func (r *Repository) RecordShellCommand(cmd *ShellCommand) error {
 	query := `
 		INSERT INTO shell_commands (
 			conversation_id, session_name, command, description, working_directory, git_branch,
-			exit_code, stdout, stderr, duration_ms, executed_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			model_provider, model_name, exit_code, stdout, stderr, duration_ms, executed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
@@ -38,6 +38,8 @@ func (r *Repository) RecordShellCommand(cmd *ShellCommand) error {
 		cmd.Description,
 		cmd.WorkingDirectory,
 		cmd.GitBranch,
+		cmd.ModelProvider,
+		cmd.ModelName,
 		cmd.ExitCode,
 		cmd.Stdout,
 		cmd.Stderr,
@@ -67,8 +69,8 @@ func (r *Repository) RecordClaudeCommand(cmd *ClaudeCommand) error {
 	query := `
 		INSERT INTO claude_commands (
 			conversation_id, session_name, tool_name, parameters, result, working_directory, git_branch,
-			success, error_message, duration_ms, executed_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			model_provider, model_name, success, error_message, duration_ms, executed_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
@@ -80,6 +82,8 @@ func (r *Repository) RecordClaudeCommand(cmd *ClaudeCommand) error {
 		cmd.Result,
 		cmd.WorkingDirectory,
 		cmd.GitBranch,
+		cmd.ModelProvider,
+		cmd.ModelName,
 		cmd.Success,
 		cmd.ErrorMessage,
 		cmd.DurationMs,
@@ -123,6 +127,8 @@ func (r *Repository) GetShellCommands(query *CommandHistoryQuery) ([]*ShellComma
 			&cmd.Description,
 			&cmd.WorkingDirectory,
 			&cmd.GitBranch,
+			&cmd.ModelProvider,
+			&cmd.ModelName,
 			&cmd.ExitCode,
 			&cmd.Stdout,
 			&cmd.Stderr,
@@ -163,6 +169,8 @@ func (r *Repository) GetClaudeCommands(query *CommandHistoryQuery) ([]*ClaudeCom
 			&cmd.Result,
 			&cmd.WorkingDirectory,
 			&cmd.GitBranch,
+			&cmd.ModelProvider,
+			&cmd.ModelName,
 			&cmd.Success,
 			&cmd.ErrorMessage,
 			&cmd.DurationMs,
@@ -242,8 +250,8 @@ func (r *Repository) UpsertConversation(conv *Conversation) error {
 	query := `
 		INSERT INTO conversations (
 			id, project_path, started_at, last_activity_at,
-			total_commands, total_shell_commands, total_tokens, status
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			total_commands, total_shell_commands, total_tokens, status, model_provider, model_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			project_path = excluded.project_path,
 			last_activity_at = excluded.last_activity_at,
@@ -251,6 +259,8 @@ func (r *Repository) UpsertConversation(conv *Conversation) error {
 			total_shell_commands = excluded.total_shell_commands,
 			total_tokens = excluded.total_tokens,
 			status = excluded.status,
+			model_provider = excluded.model_provider,
+			model_name = excluded.model_name,
 			updated_at = CURRENT_TIMESTAMP
 	`
 
@@ -264,6 +274,8 @@ func (r *Repository) UpsertConversation(conv *Conversation) error {
 		conv.TotalShellCommands,
 		conv.TotalTokens,
 		conv.Status,
+		conv.ModelProvider,
+		conv.ModelName,
 	)
 
 	if err != nil {
@@ -278,6 +290,7 @@ func (r *Repository) UpsertConversation(conv *Conversation) error {
 func (r *Repository) buildShellCommandQuery(query *CommandHistoryQuery) (string, []interface{}) {
 	sql := `
 		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, command, description, working_directory, git_branch,
+		       COALESCE(model_provider, '') as model_provider, COALESCE(model_name, '') as model_name,
 		       exit_code, stdout, stderr, duration_ms, executed_at, created_at
 		FROM shell_commands
 		WHERE 1=1
@@ -318,6 +331,7 @@ func (r *Repository) buildShellCommandQuery(query *CommandHistoryQuery) (string,
 func (r *Repository) buildClaudeCommandQuery(query *CommandHistoryQuery) (string, []interface{}) {
 	sql := `
 		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, tool_name, parameters, result, working_directory, git_branch,
+		       COALESCE(model_provider, '') as model_provider, COALESCE(model_name, '') as model_name,
 		       success, error_message, duration_ms, executed_at, created_at
 		FROM claude_commands
 		WHERE 1=1
@@ -436,8 +450,8 @@ func (r *Repository) RecordUserMessage(msg *UserMessage) error {
 	query := `
 		INSERT INTO user_messages (
 			conversation_id, session_name, message, working_directory, git_branch,
-			message_length, submitted_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?)
+			model_provider, model_name, message_length, submitted_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
@@ -447,6 +461,8 @@ func (r *Repository) RecordUserMessage(msg *UserMessage) error {
 		msg.Message,
 		msg.WorkingDirectory,
 		msg.GitBranch,
+		msg.ModelProvider,
+		msg.ModelName,
 		msg.MessageLength,
 		msg.SubmittedAt,
 	)
@@ -468,6 +484,7 @@ func (r *Repository) GetUserMessages(query *CommandHistoryQuery) ([]*UserMessage
 
 	sql := `
 		SELECT id, conversation_id, COALESCE(session_name, '') as session_name, message, working_directory, git_branch,
+		       COALESCE(model_provider, '') as model_provider, COALESCE(model_name, '') as model_name,
 		       message_length, submitted_at, created_at
 		FROM user_messages
 		WHERE 1=1
@@ -518,6 +535,8 @@ func (r *Repository) GetUserMessages(query *CommandHistoryQuery) ([]*UserMessage
 			&msg.Message,
 			&msg.WorkingDirectory,
 			&msg.GitBranch,
+			&msg.ModelProvider,
+			&msg.ModelName,
 			&msg.MessageLength,
 			&msg.SubmittedAt,
 			&msg.CreatedAt,
@@ -838,8 +857,8 @@ func (r *Repository) RecordNotification(notif *Notification) error {
 	query := `
 		INSERT INTO notifications (
 			conversation_id, session_name, notification_type, message, tool_name, command_details,
-			working_directory, git_branch, notified_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			working_directory, git_branch, model_provider, model_name, notified_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
@@ -852,6 +871,8 @@ func (r *Repository) RecordNotification(notif *Notification) error {
 		notif.CommandDetails,
 		notif.WorkingDirectory,
 		notif.GitBranch,
+		notif.ModelProvider,
+		notif.ModelName,
 		notif.NotifiedAt,
 	)
 
@@ -874,7 +895,9 @@ func (r *Repository) GetNotifications(query *CommandHistoryQuery) ([]*Notificati
 		SELECT id, conversation_id, COALESCE(session_name, '') as session_name,
 		       notification_type, message, COALESCE(tool_name, '') as tool_name,
 		       COALESCE(command_details, '') as command_details,
-		       working_directory, git_branch, notified_at, created_at
+		       working_directory, git_branch,
+		       COALESCE(model_provider, '') as model_provider, COALESCE(model_name, '') as model_name,
+		       notified_at, created_at
 		FROM notifications
 		WHERE 1=1
 	`
@@ -927,6 +950,8 @@ func (r *Repository) GetNotifications(query *CommandHistoryQuery) ([]*Notificati
 			&notif.CommandDetails,
 			&notif.WorkingDirectory,
 			&notif.GitBranch,
+			&notif.ModelProvider,
+			&notif.ModelName,
 			&notif.NotifiedAt,
 			&notif.CreatedAt,
 		)

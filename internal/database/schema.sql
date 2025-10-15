@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS shell_commands (
     description TEXT,
     working_directory TEXT,
     git_branch TEXT,
+    model_provider TEXT,
+    model_name TEXT,
     exit_code INTEGER,
     stdout TEXT,
     stderr TEXT,
@@ -27,6 +29,8 @@ CREATE TABLE IF NOT EXISTS claude_commands (
     result TEXT, -- JSON string
     working_directory TEXT,
     git_branch TEXT,
+    model_provider TEXT,
+    model_name TEXT,
     success BOOLEAN DEFAULT 1,
     error_message TEXT,
     duration_ms INTEGER,
@@ -44,6 +48,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     total_shell_commands INTEGER DEFAULT 0,
     total_tokens INTEGER DEFAULT 0,
     status TEXT DEFAULT 'active',
+    model_provider TEXT,
+    model_name TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,6 +77,8 @@ CREATE TABLE IF NOT EXISTS user_messages (
     message TEXT NOT NULL,
     working_directory TEXT,
     git_branch TEXT,
+    model_provider TEXT,
+    model_name TEXT,
     message_length INTEGER,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -98,6 +106,8 @@ CREATE TABLE IF NOT EXISTS notifications (
     command_details TEXT, -- actual command/parameters that required permission
     working_directory TEXT,
     git_branch TEXT,
+    model_provider TEXT,
+    model_name TEXT,
     notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -144,3 +154,19 @@ CREATE INDEX IF NOT EXISTS idx_notifications_type
 
 CREATE INDEX IF NOT EXISTS idx_notifications_tool
     ON notifications(tool_name, notified_at DESC) WHERE tool_name IS NOT NULL;
+
+-- Indexes for model filtering
+CREATE INDEX IF NOT EXISTS idx_shell_commands_model
+    ON shell_commands(model_provider, model_name);
+
+CREATE INDEX IF NOT EXISTS idx_claude_commands_model
+    ON claude_commands(model_provider, model_name);
+
+CREATE INDEX IF NOT EXISTS idx_user_messages_model
+    ON user_messages(model_provider, model_name);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_model
+    ON notifications(model_provider, model_name);
+
+CREATE INDEX IF NOT EXISTS idx_conversations_model
+    ON conversations(model_provider, model_name);
