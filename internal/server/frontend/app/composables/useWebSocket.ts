@@ -57,6 +57,14 @@ export const useWebSocket = () => {
             callbacks.onCommand?.(message.data)
             break
 
+          case 'claude':
+            // Handle claude tool events with proper structure
+            callbacks.onCommand?.({
+              data: message.data,
+              type: 'claude'
+            })
+            break
+
           case 'stats_updated':
             callbacks.onStatsUpdate?.(message.data)
             break

@@ -23,7 +23,7 @@
     <!-- Filter tabs -->
     <div class="filter-tabs">
       <button
-        v-for="tab in ['all', 'shell', 'claude', 'prompt', 'notification']"
+        v-for="tab in ['all', 'shell', 'claude', 'command', 'prompt', 'notification']"
         :key="tab"
         :class="{ active: filter === tab }"
         @click="filter = tab"
@@ -58,7 +58,7 @@
           <span v-if="item.type === 'shell' && item.exit_code !== undefined" :class="['meta-item', item.exit_code === 0 ? 'success' : 'error']">
             Exit: {{ item.exit_code }}
           </span>
-          <span v-if="item.type === 'claude'" :class="['meta-item', item.success ? 'success' : 'error']">
+          <span v-if="(item.type === 'claude' || item.type === 'command') && item.success !== undefined" :class="['meta-item', item.success ? 'success' : 'error']">
             {{ item.success ? 'Success' : 'Error' }}
           </span>
         </div>
@@ -72,7 +72,7 @@ import type { ActivityItem } from '~/types/analytics'
 
 // State - ONLY updated via WebSocket or initial load
 const history = ref<ActivityItem[]>([])
-const filter = ref<'all' | 'shell' | 'claude' | 'prompt' | 'notification'>('all')
+const filter = ref<'all' | 'shell' | 'claude' | 'prompt' | 'notification' | 'command'>('all')
 const searchTerm = ref('')
 
 // WebSocket integration
@@ -107,9 +107,24 @@ on('onPrompt', (data: any) => {
 on('onCommand', (message: any) => {
   console.log('📝 Received command:', message)
   const cmd = message.data || message
+  
+  // Extract file_path from parameters if it's a file operation
+  let filePath = cmd.file_path
+  if (!filePath && cmd.parameters) {
+    try {
+      const params = typeof cmd.parameters === 'string' ? JSON.parse(cmd.parameters) : cmd.parameters
+      filePath = params?.file_path || params?.path
+    } catch (e) {
+      // If parameters isn't valid JSON, ignore
+    }
+  }
+  
+  // Determine the correct type
+  const itemType = message.type === 'claude' ? 'claude' : (message.type || 'command')
+  
   history.value.unshift({
     id: cmd.id || Date.now(),
-    type: message.type || 'command',
+    type: itemType,
     command: cmd.command,
     tool_name: cmd.tool_name,
     session_name: cmd.session_name,
@@ -118,7 +133,13 @@ on('onCommand', (message: any) => {
     working_directory: cmd.working_directory,
     exit_code: cmd.exit_code,
     success: cmd.success,
-    timestamp: new Date(cmd.executed_at || cmd.timestamp)
+    description: cmd.description,
+    parameters: typeof cmd.parameters === 'object' ? JSON.stringify(cmd.parameters) : cmd.parameters,
+    duration_ms: cmd.duration_ms,
+    executed_at: cmd.executed_at,
+    file_path: filePath,
+    timestamp: new Date(cmd.executed_at || cmd.timestamp),
+    raw_data: cmd
   })
 })
 
@@ -166,6 +187,8 @@ function getToolLabel(item: ActivityItem): string {
       return 'Bash'
     case 'claude':
       return item.tool_name || 'Claude Tool'
+    case 'command':
+      return item.tool_name || 'Command'
     case 'prompt':
       return '💬 User Prompt'
     case 'notification':
@@ -181,7 +204,17 @@ function getDisplayText(item: ActivityItem): string {
   if (item.type === 'shell') {
     return item.command || ''
   } else if (item.type === 'claude') {
+    // Show tool name with file path if available, like "Read(/path/to/file)"
+    if (item.file_path && item.tool_name) {
+      return `${item.tool_name}(${item.file_path})`
+    }
     return item.tool_name || ''
+  } else if (item.type === 'command') {
+    // Show tool name with file path if available, like "Read(/path/to/file)"
+    if (item.file_path && item.tool_name) {
+      return `${item.tool_name}(${item.file_path})`
+    }
+    return item.command || item.description || item.tool_name || ''
   } else if (item.type === 'prompt') {
     const msg = item.message || ''
     return msg.length > 200 ? msg.substring(0, 200) + '...' : msg
@@ -195,6 +228,7 @@ function formatTime(timestamp: Date | string): string {
   const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
   return date.toLocaleTimeString()
 }
+
 
 // Initial load from API
 onMounted(async () => {
@@ -361,6 +395,7 @@ onMounted(async () => {
   align-items: center;
   margin-bottom: 8px;
 }
+
 
 .activity-tool {
   font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
