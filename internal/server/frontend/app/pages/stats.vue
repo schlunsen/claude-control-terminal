@@ -64,6 +64,10 @@
               <span>CPU Usage</span>
               <span class="metric-value">12%</span>
             </div>
+            <div class="metric-row">
+              <span>Database Size</span>
+              <span class="metric-value">{{ dbStats.db_size_human || 'Loading...' }}</span>
+            </div>
           </div>
         </div>
       </section>
@@ -89,6 +93,10 @@ const stats = ref<Stats>({
   timestamp: ''
 })
 
+const dbStats = ref<any>({
+  db_size_human: 'Loading...'
+})
+
 const startTime = ref(Date.now())
 
 // WebSocket for stats updates
@@ -107,6 +115,18 @@ async function loadStats() {
     }
   } catch (error) {
     // Error loading stats
+  }
+}
+
+// Load database stats
+async function loadDbStats() {
+  try {
+    const { data } = await useFetch<any>('/api/db/stats')
+    if (data.value?.stats) {
+      dbStats.value = data.value.stats
+    }
+  } catch (error) {
+    // Error loading database stats
   }
 }
 
@@ -130,6 +150,7 @@ function formatUptime(): string {
 // Load stats on mount
 onMounted(() => {
   loadStats()
+  loadDbStats()
 })
 </script>
 
