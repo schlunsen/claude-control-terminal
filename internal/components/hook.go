@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/schlunsen/claude-control-terminal/hooks"
 )
 
 // HookInstaller handles installation of Claude Code hooks
@@ -85,34 +87,11 @@ func (hi *HookInstaller) InstallUserPromptLogger() error {
 
 // copyHookScript copies a hook script from the embedded hooks directory to Claude's hooks directory
 func (hi *HookInstaller) copyHookScript(hookName string, hooksDir string) error {
-	// Find the source hook script
-	// Try multiple locations: embedded in binary, current directory, or project root
-	var sourceContent []byte
-	var err error
-
-	// Try 1: Current working directory (development)
-	cwd, _ := os.Getwd()
-	sourcePath := filepath.Join(cwd, "hooks", hookName)
-	sourceContent, err = os.ReadFile(sourcePath)
-
-	// Try 2: Relative to binary location
+	// Read hook script from embedded filesystem
+	// The hooks package embeds all .sh files directly, so we just use the filename
+	sourceContent, err := hooks.Scripts.ReadFile(hookName)
 	if err != nil {
-		execPath, _ := os.Executable()
-		execDir := filepath.Dir(execPath)
-		sourcePath = filepath.Join(execDir, "hooks", hookName)
-		sourceContent, err = os.ReadFile(sourcePath)
-	}
-
-	// Try 3: Project root (go up from internal/components)
-	if err != nil {
-		// Assume we're in internal/components, go up to project root
-		projectRoot := filepath.Join(cwd, "..", "..")
-		sourcePath = filepath.Join(projectRoot, "hooks", hookName)
-		sourceContent, err = os.ReadFile(sourcePath)
-	}
-
-	if err != nil {
-		return fmt.Errorf("could not find hook script %s: %w", hookName, err)
+		return fmt.Errorf("could not find embedded hook script %s: %w", hookName, err)
 	}
 
 	// Write to destination

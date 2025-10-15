@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2025-10-15
+
+### Fixed
+- Hook scripts now embedded in binary using Go's embed package for portability
+- `cct --install-all-hooks` now works from any directory without requiring hook source files
+- Created hooks package with embedded .sh files for reliable hook installation
+
 ## [0.3.0] - 2025-10-15
 
 ### Added
@@ -434,7 +441,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.20...v0.3.0
 [0.2.20]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.19...v0.2.20
 [0.2.19]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.18...v0.2.19
