@@ -72,6 +72,7 @@
           <div class="session-info">
             <span class="session-name">{{ session.name }}</span>
             <span v-if="session.id" class="session-id">{{ session.id }}</span>
+            <span v-if="session.startTime" class="session-time">Started {{ formatSessionTime(session.startTime) }}</span>
           </div>
           <span v-if="selectedSession === session.name" class="session-check">✓</span>
         </div>
@@ -210,17 +211,36 @@ on('onHistoryCleared', () => {
   history.value = []
 })
 
-// Get unique sessions from history with conversation IDs
+// Get unique sessions from history with conversation IDs and start time
 const uniqueSessions = computed(() => {
-  const sessions = new Map<string, { name: string, id: string }>()
+  const sessions = new Map<string, { name: string, id: string, startTime: Date | null }>()
+
   history.value.forEach(item => {
     if (item.session_name) {
-      sessions.set(item.session_name, {
-        name: item.session_name,
-        id: item.conversation_id || ''
-      })
+      const existing = sessions.get(item.session_name)
+      const itemTimestamp = item.timestamp ? new Date(item.timestamp) : null
+
+      if (!existing) {
+        sessions.set(item.session_name, {
+          name: item.session_name,
+          id: item.conversation_id || '',
+          startTime: item.type === 'prompt' ? itemTimestamp : null
+        })
+      } else {
+        // Update if this is a prompt and it's earlier than current start time
+        if (item.type === 'prompt' && itemTimestamp) {
+          if (!existing.startTime || itemTimestamp < existing.startTime) {
+            existing.startTime = itemTimestamp
+          }
+        }
+        // Update conversation ID if missing
+        if (!existing.id && item.conversation_id) {
+          existing.id = item.conversation_id
+        }
+      }
     }
   })
+
   return Array.from(sessions.values()).sort((a, b) => a.name.localeCompare(b.name))
 })
 
@@ -347,6 +367,22 @@ function getDisplayText(item: ActivityItem): string {
 function formatTime(timestamp: Date | string): string {
   const date = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
   return date.toLocaleTimeString()
+}
+
+function formatSessionTime(timestamp: Date): string {
+  const now = new Date()
+  const date = new Date(timestamp)
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+
+  return date.toLocaleDateString()
 }
 
 
@@ -746,6 +782,12 @@ onUnmounted(() => {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-family: 'SF Mono', Monaco, 'Consolas', 'Courier New', monospace;
+}
+
+.session-time {
+  font-size: 0.7rem;
+  color: var(--accent-cyan);
+  font-weight: 500;
 }
 
 .session-check {
