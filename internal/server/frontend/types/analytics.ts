@@ -2,10 +2,10 @@
 
 export interface ActivityItem {
   id: number
-  type: 'shell' | 'claude' | 'prompt' | 'notification'
+  type: 'shell' | 'claude' | 'prompt' | 'notification' | 'command'
   timestamp: Date | string
   session_name?: string
-  conversation_id: string
+  conversation_id?: string
   git_branch?: string
   working_directory?: string
 
@@ -22,6 +22,9 @@ export interface ActivityItem {
   result?: string
   success?: boolean
   error_message?: string
+  description?: string
+  executed_at?: string
+  file_path?: string
 
   // User prompt fields
   message?: string
@@ -32,6 +35,10 @@ export interface ActivityItem {
   notification_type?: string
   command_details?: string
   notified_at?: string
+
+  // Additional metadata from WebSocket
+  raw_data?: any
+  expanded?: boolean
 }
 
 export interface Stats {
