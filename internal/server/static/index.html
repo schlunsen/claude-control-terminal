@@ -474,6 +474,20 @@
             border-left: 4px solid #3b82f6;
         }
 
+        .command-details-code {
+            display: inline-block;
+            background: #f3f4f6;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            font-size: 13px;
+            color: #1f2937;
+            max-width: 600px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
         .load-more {
             text-align: center;
             padding: 16px;
@@ -1205,7 +1219,12 @@
                     }
                     displayText = msg;
                 } else if (isNotification) {
-                    displayText = item.message || '';
+                    // For permission requests, show the actual command if available
+                    if (item.notification_type === 'permission_request' && item.command_details) {
+                        displayText = item.command_details;
+                    } else {
+                        displayText = item.message || '';
+                    }
                 }
 
                 return `

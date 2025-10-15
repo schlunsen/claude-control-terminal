@@ -18,10 +18,12 @@ if command -v jq &> /dev/null; then
     SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
     MESSAGE=$(echo "$INPUT" | jq -r '.message // empty')
     CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+    TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 else
     # Fallback to basic parsing (less robust)
     SESSION_ID=$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4 || echo "")
     MESSAGE=$(echo "$INPUT" | grep -o '"message":"[^"]*"' | cut -d'"' -f4 || echo "")
+    TRANSCRIPT_PATH=$(echo "$INPUT" | grep -o '"transcript_path":"[^"]*"' | cut -d'"' -f4 || echo "")
     CWD=""
 fi
 
@@ -45,11 +47,28 @@ fi
 # Determine notification type and extract tool name if applicable
 NOTIFICATION_TYPE="other"
 TOOL_NAME=""
+COMMAND_DETAILS=""
 
 if echo "$MESSAGE" | grep -qi "permission"; then
     NOTIFICATION_TYPE="permission_request"
     # Extract tool name from message (e.g., "use Bash" -> "Bash")
-    TOOL_NAME=$(echo "$MESSAGE" | grep -oP '(?<=use )\w+' || echo "")
+    TOOL_NAME=$(echo "$MESSAGE" | sed -n 's/.*use \([A-Za-z_0-9-]*\).*/\1/p')
+
+    # Extract actual command from transcript if available
+    if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]] && command -v jq &> /dev/null; then
+        # Get the last assistant message and extract tool_use from it
+        # The structure is: .message.content[] where type == "tool_use"
+        LAST_ASSISTANT=$(tail -20 "$TRANSCRIPT_PATH" | grep '"type":"assistant"' | tail -1)
+        if [[ -n "$LAST_ASSISTANT" ]]; then
+            # Extract tool_use from the assistant message content array
+            if [[ "$TOOL_NAME" == "Bash" ]]; then
+                COMMAND_DETAILS=$(echo "$LAST_ASSISTANT" | jq -r '.message.content[] | select(.type == "tool_use") | .input.command // empty' 2>/dev/null | head -1)
+            else
+                # For other tools, show the input as JSON
+                COMMAND_DETAILS=$(echo "$LAST_ASSISTANT" | jq -c '.message.content[] | select(.type == "tool_use") | .input // {}' 2>/dev/null | head -1)
+            fi
+        fi
+    fi
 elif echo "$MESSAGE" | grep -qi "waiting.*input"; then
     NOTIFICATION_TYPE="idle_alert"
 fi
@@ -112,6 +131,7 @@ if command -v jq &> /dev/null; then
         --arg notificationType "$NOTIFICATION_TYPE" \
         --arg message "$MESSAGE" \
         --arg toolName "$TOOL_NAME" \
+        --arg commandDetails "$COMMAND_DETAILS" \
         --arg cwd "$CWD" \
         --arg branch "$GIT_BRANCH" \
         '{
@@ -120,6 +140,7 @@ if command -v jq &> /dev/null; then
             notification_type: $notificationType,
             message: $message,
             tool_name: $toolName,
+            command_details: $commandDetails,
             cwd: $cwd,
             branch: $branch
         }')
@@ -132,6 +153,7 @@ else
   "notification_type": "$NOTIFICATION_TYPE",
   "message": "$MESSAGE",
   "tool_name": "$TOOL_NAME",
+  "command_details": "$COMMAND_DETAILS",
   "cwd": "$CWD",
   "branch": "$GIT_BRANCH"
 }

@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     notification_type TEXT NOT NULL, -- 'permission_request', 'idle_alert', 'other'
     message TEXT NOT NULL,
     tool_name TEXT, -- extracted from permission requests
+    command_details TEXT, -- actual command/parameters that required permission
     working_directory TEXT,
     git_branch TEXT,
     notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

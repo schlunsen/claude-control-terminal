@@ -110,6 +110,7 @@ type Notification struct {
 	NotificationType string    `json:"notification_type"` // 'permission_request', 'idle_alert', 'other'
 	Message          string    `json:"message"`
 	ToolName         string    `json:"tool_name,omitempty"`
+	CommandDetails   string    `json:"command_details,omitempty"` // Actual command/parameters that required permission
 	WorkingDirectory string    `json:"working_directory,omitempty"`
 	GitBranch        string    `json:"git_branch,omitempty"`
 	NotifiedAt       time.Time `json:"notified_at"`

@@ -958,6 +958,7 @@ func (s *Server) handleRecordNotification(c *fiber.Ctx) error {
 		NotificationType string `json:"notification_type"`
 		Message          string `json:"message"`
 		ToolName         string `json:"tool_name"`
+		CommandDetails   string `json:"command_details"`
 		WorkingDirectory string `json:"cwd"`
 		GitBranch        string `json:"branch"`
 	}
@@ -983,6 +984,7 @@ func (s *Server) handleRecordNotification(c *fiber.Ctx) error {
 		NotificationType: req.NotificationType,
 		Message:          req.Message,
 		ToolName:         req.ToolName,
+		CommandDetails:   req.CommandDetails,
 		WorkingDirectory: req.WorkingDirectory,
 		GitBranch:        req.GitBranch,
 		NotifiedAt:       time.Now(),
