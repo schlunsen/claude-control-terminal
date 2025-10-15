@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.5] - 2025-10-16
+## [0.3.5] - TLS/HTTPS Security & API Authentication - 2025-10-16
 
 ### Added
 - TLS/HTTPS encryption enabled by default for analytics server with auto-generated self-signed certificates
@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Analytics header UI cleaned up by removing non-functional "Open Dashboard" button
 
-## [0.3.4] - 2025-10-15
+## [0.3.4] - AI Model Provider Tracking - 2025-10-15
 
 ### Added
 - AI model provider tracking with color-coded badges in analytics dashboard
@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bumped GitHub Pages deployment version for improved website stability
 
-## [0.3.3] - 2025-10-15
+## [0.3.3] - Browser Integration and Character Avatars - 2025-10-15
 
 ### Added
 - Browser integration: Press 'O' in TUI menu to open analytics dashboard in default browser (when analytics is enabled)
@@ -56,20 +56,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved ActivityHistory component with visual session identification using character avatars
 - Analytics dashboard now displays session info with avatars, IDs, and relative timestamps
 
-## [0.3.2] - 2025-10-15
+## [0.3.2] - Website Branding Updates - 2025-10-15
 
 ### Changed
 - Updated website favicons for improved branding consistency
 - Enhanced website header with current version display (v0.3.1)
 
-## [0.3.1] - 2025-10-15
+## [0.3.1] - Hook Installation Improvements - 2025-10-15
 
 ### Fixed
 - Hook scripts now embedded in binary using Go's embed package for portability
 - `cct --install-all-hooks` now works from any directory without requiring hook source files
 - Created hooks package with embedded .sh files for reliable hook installation
 
-## [0.3.0] - 2025-10-15
+## [0.3.0] - PostToolUse Hooks & Test Coverage - 2025-10-15
 
 ### Added
 - Nuxt-based documentation website with modern UI at website/
@@ -92,7 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Mobile responsive layout issues in documentation website
 - Hero section spacing and component alignment
 
-## [0.2.20] - 2025-10-14
+## [0.2.20] - MCP Metadata Tracking - 2025-10-14
 
 ### Added
 - MCP metadata tracking system (.mcp-metadata.json) that maintains install name to server keys mapping
@@ -108,7 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP uninstall now accurately removes correct server entries using metadata tracking
 - Installation status indicator in TUI now correctly identifies installed MCPs regardless of name complexity
 
-## [0.2.19] - 2025-10-14
+## [0.2.19] - Batch Component Operations - 2025-10-14
 
 ### Added
 - Multi-component selection support with Space key for batch operations
@@ -124,7 +124,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP removal now properly cleans up all servers from .mcp.json configuration
 - Fixed broken string matching for MCP server removal
 
-## [0.2.18] - 2025-10-14
+## [0.2.18] - Claude CLI Detection Improvements - 2025-10-14
 
 ### Fixed
 - Claude CLI detection now works when installed in ~/.local/bin but not in PATH
@@ -136,7 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added 160+ lines of test coverage for Claude binary detection
 - Tests cover PATH detection, common location fallback, and error cases
 
-## [0.2.17] - 2025-10-14
+## [0.2.17] - Automatic Claude CLI Installer - 2025-10-14
 
 ### Added
 - Automatic Claude CLI installer with native binary and npm fallback support
@@ -159,7 +159,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docker-based testing environment for clean installation verification
 - Comprehensive test coverage for edge cases and error handling
 
-## [0.2.16] - 2025-10-14
+## [0.2.16] - Test Coverage Infrastructure - 2025-10-14
 
 ### Added
 - Comprehensive test coverage for core packages (analytics, server, websocket, components)
@@ -170,7 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved test coverage from minimal to 60%+ across critical packages
 - Enhanced CI workflow with test coverage reporting
 
-## [0.2.15] - 2025-10-14
+## [0.2.15] - Persistent Provider Storage - 2025-10-14
 
 ### Added
 - Persistent provider token storage with SQLite database for secure credential management
@@ -183,7 +183,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provider UI now displays in compact mode on smaller terminals for better accessibility
 - Improved provider model selection with custom input option
 
-## [0.2.14] - 2025-10-13
+## [0.2.14] - AI Provider Configuration - 2025-10-13
 
 ### Added
 - AI provider configuration and management system for flexible model selection
@@ -191,7 +191,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provider configuration UI in TUI for easy setup
 - Model selection and API key management per provider
 
-## [0.2.13] - 2025-10-13
+## [0.2.13] - Multi-Source Permissions - 2025-10-13
 
 ### Added
 - Multi-source permissions management with tabbed UI for better control over Claude Code permissions
@@ -200,18 +200,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Improved
 - Enhanced permissions management interface with tabbed navigation between different permission sources
 
-## [0.2.12] - 2025-10-13
+## [0.2.12] - Local Permissions Fix - 2025-10-13
 
 ### Fixed
 - Permissions management now uses local `.claude/settings.local.json` instead of global settings file for better project isolation
 - Empty permissions object is now properly removed from settings when all permissions are disabled
 
-## [0.2.11] - 2025-10-13
+## [0.2.11] - Permissions Improvements - 2025-10-13
 
 ### Fixed
 - Permissions management improvements
 
-## [0.2.10] - 2025-10-13
+## [0.2.10] - Session Launcher & Documentation - 2025-10-13
 
 ### Added
 - 'Launch last Claude session' menu option in TUI for quick access to recent conversations
@@ -220,7 +220,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Search bar state persistence issue when navigating between screens in TUI
 
-## [0.2.9] - 2025-10-13
+## [0.2.9] - Security & Stability Improvements - 2025-10-13
 
 ### Added
 - Memory limits to conversation parser to prevent excessive memory usage
@@ -236,19 +236,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Enhanced process detector security to prevent command injection attacks
 
-## [0.2.8] - 2025-10-12
+## [0.2.8] - Homebrew CGO Fix - 2025-10-12
 
 ### Fixed
 - Enabled CGO in GitHub Actions workflow to fix SQLite database support in Homebrew installations
 - Analytics now works correctly when installed via Homebrew
 
-## [0.2.7] - 2025-10-12
+## [0.2.7] - Analytics Startup Fix - 2025-10-12
 
 ### Fixed
 - Analytics server now loads conversation data synchronously on startup to ensure data is available before server starts
 - Improved initial page load experience with pre-loaded conversation data
 
-## [0.2.6] - 2025-10-12
+## [0.2.6] - Command History Database - 2025-10-12
 
 ### Added
 - SQLite database for command history tracking
@@ -264,7 +264,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Simplified wrapper script implementation
 - Enhanced command history tracking with persistent storage
 
-## [0.2.5] - 2025-10-12
+## [0.2.5] - Integrated Analytics - 2025-10-12
 
 ### Added
 - Analytics server now enabled by default in TUI mode
@@ -282,7 +282,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed debug print statements from WebSocket handler
 - Improved analytics server startup/shutdown reliability
 
-## [0.2.4] - 2025-10-12
+## [0.2.4] - Background Shell Detection - 2025-10-12
 
 ### Added
 - Background shell detection in analytics dashboard
@@ -291,18 +291,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Improved analytics dashboard to identify and display background shell processes
 
-## [0.2.3] - 2025-10-12
+## [0.2.3] - Analytics Enhancements - 2025-10-12
 
 ### Added
 - Analytics dashboard enhancements for better background process detection
 
-## [0.2.2] - 2025-10-12
+## [0.2.2] - Docker Build Fix - 2025-10-12
 
 ### Fixed
 - Docker build process now automatically builds cct binary before image build
 - Resolved issue where Docker image build would fail if cct binary was missing
 
-## [0.2.1] - 2025-10-12
+## [0.2.1] - Component Removal - 2025-10-12
 
 ### Added
 - Component removal functionality - ability to uninstall agents, commands, and MCPs
@@ -312,7 +312,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TUI rebranded to "Claude Control Terminal" with updated branding throughout interface
 - Improved component management workflow with removal capabilities
 
-## [0.2.0] - 2025-10-12
+## [0.2.0] - Claude Control Terminal Rebrand & Docker Support - 2025-10-12
 
 ### Changed - BREAKING
 - **Rebrand to Claude Control Terminal (CCT)**: Project renamed from `go-claude-templates` to better reflect its role as a comprehensive control center for Claude Code
@@ -363,19 +363,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All documentation files updated with new repository URLs
 - GitHub workflows updated with new repository references
 
-## [0.1.0] - 2025-10-12
+## [0.1.0] - Stable TUI Release - 2025-10-12
 
 ### Changed
 - Minor version bump to 0.1.0 marking stable TUI and core functionality
 
-## [0.0.9] - 2025-10-12
+## [0.0.9] - Claude CLI Launcher - 2025-10-12
 
 ### Added
 - Claude CLI launcher integration in TUI for direct conversation launching
 - Launch Claude Code conversations from selected agents or components
 - Interactive component selection with conversation context
 
-## [0.0.8] - 2025-10-12
+## [0.0.8] - MCP Registration Fix - 2025-10-12
 
 ### Fixed
 - TUI MCP installer now properly registers MCP servers in .mcp.json configuration file
@@ -384,7 +384,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Added .mcp.json to .gitignore to prevent committing local MCP configurations
 
-## [0.0.7] - 2025-10-12
+## [0.0.7] - Component Preview - 2025-10-12
 
 ### Added
 - Preview functionality for agents, commands, and MCPs via --preview/-p flag
@@ -398,7 +398,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - MCP registration in TUI now uses proper project scope
 
-## [0.0.6] - 2025-10-12
+## [0.0.6] - MCP Configuration - 2025-10-12
 
 ### Added
 - MCP installation now properly registers servers in Claude Code configuration files
@@ -412,7 +412,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCPs not showing up in Claude Code's /mcp command after installation
 - MCP servers not being properly registered in .mcp.json or ~/.claude/config.json
 
-## [0.0.5] - 2025-10-12
+## [0.0.5] - TUI Improvements - 2025-10-12
 
 ### Added
 - Active filter display with contextual hints when search is not focused
@@ -429,7 +429,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Search filter state unclear after exiting search mode
 - Help text and component lists truncated in limited height terminals
 
-## [0.0.4] - 2025-10-12
+## [0.0.4] - Navigation & Documentation - 2025-10-12
 
 ### Added
 - Page up/down navigation support in component lists
@@ -441,7 +441,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - Old test scripts from project root
 
-## [0.0.3] - 2025-10-12
+## [0.0.3] - Modern TUI - 2025-10-12
 
 ### Added
 - Modern interactive TUI with theme support
@@ -452,7 +452,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew formula generation in release workflow
 - Installation documentation accuracy
 
-## [0.0.2] - 2025-10-12
+## [0.0.2] - Homebrew & Documentation - 2025-10-12
 
 ### Added
 - Homebrew formula generation to release workflow
@@ -470,7 +470,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated repository URLs from placeholders to actual repository
 - Enhanced code blocks with language labels
 
-## [0.0.1] - 2025-10-12
+## [0.0.1] - Initial Go Port - 2025-10-12
 
 ### Added
 - Initial Go port of claude-code-templates from Node.js
