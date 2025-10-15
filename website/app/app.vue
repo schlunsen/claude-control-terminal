@@ -10,6 +10,7 @@ import '../assets/css/main.css'
           <span class="nav-logo">CCT</span>
           <span class="nav-separator">|</span>
           <span class="nav-title">Claude Control Terminal</span>
+          <span class="nav-version">v0.3.0</span>
         </div>
         <div class="nav-links">
           <a href="#features">Features</a>
@@ -80,6 +81,13 @@ import '../assets/css/main.css'
 .nav-title {
   color: var(--text-primary);
   font-size: 1rem;
+}
+
+.nav-version {
+  color: var(--accent-cyan);
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-left: 0.5rem;
 }
 
 .navbar .container {
@@ -165,6 +173,11 @@ import '../assets/css/main.css'
 
   .nav-title {
     display: none;
+  }
+
+  .nav-version {
+    font-size: 0.8rem;
+    margin-left: 0.25rem;
   }
 
   .footer {
