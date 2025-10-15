@@ -202,6 +202,30 @@ func (d *Database) Stats() (map[string]interface{}, error) {
 	return stats, nil
 }
 
+// Vacuum reclaims unused disk space by rebuilding the database file
+func (d *Database) Vacuum() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.db == nil {
+		return fmt.Errorf("database not initialized")
+	}
+
+	// First, run VACUUM to rebuild the database
+	_, err := d.db.Exec("VACUUM")
+	if err != nil {
+		return fmt.Errorf("failed to vacuum database: %w", err)
+	}
+
+	// Then checkpoint the WAL to ensure all data is written to main DB file
+	_, err = d.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+	if err != nil {
+		return fmt.Errorf("failed to checkpoint WAL after vacuum: %w", err)
+	}
+
+	return nil
+}
+
 // runMigrations runs database migrations for existing databases
 func runMigrations(db *sql.DB) error {
 	// Migration 1: Add model_name column to providers table if it doesn't exist

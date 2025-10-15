@@ -206,8 +206,8 @@ function getDisplayText(item: ActivityItem): string {
       try {
         const params = typeof item.parameters === 'string' ? JSON.parse(item.parameters) : item.parameters
         if (params?.todos && Array.isArray(params.todos)) {
-          const todoSummary = params.todos.map((todo: any) => `${todo.status === 'completed' ? '✅' : todo.status === 'in_progress' ? '🔄' : '📝'} ${todo.content}`).join(', ')
-          return `Updated ${params.todos.length} todo${params.todos.length !== 1 ? 's' : ''}: ${todoSummary.length > 150 ? todoSummary.substring(0, 150) + '...' : todoSummary}`
+          const todoList = params.todos.map((todo: any) => `${todo.status === 'completed' ? '✅' : todo.status === 'in_progress' ? '🔄' : '📝'} ${todo.content}`).join('\n')
+          return `Updated ${params.todos.length} todo${params.todos.length !== 1 ? 's' : ''}:\n${todoList}`
         }
       } catch (e) {
         // Fall back to default behavior if parsing fails

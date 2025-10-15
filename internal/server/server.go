@@ -10,6 +10,7 @@ import (
 
 	"github.com/schlunsen/claude-control-terminal/internal/analytics"
 	"github.com/schlunsen/claude-control-terminal/internal/database"
+	"github.com/schlunsen/claude-control-terminal/internal/version"
 	ws "github.com/schlunsen/claude-control-terminal/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -106,6 +107,9 @@ func (s *Server) setupRoutes() {
 	// Health check
 	api.Get("/health", s.handleHealth)
 
+	// Version info
+	api.Get("/version", s.handleGetVersion)
+
 	// Data endpoints
 	api.Get("/data", s.handleGetData)
 	api.Get("/conversations", s.handleGetConversations)
@@ -155,6 +159,15 @@ func (s *Server) handleHealth(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"status": "ok",
 		"time":   time.Now(),
+	})
+}
+
+// Handler: Get version info
+func (s *Server) handleGetVersion(c *fiber.Ctx) error {
+	return c.JSON(fiber.Map{
+		"version": version.Version,
+		"name":    version.Name,
+		"time":    time.Now(),
 	})
 }
 
@@ -717,6 +730,14 @@ func (s *Server) handleRecordUserPrompt(c *fiber.Ctx) error {
 
 // Handler: Clear all history (user prompts, shell commands, and claude commands)
 func (s *Server) handleClearAllHistory(c *fiber.Ctx) error {
+	// Get database size before clearing
+	var sizeBefore int64
+	if stats, err := s.db.Stats(); err == nil {
+		if size, ok := stats["db_size_bytes"].(int64); ok {
+			sizeBefore = size
+		}
+	}
+
 	err := s.repo.DeleteAllHistory()
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -725,14 +746,37 @@ func (s *Server) handleClearAllHistory(c *fiber.Ctx) error {
 		})
 	}
 
+	// Vacuum database to reclaim disk space
+	if !s.quiet {
+		fmt.Printf("🗑️  Vacuuming database to reclaim disk space (size before: %s)...\n", formatBytes(sizeBefore))
+	}
+	if err := s.db.Vacuum(); err != nil {
+		// Log the error but don't fail the request since data was deleted successfully
+		if !s.quiet {
+			fmt.Printf("⚠️  Warning: Failed to vacuum database after clearing history: %v\n", err)
+		}
+	} else {
+		// Get database size after vacuum
+		var sizeAfter int64
+		if stats, err := s.db.Stats(); err == nil {
+			if size, ok := stats["db_size_bytes"].(int64); ok {
+				sizeAfter = size
+			}
+		}
+		if !s.quiet {
+			fmt.Printf("✅ Database vacuum completed successfully (size after: %s, reduced by: %s)\n", 
+				formatBytes(sizeAfter), formatBytes(sizeBefore-sizeAfter))
+		}
+	}
+
 	// Broadcast update to WebSocket clients with data
 	s.wsHub.BroadcastData("history_cleared", fiber.Map{
-		"message": "All history deleted",
+		"message": "All history deleted and database vacuumed",
 	})
 
 	return c.JSON(fiber.Map{
 		"status":  "cleared",
-		"message": "All history (prompts, shell commands, and Claude commands) have been deleted",
+		"message": "All history (prompts, shell commands, and Claude commands) have been deleted and database vacuumed",
 		"time":    time.Now(),
 	})
 }

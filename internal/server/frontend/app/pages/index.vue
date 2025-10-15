@@ -3,12 +3,14 @@
     <div class="container">
       <!-- Header -->
       <header>
-        <h1>Claude Code Analytics</h1>
-        <p class="subtitle">Real-time monitoring and process management</p>
-        <div class="status" :class="{ 'status-connected': connected }">
-          <div class="status-dot"></div>
-          <span>{{ connected ? 'Analytics running' : 'Connecting...' }}</span>
+        <div class="header-top">
+          <h1>Claude Code Analytics</h1>
+          <div class="status" :class="{ 'status-connected': connected }">
+            <div class="status-dot"></div>
+            <span>{{ connected ? 'Analytics running' : 'Connecting...' }}</span>
+          </div>
         </div>
+        <p class="subtitle">Real-time monitoring and process management</p>
       </header>
 
       <!-- Stats Overview -->
@@ -133,11 +135,18 @@ header {
   margin-bottom: 40px;
 }
 
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
 header h1 {
   font-size: 2rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin: 0;
   letter-spacing: -0.02em;
 }
 
@@ -157,7 +166,6 @@ header h1 {
   border-radius: 6px;
   font-size: 0.875rem;
   color: var(--text-secondary);
-  margin-top: 16px;
   transition: all 0.3s ease;
 }
 

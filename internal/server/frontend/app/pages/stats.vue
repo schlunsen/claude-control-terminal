@@ -3,12 +3,14 @@
     <div class="container">
       <!-- Header -->
       <header>
-        <h1>Detailed Statistics</h1>
-        <p class="subtitle">Comprehensive analytics and performance metrics</p>
-        <div class="status" :class="{ 'status-connected': connected }">
-          <div class="status-dot"></div>
-          <span>{{ connected ? 'Analytics running' : 'Connecting...' }}</span>
+        <div class="header-top">
+          <h1>Detailed Statistics</h1>
+          <div class="status" :class="{ 'status-connected': connected }">
+            <div class="status-dot"></div>
+            <span>{{ connected ? 'Analytics running' : 'Connecting...' }}</span>
+          </div>
         </div>
+        <p class="subtitle">Comprehensive analytics and performance metrics</p>
       </header>
 
       <!-- Enhanced Stats Grid -->
@@ -66,7 +68,17 @@
             </div>
             <div class="metric-row">
               <span>Database Size</span>
-              <span class="metric-value">{{ dbStats.db_size_human || 'Loading...' }}</span>
+              <div class="metric-with-action">
+                <span class="metric-value">{{ dbStats.db_size_human || 'Loading...' }}</span>
+                <button 
+                  class="purge-btn" 
+                  @click="confirmPurgeDatabase"
+                  :disabled="isPurging"
+                  title="Purge all database data permanently"
+                >
+                  {{ isPurging ? 'Purging...' : 'Purge' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -98,6 +110,7 @@ const dbStats = ref<any>({
 })
 
 const startTime = ref(Date.now())
+const isPurging = ref(false)
 
 // WebSocket for stats updates
 const { connected, on } = useWebSocket()
@@ -147,6 +160,46 @@ function formatUptime(): string {
   return `${hours}h ${minutes}m`
 }
 
+// Purge database functionality
+function confirmPurgeDatabase() {
+  const confirmed = confirm(
+    'Are you sure you want to purge all database data?\n\n' +
+    'This will permanently delete:\n' +
+    '• All command history\n' +
+    '• All user prompts\n' +
+    '• All notifications\n' +
+    '• All conversation data\n\n' +
+    'This action cannot be undone.'
+  )
+  
+  if (confirmed) {
+    purgeDatabase()
+  }
+}
+
+async function purgeDatabase() {
+  isPurging.value = true
+  
+  try {
+    const response = await fetch('/api/history', {
+      method: 'DELETE'
+    })
+    
+    if (response.ok) {
+      // Reload database stats to show updated size
+      await loadDbStats()
+      alert('Database purged successfully!')
+    } else {
+      const error = await response.json()
+      alert(`Failed to purge database: ${error.error || 'Unknown error'}`)
+    }
+  } catch (error) {
+    alert(`Failed to purge database: ${error}`)
+  } finally {
+    isPurging.value = false
+  }
+}
+
 // Load stats on mount
 onMounted(() => {
   loadStats()
@@ -172,11 +225,18 @@ header {
   margin-bottom: 40px;
 }
 
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
 header h1 {
   font-size: 2rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 8px;
+  margin: 0;
   letter-spacing: -0.02em;
 }
 
@@ -196,7 +256,6 @@ header h1 {
   border-radius: 6px;
   font-size: 0.875rem;
   color: var(--text-secondary);
-  margin-top: 16px;
   transition: all 0.3s ease;
 }
 
@@ -310,6 +369,36 @@ header h1 {
   color: var(--accent-purple);
   font-weight: 600;
   font-size: 0.9rem;
+}
+
+.metric-with-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.purge-btn {
+  background: var(--status-error);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 60px;
+}
+
+.purge-btn:hover:not(:disabled) {
+  background: #dc2626;
+  transform: translateY(-1px);
+}
+
+.purge-btn:disabled {
+  background: var(--text-muted);
+  cursor: not-allowed;
+  transform: none;
 }
 
 @media (max-width: 768px) {

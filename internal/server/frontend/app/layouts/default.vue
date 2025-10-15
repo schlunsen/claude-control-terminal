@@ -14,13 +14,16 @@
               <line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
           </button>
+          <span class="nav-logo">CCT</span>
+        </div>
+        <div class="nav-right">
           <div class="nav-brand">
-            <span class="nav-logo">CCT</span>
+            <span v-if="versionInfo.version" class="version-badge">v{{ versionInfo.version }}</span>
             <span class="nav-separator">|</span>
             <span class="nav-title">Analytics Dashboard</span>
           </div>
+          <ThemeToggle />
         </div>
-        <ThemeToggle />
       </div>
     </nav>
 
@@ -41,6 +44,29 @@ const { isDark } = useDarkMode()
 
 // Initialize sidebar state
 const { isCollapsed, toggleSidebar } = useSidebar()
+
+// Version info
+const versionInfo = ref({
+  version: '',
+  name: ''
+})
+
+// Load version info
+async function loadVersion() {
+  try {
+    const { data } = await useFetch('/api/version')
+    if (data.value) {
+      versionInfo.value = data.value
+    }
+  } catch (error) {
+    // Error loading version
+  }
+}
+
+// Load version on mount
+onMounted(() => {
+  loadVersion()
+})
 </script>
 
 <style scoped>
@@ -69,6 +95,12 @@ const { isCollapsed, toggleSidebar } = useSidebar()
 }
 
 .nav-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav-right {
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -115,6 +147,16 @@ const { isCollapsed, toggleSidebar } = useSidebar()
 .nav-title {
   color: var(--text-primary);
   font-size: 1rem;
+}
+
+.version-badge {
+  background: var(--accent-purple);
+  color: white;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .app-layout {

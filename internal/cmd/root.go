@@ -11,12 +11,14 @@ import (
 	"github.com/schlunsen/claude-control-terminal/internal/docker"
 	"github.com/schlunsen/claude-control-terminal/internal/server"
 	"github.com/schlunsen/claude-control-terminal/internal/tui"
+	"github.com/schlunsen/claude-control-terminal/internal/version"
 	"github.com/spf13/cobra"
 )
 
-const (
-	Version = "0.2.20"
-	Name    = "claude-control-terminal"
+// Use version constants from version package
+var (
+	Version = version.Version
+	Name    = version.Name
 )
 
 var (
