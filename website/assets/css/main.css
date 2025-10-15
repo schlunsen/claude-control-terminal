@@ -24,6 +24,8 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
@@ -34,6 +36,8 @@ body {
   background: var(--bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 /* Typography */
@@ -120,6 +124,7 @@ code {
   padding: 0.2rem 0.4rem;
   border-radius: 4px;
   color: var(--accent-cyan);
+  word-wrap: break-word;
 }
 
 pre {
@@ -129,6 +134,8 @@ pre {
   overflow-x: auto;
   border: 1px solid var(--border-color);
   margin-bottom: 1.5rem;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 
 pre code {
@@ -136,6 +143,8 @@ pre code {
   padding: 0;
   border-radius: 0;
   color: var(--text-secondary);
+  word-wrap: normal;
+  white-space: pre;
 }
 
 /* Utility classes */
@@ -166,8 +175,53 @@ pre code {
   h1 { font-size: 2.25rem; }
   h2 { font-size: 2rem; }
   h3 { font-size: 1.75rem; }
+  h4 { font-size: 1.25rem; }
 
   .container {
     padding: 0 1rem;
+  }
+
+  .btn {
+    font-size: 0.9rem;
+    padding: 0.65rem 1.25rem;
+  }
+
+  pre {
+    padding: 1rem;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+
+  code {
+    font-size: 0.85rem;
+  }
+
+  pre code {
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  body {
+    font-size: 14px;
+  }
+
+  h1 { font-size: 1.75rem; }
+  h2 { font-size: 1.5rem; }
+  h3 { font-size: 1.25rem; }
+  h4 { font-size: 1.1rem; }
+
+  .container {
+    padding: 0 0.75rem;
+  }
+
+  pre {
+    padding: 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  code {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.3rem;
   }
 }

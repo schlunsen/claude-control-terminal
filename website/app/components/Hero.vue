@@ -5,8 +5,8 @@
         
 
         <h1 class="hero-title">
-          <span class="text-purple">Claude</span>&nbsp;
-          <span class="text-cyan">Control</span>&nbsp;
+          <span class="text-purple">Claude </span>
+          <span class="text-cyan">Control </span>
           <span class="text-green">Terminal</span>
         </h1>
 
@@ -78,6 +78,8 @@
 .hero-title {
   font-size: 3.5rem;
   margin-bottom: 1rem;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .hero-subtitle {
@@ -151,6 +153,11 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
+  min-width: 0;
+}
+
+.quick-install pre {
+  overflow-x: auto;
 }
 
 .install-label {
@@ -162,6 +169,7 @@
 @media (max-width: 768px) {
   .hero {
     padding: 2rem 0;
+    min-height: auto;
   }
 
   .ascii-art pre {
@@ -169,7 +177,10 @@
   }
 
   .hero-title {
-    font-size: 2rem;
+    font-size: 1.75rem;
+    line-height: 1.4;
+    padding: 0 0.5rem;
+    word-spacing: 0.1em;
   }
 
   .hero-subtitle {
@@ -178,6 +189,93 @@
 
   .hero-description {
     font-size: 0.95rem;
+    padding: 0 0.5rem;
+  }
+
+  .hero-badges {
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .hero-badges img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .quick-install {
+    padding: 1rem;
+    margin: 1.5rem auto 0;
+  }
+
+  .quick-install pre {
+    font-size: 0.85rem;
+    padding: 1rem;
+    overflow-x: auto;
+  }
+
+  .hero-video {
+    margin: 2rem auto;
+  }
+
+  .video-caption {
+    font-size: 0.85rem;
+    padding: 0 0.5rem;
+  }
+
+  .hero-cta {
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 1.5rem 0;
+    align-items: center;
+  }
+
+  .btn {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero {
+    padding: 1.5rem 0;
+  }
+
+  .hero-title {
+    font-size: 1.5rem;
+    line-height: 1.3;
+    margin-bottom: 0.75rem;
+  }
+
+  .hero-subtitle {
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .hero-description {
+    font-size: 0.9rem;
+  }
+
+  .quick-install {
+    padding: 0.875rem;
+    margin: 1.25rem auto 0;
+  }
+
+  .install-label {
+    font-size: 0.85rem;
+  }
+
+  .quick-install pre {
+    font-size: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .hero-video {
+    margin: 1.5rem auto;
+  }
+
+  .hero-cta {
+    margin: 1.25rem 0;
+    align-items: center;
   }
 }
 </style>
