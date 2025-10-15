@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2025-10-15
+
+### Added
+- Nuxt-based documentation website with modern UI at website/
+- Lightbox viewer for screenshot galleries in documentation
+- GitHub Actions workflow for automated website deployment
+- Enhanced website UI with responsive design and improved navigation
+- COVERAGE.md file documenting test coverage status
+
+### Changed
+- Improved test coverage across analytics, file watcher, and reset tracker modules
+- Enhanced mobile responsiveness for documentation website
+- Hero section spacing and badge alignment improvements
+- Refactored version management to dedicated internal/version package
+
+### Removed
+- Non-working wrapper functionality and related scripts (internal/wrapper, scripts/install-wrapper.sh)
+- Deprecated wrapper tests that were no longer functional
+
+### Fixed
+- Mobile responsive layout issues in documentation website
+- Hero section spacing and component alignment
+
 ## [0.2.20] - 2025-10-14
 
 ### Added
@@ -411,7 +434,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
-[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.20...HEAD
+[Unreleased]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.20...v0.3.0
 [0.2.20]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.19...v0.2.20
 [0.2.19]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.18...v0.2.19
 [0.2.18]: https://github.com/schlunsen/claude-control-terminal/compare/v0.2.17...v0.2.18
