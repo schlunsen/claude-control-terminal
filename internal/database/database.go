@@ -293,6 +293,7 @@ func runMigrations(db *sql.DB) error {
 					notification_type TEXT NOT NULL,
 					message TEXT NOT NULL,
 					tool_name TEXT,
+					command_details TEXT,
 					working_directory TEXT,
 					git_branch TEXT,
 					notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -314,6 +315,22 @@ func runMigrations(db *sql.DB) error {
 			_, err := db.Exec(createNotificationsTable)
 			if err != nil {
 				return fmt.Errorf("failed to create notifications table: %w", err)
+			}
+		}
+	}
+
+	// Migration 6: Add command_details column to notifications table if it doesn't exist
+	var commandDetailsExists bool
+	commandDetailsQuery := `
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('notifications')
+		WHERE name='command_details'
+	`
+	if err := db.QueryRow(commandDetailsQuery).Scan(&commandDetailsExists); err == nil {
+		if !commandDetailsExists {
+			_, err := db.Exec("ALTER TABLE notifications ADD COLUMN command_details TEXT")
+			if err != nil {
+				return fmt.Errorf("failed to add command_details column to notifications: %w", err)
 			}
 		}
 	}

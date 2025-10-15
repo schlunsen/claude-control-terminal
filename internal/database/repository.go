@@ -837,9 +837,9 @@ func (r *Repository) RecordNotification(notif *Notification) error {
 
 	query := `
 		INSERT INTO notifications (
-			conversation_id, session_name, notification_type, message, tool_name,
+			conversation_id, session_name, notification_type, message, tool_name, command_details,
 			working_directory, git_branch, notified_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	result, err := r.db.db.Exec(
@@ -849,6 +849,7 @@ func (r *Repository) RecordNotification(notif *Notification) error {
 		notif.NotificationType,
 		notif.Message,
 		notif.ToolName,
+		notif.CommandDetails,
 		notif.WorkingDirectory,
 		notif.GitBranch,
 		notif.NotifiedAt,
@@ -872,6 +873,7 @@ func (r *Repository) GetNotifications(query *CommandHistoryQuery) ([]*Notificati
 	sql := `
 		SELECT id, conversation_id, COALESCE(session_name, '') as session_name,
 		       notification_type, message, COALESCE(tool_name, '') as tool_name,
+		       COALESCE(command_details, '') as command_details,
 		       working_directory, git_branch, notified_at, created_at
 		FROM notifications
 		WHERE 1=1
@@ -922,6 +924,7 @@ func (r *Repository) GetNotifications(query *CommandHistoryQuery) ([]*Notificati
 			&notif.NotificationType,
 			&notif.Message,
 			&notif.ToolName,
+			&notif.CommandDetails,
 			&notif.WorkingDirectory,
 			&notif.GitBranch,
 			&notif.NotifiedAt,
