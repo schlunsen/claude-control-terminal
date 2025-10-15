@@ -387,9 +387,8 @@ function formatTime(timestamp: Date | string): string {
   return date.toLocaleTimeString()
 }
 
-function formatSessionTime(timestamp: Date): string {
+function formatSessionTime(date: Date): string {
   const now = new Date()
-  const date = new Date(timestamp)
   const diffMs = now.getTime() - date.getTime()
   const diffMins = Math.floor(diffMs / 60000)
   const diffHours = Math.floor(diffMins / 60)
