@@ -59,6 +59,20 @@ class Tool(str, Enum):
     WEB_FETCH = "WebFetch"
 
 
+class MCPServerConfig(BaseModel):
+    """Configuration for an MCP (Model Context Protocol) server."""
+
+    name: str = Field(description="Name of the MCP server")
+    type: str = Field(default="stdio", description="Type of MCP server: 'stdio' for subprocess-based")
+    command: Optional[str] = Field(default=None, description="Command to run for stdio-based MCP servers")
+    args: Optional[List[str]] = Field(default=None, description="Arguments for the MCP server command")
+    env: Optional[Dict[str, str]] = Field(default=None, description="Environment variables for the MCP server")
+    require_permission: bool = Field(
+        default=True,
+        description="Whether to require user permission for tools from this MCP server"
+    )
+
+
 class SessionOptions(BaseModel):
     """Options for creating an agent session."""
 
@@ -78,6 +92,10 @@ class SessionOptions(BaseModel):
     permission_mode: Optional[str] = "default"  # Permission mode: default, allow-all, read-only
     conversation_history: Optional[str] = None  # Formatted conversation history for resume
     original_conversation_id: Optional[str] = None  # ID of the conversation being resumed
+    mcp_servers: Optional[List[MCPServerConfig]] = Field(
+        default=None,
+        description="List of MCP servers to load for this session"
+    )
 
 
 class SessionStatus(str, Enum):
