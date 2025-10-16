@@ -185,8 +185,8 @@ jobs:
       - name: Get release name from tag
         id: release_name
         run: |
-          # Get the tag annotation message which contains the release name
-          TAG_MESSAGE=$(git tag -l --format='%(contents)' ${GITHUB_REF#refs/tags/})
+          # Get the tag annotation message (first line only, excluding GPG signature)
+          TAG_MESSAGE=$(git tag -l --format='%(contents:lines=1)' ${GITHUB_REF#refs/tags/})
           echo "tag_message=$TAG_MESSAGE" >> $GITHUB_OUTPUT
 
       - name: Create Release
