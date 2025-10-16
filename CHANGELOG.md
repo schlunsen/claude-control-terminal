@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - MCP Server Integration - 2025-10-16
+
+### Added
+- MCP (Model Context Protocol) server integration for agents_server to extend Claude's capabilities with custom tools and resources
+- Support for stdio-based MCP server processes with configurable commands, arguments, and environment variables
+- MCPServerConfig model for managing MCP server configurations
+- Comprehensive MCP tool permission handling integrated with existing permission system
+- MCP tool naming convention: mcp__<server_name>__<tool_name>
+- Configuration options for per-server permission requirements via require_permission flag
+- Documentation and examples for calculator and GitHub MCP servers
+
+### Changed
+- Enhanced agent_manager.py with _build_mcp_servers() method to register and manage MCP servers
+- Improved models.py with MCP server configuration data structures
+
 ## [0.4.2] - Live Agent TodoWrite & Tool Tracking - 2025-10-16
 
 ### Added
@@ -548,6 +563,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.4.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.5...v0.4.0
