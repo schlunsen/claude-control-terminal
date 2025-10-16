@@ -1199,20 +1199,20 @@ agentWs.on('onAgentToolUse', (data) => {
 
   // Handle TodoWrite specifically
   if (data.tool && data.tool.includes('TodoWrite')) {
-    console.log('TodoWrite tool used with data:', data.tool)
+    console.log('TodoWrite tool used with data:', data)
 
-    // Try to extract todos from the data.tool string or data.input
+    // Try to extract todos from the data.input property (for new format)
     let todos: TodoItem[] | null = null
 
-    // If data has input with todos, use that
+    // If data has input with todos (new enhanced format), use that
     if (data.input && typeof data.input === 'object' && data.input.todos) {
       todos = data.input.todos
       console.log('Extracted todos from data.input:', todos)
-    } else if (data.tool) {
-      // Try to parse from the tool string representation
-      const toolStr = String(data.tool)
+    } else {
+      // Try legacy parsing from tool string representation
+      const toolStr = String(data.tool || '')
       todos = parseTodoWrite(toolStr)
-      console.log('Parsed todos from tool string:', todos)
+      console.log('Parsed todos from legacy tool string:', todos)
     }
 
     if (todos && Array.isArray(todos)) {

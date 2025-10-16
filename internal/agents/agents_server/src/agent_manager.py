@@ -622,17 +622,25 @@ Continue helping the user from where they left off. You have access to the proje
             tool_name = message.get("tool", "")
             parameters = message.get("parameters", {})
 
-            # Check if this tool requires permission and the session is in default mode
-            session_id = message.get("session_id")
-            if session_id and self._requires_permission(session_id, tool_name, parameters):
-                return self._create_permission_request(session_id, tool_name, parameters)
-
-            return {
+            # For TodoWrite, we need to capture the full tool block data
+            tool_data = {
                 "type": "agent_tool_use",
                 "tool": tool_name,
                 "parameters": parameters,
                 "result": message.get("result")
             }
+
+            # Check if this tool requires permission and the session is in default mode
+            session_id = message.get("session_id")
+            if session_id and self._requires_permission(session_id, tool_name, parameters):
+                return self._create_permission_request(session_id, tool_name, parameters)
+
+            # Special handling for TodoWrite - capture the full input data
+            if tool_name == "TodoWrite" and message.get("input"):
+                tool_data["input"] = message["input"]
+                logger.debug(f"Session {session_id}: Enhanced TodoWrite tool with input data")
+
+            return tool_data
         elif msg_type == "error":
             return {
                 "type": "agent_error",
