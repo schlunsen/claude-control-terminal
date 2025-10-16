@@ -83,8 +83,9 @@
         </div>
       </aside>
 
-      <!-- Chat Area -->
-      <main class="chat-area">
+      <!-- Chat Area with Metrics -->
+      <main class="chat-area-with-metrics">
+        <div class="chat-main-area">
         <div v-if="!activeSessionId" class="no-session-selected">
           <div class="empty-state">
             <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5">
@@ -166,9 +167,9 @@
           </div>
 
           <!-- Permission Requests -->
-          <div v-if="pendingPermissions.length > 0" class="permission-requests">
+          <div v-if="activeSessionPermissions.length > 0" class="permission-requests">
             <div
-              v-for="permission in pendingPermissions"
+              v-for="permission in activeSessionPermissions"
               :key="permission.request_id"
               class="permission-request"
             >
@@ -218,11 +219,16 @@
                 <span v-else>🛠️</span>
               </div>
               <div class="tool-execution-details">
-                <div class="tool-execution-name">{{ activeSessionToolExecution?.toolName }}</div>
+                <div class="tool-execution-name">
+                  {{ activeSessionToolExecution?.toolName }}
+                  <span v-if="activeSessionToolExecution?.detail" class="tool-execution-detail-badge">
+                    {{ truncatePath(activeSessionToolExecution.detail, 40) }}
+                  </span>
+                </div>
                 <div class="tool-execution-info">
-                  <span v-if="activeSessionToolExecution?.command">{{ activeSessionToolExecution.command }}</span>
-                  <span v-else-if="activeSessionToolExecution?.filePath">{{ truncatePath(activeSessionToolExecution.filePath) }}</span>
-                  <span v-else-if="activeSessionToolExecution?.pattern">{{ activeSessionToolExecution.pattern }}</span>
+                  <span v-if="activeSessionToolExecution?.command">{{ truncatePath(activeSessionToolExecution.command, 60) }}</span>
+                  <span v-else-if="activeSessionToolExecution?.filePath">{{ truncatePath(activeSessionToolExecution.filePath, 60) }}</span>
+                  <span v-else-if="activeSessionToolExecution?.pattern">{{ truncatePath(activeSessionToolExecution.pattern, 60) }}</span>
                   <span v-else>Executing...</span>
                 </div>
               </div>
@@ -253,6 +259,16 @@
             </button>
           </div>
         </div>
+        </div>
+
+        <!-- Session Metrics Sidebar -->
+        <aside class="metrics-sidebar" v-if="activeSessionId">
+          <SessionMetrics
+            :session="activeSession"
+            :tool-executions="sessionToolStats.get(activeSessionId)"
+            :permission-stats="sessionPermissionStats.get(activeSessionId)"
+          />
+        </aside>
       </main>
     </div>
 
@@ -489,6 +505,7 @@
 
 <script setup lang="ts">
 import { useAgentWebSocket } from '~/composables/useAgentWebSocket'
+import SessionMetrics from '~/components/SessionMetrics.vue'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 
 interface TodoItem {
@@ -525,13 +542,17 @@ const showCreateSessionModal = ref(false)
 const selectedResumeSession = ref(null)
 const creatingSession = ref(false)
 const resumingSession = ref(false)
-const pendingPermissions = ref([]) // Array of pending permission requests
+const sessionPermissions = ref(new Map<string, any[]>()) // { sessionId: [...permissions] }
 const awaitingToolResults = ref(new Set()) // Track sessions awaiting tool execution results
 
 // Live agents state
 const sessionTodos = ref(new Map<string, TodoItem[]>()) // { sessionId: [...todos] }
 const sessionToolExecution = ref(new Map<string, ToolExecution | null>()) // { sessionId: toolExecution }
 const todoHideTimers = ref(new Map<string, NodeJS.Timeout>()) // { sessionId: timeoutId }
+
+// Session metrics state
+const sessionToolStats = ref(new Map<string, Record<string, number>>()) // { sessionId: { toolName: count } }
+const sessionPermissionStats = ref(new Map<string, { approved: number; denied: number; total: number }>()) // { sessionId: stats }
 
 // Session creation form
 const sessionForm = ref({
@@ -560,6 +581,11 @@ const activeSessionTodos = computed(() => {
   return sessionTodos.value.get(activeSessionId.value) || []
 })
 
+const activeSessionPermissions = computed(() => {
+  if (!activeSessionId.value) return []
+  return sessionPermissions.value.get(activeSessionId.value) || []
+})
+
 const activeSessionToolExecution = computed(() => {
   if (!activeSessionId.value) return null
   return sessionToolExecution.value.get(activeSessionId.value) || null
@@ -571,6 +597,11 @@ const shouldShowTodoBox = computed(() => {
 
 const shouldShowToolBar = computed(() => {
   return activeSessionToolExecution.value !== null
+})
+
+const activeSession = computed(() => {
+  if (!activeSessionId.value) return null
+  return sessions.value.find(s => s.id === activeSessionId.value) || null
 })
 
 // Message formatting
@@ -681,6 +712,13 @@ const endSession = async (sessionId) => {
 
   // Clean up live agents session data
   cleanupSessionData(sessionId)
+
+  // Clean up session permissions
+  sessionPermissions.value.delete(sessionId)
+
+  // Clean up session metrics
+  sessionToolStats.value.delete(sessionId)
+  sessionPermissionStats.value.delete(sessionId)
 
   if (activeSessionId.value === sessionId) {
     activeSessionId.value = null
@@ -1061,18 +1099,31 @@ const sendPermissionResponse = (request, approved, reason = '') => {
       reason: reason
     })
 
-    // Remove from pending permissions
-    pendingPermissions.value = pendingPermissions.value.filter(p => p.request_id !== request.request_id)
+    // Update permission stats
+    const permStats = sessionPermissionStats.value.get(request.session_id) || { approved: 0, denied: 0, total: 0 }
+    if (approved) {
+      permStats.approved++
+    } else {
+      permStats.denied++
+    }
+    sessionPermissionStats.value.set(request.session_id, permStats)
 
-    // Add a system message to show the decision
-    if (!messages.value[activeSessionId.value]) {
-      messages.value[activeSessionId.value] = []
+    // Remove from session-specific permissions
+    const sessionPerms = sessionPermissions.value.get(request.session_id) || []
+    sessionPermissions.value.set(
+      request.session_id,
+      sessionPerms.filter(p => p.request_id !== request.request_id)
+    )
+
+    // Add a system message to show the decision (to the correct session)
+    if (!messages.value[request.session_id]) {
+      messages.value[request.session_id] = []
     }
 
     const decisionText = approved ? '✅ Approved' : '❌ Denied'
     const decisionMessage = reason ? `${decisionText} (Reason: ${reason})` : decisionText
 
-    messages.value[activeSessionId.value].push({
+    messages.value[request.session_id].push({
       id: crypto.randomUUID(),
       role: 'system',
       content: `Permission request for "${request.description}" ${decisionMessage}`,
@@ -1080,13 +1131,15 @@ const sendPermissionResponse = (request, approved, reason = '') => {
       isPermissionDecision: true
     })
 
-    // Auto-scroll to bottom
-    nextTick(() => {
-      const container = document.querySelector('.messages-container')
-      if (container) {
-        container.scrollTop = container.scrollHeight
-      }
-    })
+    // Auto-scroll to bottom only if viewing this session
+    if (request.session_id === activeSessionId.value) {
+      nextTick(() => {
+        const container = document.querySelector('.messages-container')
+        if (container) {
+          container.scrollTop = container.scrollHeight
+        }
+      })
+    }
 
   } catch (error) {
     console.error('Failed to send permission response:', error)
@@ -1125,6 +1178,17 @@ agentWs.on('onSessionCreated', (data) => {
 agentWs.on('onAgentMessage', (data) => {
   if (!messages.value[data.session_id]) {
     messages.value[data.session_id] = []
+  }
+
+  // Update session status and message count
+  const session = sessions.value.find(s => s.id === data.session_id)
+  if (session) {
+    // Set status to processing while streaming, idle when complete
+    session.status = data.complete ? 'idle' : 'processing'
+
+    if (data.complete) {
+      session.message_count = (session.message_count || 0) + 1
+    }
   }
 
   // Clear tool execution when we receive a message
@@ -1248,9 +1312,52 @@ agentWs.on('onAgentThinking', (data) => {
       isProcessing.value = false
     }
   }
+
+  // Update session status based on thinking state
+  const session = sessions.value.find(s => s.id === data.session_id)
+  if (session) {
+    session.status = data.thinking ? 'processing' : 'idle'
+  }
 })
 
 agentWs.on('onAgentToolUse', (data) => {
+  // Update session status to processing when tool is being used
+  const session = sessions.value.find(s => s.id === data.session_id)
+  if (session) {
+    session.status = 'processing'
+  }
+
+  // Track tool usage for metrics
+  const toolStats = sessionToolStats.value.get(data.session_id) || {}
+  toolStats[data.tool] = (toolStats[data.tool] || 0) + 1
+  sessionToolStats.value.set(data.session_id, toolStats)
+
+  // Extract tool details from parameters for display
+  let toolDetail = ''
+  if (data.parameters) {
+    const params = typeof data.parameters === 'string' ? JSON.parse(data.parameters) : data.parameters
+    if (data.tool === 'Read' || data.tool === 'Write' || data.tool === 'Edit') {
+      toolDetail = params.file_path
+    } else if (data.tool === 'Bash') {
+      toolDetail = params.command
+    } else if (data.tool === 'Glob') {
+      toolDetail = params.pattern
+    } else if (data.tool === 'Grep') {
+      toolDetail = params.pattern
+    }
+  }
+
+  // Update tool execution display
+  if (data.session_id === activeSessionId.value) {
+    sessionToolExecution.value.set(data.session_id, {
+      toolName: data.tool,
+      filePath: data.tool === 'Read' || data.tool === 'Write' || data.tool === 'Edit' ? toolDetail : undefined,
+      command: data.tool === 'Bash' ? toolDetail : undefined,
+      pattern: data.tool === 'Glob' || data.tool === 'Grep' ? toolDetail : undefined,
+      detail: toolDetail
+    })
+  }
+
   if (!messages.value[data.session_id]) return
 
   const lastMessage = messages.value[data.session_id][messages.value[data.session_id].length - 1]
@@ -1304,13 +1411,18 @@ agentWs.on('onAgentToolUse', (data) => {
 })
 
 agentWs.on('onPermissionRequest', (data) => {
-  if (data.session_id === activeSessionId.value) {
-    // Add to pending permissions for this session
-    pendingPermissions.value.push({
-      ...data,
-      timestamp: new Date()
-    })
-  }
+  // Track permission request for metrics
+  const permStats = sessionPermissionStats.value.get(data.session_id) || { approved: 0, denied: 0, total: 0 }
+  permStats.total++
+  sessionPermissionStats.value.set(data.session_id, permStats)
+
+  // Add to session-specific permissions map
+  const sessionPerms = sessionPermissions.value.get(data.session_id) || []
+  sessionPerms.push({
+    ...data,
+    timestamp: new Date()
+  })
+  sessionPermissions.value.set(data.session_id, sessionPerms)
 })
 
 agentWs.on('onPermissionAcknowledged', (data) => {
@@ -1401,6 +1513,11 @@ agentWs.on('onAgentsKilled', (data) => {
   // Clear all live agents session data
   sessionTodos.value.clear()
   sessionToolExecution.value.clear()
+  sessionPermissions.value.clear()  // Clear all session permissions
+
+  // Clear all session metrics
+  sessionToolStats.value.clear()
+  sessionPermissionStats.value.clear()
 
   // Show success message
   alert(`Successfully killed ${data.killed_count} agents`)
@@ -1647,6 +1764,26 @@ watch(() => agentWs.connected, (connected) => {
   color: white;
 }
 
+/* Chat Area with Metrics */
+.chat-area-with-metrics {
+  flex: 1;
+  display: flex;
+  background: var(--bg-primary);
+  overflow: hidden;
+  min-height: 0;
+  gap: 12px;
+  padding: 12px;
+}
+
+.chat-main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* Chat Area */
 .chat-area {
   flex: 1;
@@ -1655,6 +1792,17 @@ watch(() => agentWs.connected, (connected) => {
   background: var(--bg-primary);
   overflow: hidden; /* Prevent overflow of the entire chat area */
   min-height: 0; /* Important for flex children */
+}
+
+/* Metrics Sidebar */
+.metrics-sidebar {
+  width: 320px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow-y: auto;
+  min-height: 0;
+  flex-shrink: 0;
 }
 
 .no-session-selected {
@@ -2580,6 +2728,25 @@ watch(() => agentWs.connected, (connected) => {
   font-weight: 600;
   color: #1565c0;
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tool-execution-detail-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-family: 'Monaco', 'Menlo', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
 }
 
 .tool-execution-info {
@@ -2655,6 +2822,17 @@ watch(() => agentWs.connected, (connected) => {
 }
 
 /* Responsive adjustments for live agents components */
+@media (max-width: 1024px) {
+  .chat-area-with-metrics {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .metrics-sidebar {
+    width: 280px;
+  }
+}
+
 @media (max-width: 768px) {
   .sessions-sidebar {
     width: 240px;
@@ -2664,6 +2842,26 @@ watch(() => agentWs.connected, (connected) => {
     width: 280px;
     right: 8px;
     top: 8px;
+  }
+
+  .chat-area-with-metrics {
+    flex-direction: column-reverse;
+    padding: 0;
+    gap: 0;
+  }
+
+  .metrics-sidebar {
+    width: 100%;
+    max-height: 300px;
+    border-radius: 0;
+    border: none;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 1;
+  }
+
+  .chat-main-area {
+    flex: 1;
+    min-height: 300px;
   }
 }
 

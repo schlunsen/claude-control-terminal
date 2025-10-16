@@ -113,95 +113,145 @@ class WebSocketConnection:
     async def handle_create_session(self, data: dict):
         """Handle create session request."""
         try:
+            logger.debug(f"Client {self.client_address}: ======== CREATE SESSION REQUEST ========")
+            logger.debug(f"Client {self.client_address}: Request data: {data}")
+
             msg = CreateSessionMessage(**data)
+            logger.debug(f"Client {self.client_address}: Parsed message - session_id: {msg.session_id}")
+            logger.debug(f"Client {self.client_address}: Session options - tools: {[t.value for t in msg.options.tools]}")
+            logger.debug(f"Client {self.client_address}: Permission mode: {msg.options.permission_mode}")
 
             # Create session
+            logger.debug(f"Client {self.client_address}: Creating session...")
             session = await session_manager.create_session(
                 session_id=msg.session_id,
                 options=msg.options
             )
+            logger.info(f"Client {self.client_address}: Session created: {session.id}")
 
             # Create agent
+            logger.debug(f"Client {self.client_address}: Creating agent for session...")
             await agent_manager.create_agent(session.id, msg.options)
+            logger.info(f"Client {self.client_address}: Agent created for session {session.id}")
 
             # Send response
             response = SessionCreatedMessage(
                 session_id=session.id,
                 session=session
             )
+            logger.debug(f"Client {self.client_address}: Sending session created response")
             await self.send_json(response.model_dump(mode='json'))
 
-            logger.info(f"Created session {session.id} for {self.client_address}")
+            logger.info(f"Client {self.client_address}: ======== SESSION CREATED: {session.id} ========")
 
         except ValueError as e:
+            logger.error(f"Client {self.client_address}: ValueError in create_session: {e}")
             await self.send_error(str(e))
         except Exception as e:
-            logger.error(f"Error creating session: {e}")
+            logger.error(f"Client {self.client_address}: Exception in create_session: {type(e).__name__}: {e}")
+            logger.error(f"Client {self.client_address}: Traceback: {__import__('traceback').format_exc()}")
             await self.send_error(f"Failed to create session: {e}")
 
     async def handle_send_prompt(self, data: dict):
         """Handle send prompt request."""
         try:
+            logger.debug(f"Client {self.client_address}: ======== SEND PROMPT REQUEST ========")
+            logger.debug(f"Client {self.client_address}: Request data keys: {list(data.keys())}")
+
             msg = SendPromptMessage(**data)
+            logger.info(f"Client {self.client_address}: Send prompt request - session: {msg.session_id}")
+            logger.debug(f"Client {self.client_address}: Prompt: {msg.prompt[:100]}...")
 
             # Get session
             session = await session_manager.get_session(msg.session_id)
             if not session:
+                logger.warning(f"Client {self.client_address}: Session {msg.session_id} not found")
                 await self.send_error(f"Session {msg.session_id} not found")
                 return
 
+            logger.debug(f"Client {self.client_address}: Session found - status: {session.status}, message_count: {session.message_count}")
+
             # Update session status
+            logger.debug(f"Client {self.client_address}: Updating session status to PROCESSING")
             await session_manager.update_session(
                 msg.session_id,
                 status=SessionStatus.PROCESSING
             )
             await session_manager.increment_message_count(msg.session_id)
+            logger.debug(f"Client {self.client_address}: Session status updated and message count incremented")
 
             # Send prompt to agent and stream responses
             # Create a callback for permission requests and acknowledgments to send them directly
+            response_count = 0
+
             async def send_permission_message(permission_data):
                 """Send permission-related messages directly to WebSocket."""
+                logger.debug(f"Client {self.client_address}: send_permission_message called")
+                logger.debug(f"Client {self.client_address}: Permission message type: {permission_data.get('type')}")
+
                 permission_data["session_id"] = str(msg.session_id)
 
                 # Map message types
                 if permission_data.get("type") == "permission_request":
                     permission_data["type"] = MessageType.PERMISSION_REQUEST.value
+                    logger.info(f"Client {self.client_address}: Sending permission request for tool: {permission_data.get('tool')}")
                 elif permission_data.get("type") == "permission_acknowledged":
                     permission_data["type"] = MessageType.PERMISSION_ACKNOWLEDGED.value
+                    logger.info(f"Client {self.client_address}: Sending permission acknowledgment: {permission_data.get('request_id')} -> {permission_data.get('approved')}")
 
+                logger.debug(f"Client {self.client_address}: Sending permission message via WebSocket")
                 await self.send_json(permission_data)
 
             try:
+                logger.debug(f"Client {self.client_address}: Starting to iterate over agent responses...")
                 async for response in agent_manager.send_prompt(
                     msg.session_id,
                     msg.prompt,
                     send_message_callback=send_permission_message
                 ):
+                    response_count += 1
+                    logger.debug(f"Client {self.client_address}: ======== RESPONSE #{response_count} ========")
+                    logger.debug(f"Client {self.client_address}: Response type: {response.get('type')}")
+
                     # Add session_id to response
                     response["session_id"] = str(msg.session_id)
 
                     # Map response type
                     if response.get("type") == "agent_message":
                         response["type"] = MessageType.AGENT_MESSAGE.value
+                        content = response.get("content", "")[:80]
+                        logger.debug(f"Client {self.client_address}: Agent message ({len(response.get('content', ''))} chars): {content}...")
                     elif response.get("type") == "agent_thinking":
                         response["type"] = MessageType.AGENT_THINKING.value
+                        logger.debug(f"Client {self.client_address}: Thinking: {response.get('thinking')}")
                     elif response.get("type") == "agent_tool_use":
                         response["type"] = MessageType.AGENT_TOOL_USE.value
+                        logger.info(f"Client {self.client_address}: Tool use: {response.get('tool')} with ID: {response.get('tool_use_id')}")
                     elif response.get("type") == "permission_request":
                         response["type"] = MessageType.PERMISSION_REQUEST.value
+                        logger.info(f"Client {self.client_address}: Permission request: {response.get('request_id')}")
                     elif response.get("type") == "agent_error":
                         response["type"] = MessageType.AGENT_ERROR.value
+                        logger.error(f"Client {self.client_address}: Agent error: {response.get('message')}")
 
+                    logger.debug(f"Client {self.client_address}: Sending response via WebSocket")
                     await self.send_json(response)
 
+                logger.info(f"Client {self.client_address}: Response stream complete ({response_count} responses)")
+
                 # Update session status back to idle
+                logger.debug(f"Client {self.client_address}: Updating session status back to IDLE")
                 await session_manager.update_session(
                     msg.session_id,
                     status=SessionStatus.IDLE
                 )
+                logger.info(f"Client {self.client_address}: ======== PROMPT HANDLING COMPLETE ========")
 
             except Exception as e:
-                logger.error(f"Error processing prompt: {e}")
+                logger.error(f"Client {self.client_address}: Exception processing prompt: {type(e).__name__}: {e}")
+                logger.error(f"Client {self.client_address}: Responses sent before error: {response_count}")
+                logger.error(f"Client {self.client_address}: Traceback: {__import__('traceback').format_exc()}")
+
                 await session_manager.update_session(
                     msg.session_id,
                     status=SessionStatus.ERROR,
@@ -213,7 +263,8 @@ class WebSocketConnection:
                 )
 
         except Exception as e:
-            logger.error(f"Error handling prompt: {e}")
+            logger.error(f"Client {self.client_address}: Exception handling prompt: {type(e).__name__}: {e}")
+            logger.error(f"Client {self.client_address}: Traceback: {__import__('traceback').format_exc()}")
             await self.send_error(f"Failed to send prompt: {e}")
 
     async def handle_end_session(self, data: dict):
@@ -313,34 +364,49 @@ class WebSocketConnection:
     async def handle_message(self, data: dict):
         """Route message to appropriate handler."""
         msg_type = data.get("type")
+        logger.debug(f"Client {self.client_address}: ======== MESSAGE ROUTING ========")
+        logger.debug(f"Client {self.client_address}: Message type to route: {msg_type}")
 
         if msg_type == MessageType.CREATE_SESSION.value:
+            logger.debug(f"Client {self.client_address}: Routing to handle_create_session")
             await self.handle_create_session(data)
         elif msg_type == MessageType.SEND_PROMPT.value:
+            logger.debug(f"Client {self.client_address}: Routing to handle_send_prompt (background task)")
             # Run prompt handling in background to not block permission responses
-            asyncio.create_task(self.handle_send_prompt(data))
+            task = asyncio.create_task(self.handle_send_prompt(data))
+            logger.debug(f"Client {self.client_address}: Background task created for send_prompt")
         elif msg_type == MessageType.END_SESSION.value:
+            logger.debug(f"Client {self.client_address}: Routing to handle_end_session")
             await self.handle_end_session(data)
         elif msg_type == MessageType.LIST_SESSIONS.value:
+            logger.debug(f"Client {self.client_address}: Routing to handle_list_sessions")
             await self.handle_list_sessions()
         elif msg_type == MessageType.KILL_ALL_AGENTS.value:
+            logger.debug(f"Client {self.client_address}: Routing to handle_kill_all_agents")
             await self.handle_kill_all_agents(data)
         elif msg_type == MessageType.PERMISSION_RESPONSE.value:
+            logger.debug(f"Client {self.client_address}: Routing to handle_permission_response")
             await self.handle_permission_response(data)
         elif msg_type == MessageType.PING.value:
+            logger.debug(f"Client {self.client_address}: Routing to handle_ping (no-op)")
             await self.handle_ping(data)
         else:
+            logger.warning(f"Client {self.client_address}: Unknown message type: {msg_type}")
             await self.send_error(f"Unknown message type: {msg_type}")
 
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for agent conversations."""
+    logger.debug("======== NEW WEBSOCKET CONNECTION ========")
     await websocket.accept()
     connection = WebSocketConnection(websocket)
+    logger.info(f"WebSocket accepted from {connection.client_address}")
 
     # Authenticate connection
+    logger.debug(f"Client {connection.client_address}: Authenticating WebSocket...")
     if not await authenticate_websocket(websocket):
+        logger.warning(f"Client {connection.client_address}: Authentication failed")
         await websocket.close(
             code=status.WS_1008_POLICY_VIOLATION,
             reason="Authentication required"
@@ -348,33 +414,51 @@ async def websocket_endpoint(websocket: WebSocket):
         return
 
     connection.authenticated = True
-    logger.info(f"WebSocket connection established from {connection.client_address}")
+    logger.info(f"Client {connection.client_address}: ======== AUTHENTICATED ========")
 
+    message_count = 0
     try:
         while True:
             # Receive message
             try:
+                message_count += 1
+                logger.debug(f"Client {connection.client_address}: Waiting for message #{message_count}...")
                 data = await websocket.receive_text()
+                logger.debug(f"Client {connection.client_address}: Received raw text: {len(data)} bytes")
+
                 message = json.loads(data)
+                msg_type = message.get("type")
+                logger.debug(f"Client {connection.client_address}: ======== MESSAGE #{message_count} ========")
+                logger.debug(f"Client {connection.client_address}: Message type: {msg_type}")
 
                 # Skip auth messages (already authenticated)
-                if message.get("type") == MessageType.AUTH.value:
+                if msg_type == MessageType.AUTH.value:
+                    logger.debug(f"Client {connection.client_address}: Skipping AUTH message (already authenticated)")
                     continue
 
                 # Handle message
+                logger.debug(f"Client {connection.client_address}: Routing to handler for message type: {msg_type}")
                 await connection.handle_message(message)
 
             except json.JSONDecodeError as e:
+                logger.error(f"Client {connection.client_address}: JSON decode error: {e}")
+                logger.error(f"Client {connection.client_address}: Raw data: {data[:200]}")
                 await connection.send_error(f"Invalid JSON: {e}")
 
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected from {connection.client_address}")
+        logger.info(f"Client {connection.client_address}: ======== WEBSOCKET DISCONNECTED ========")
+        logger.debug(f"Client {connection.client_address}: Total messages received: {message_count}")
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.error(f"Client {connection.client_address}: ======== WEBSOCKET ERROR ========")
+        logger.error(f"Client {connection.client_address}: Error type: {type(e).__name__}")
+        logger.error(f"Client {connection.client_address}: Error message: {e}")
+        logger.error(f"Client {connection.client_address}: Messages processed: {message_count}")
+        logger.error(f"Client {connection.client_address}: Traceback: {__import__('traceback').format_exc()}")
         await connection.send_error(f"Server error: {e}")
     finally:
         # Cleanup any sessions created by this connection
         # (In a production app, you'd track which sessions belong to which connection)
+        logger.debug(f"Client {connection.client_address}: WebSocket connection cleanup complete")
         pass
 
 
