@@ -154,6 +154,93 @@
       </main>
     </div>
 
+    <!-- Create Session Modal -->
+    <div v-if="showCreateSessionModal" class="modal-overlay" @click="showCreateSessionModal = false">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h2>Create New Session</h2>
+          <button @click="showCreateSessionModal = false" class="modal-close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="working-directory">Working Directory</label>
+            <input
+              id="working-directory"
+              v-model="sessionForm.workingDirectory"
+              type="text"
+              placeholder="/path/to/your/project"
+              class="form-input"
+            />
+            <small class="form-help">The directory where the agent will work</small>
+          </div>
+
+          <div class="form-group">
+            <label for="permission-mode">Permission Mode</label>
+            <select id="permission-mode" v-model="sessionForm.permissionMode" class="form-select">
+              <option value="default">Default (ask for permissions)</option>
+              <option value="allow-all">Allow All (full permissions)</option>
+              <option value="read-only">Read Only (no file modifications)</option>
+            </select>
+            <small class="form-help">Control what permissions the agent has</small>
+          </div>
+
+          <div class="form-group">
+            <label for="system-prompt">System Prompt (optional)</label>
+            <textarea
+              id="system-prompt"
+              v-model="sessionForm.systemPrompt"
+              placeholder="You are a helpful AI assistant."
+              class="form-textarea"
+              rows="3"
+            ></textarea>
+            <small class="form-help">Custom instructions for the agent</small>
+          </div>
+
+          <div class="form-group">
+            <label>Available Tools</label>
+            <div class="tools-grid">
+              <label class="tool-checkbox">
+                <input type="checkbox" v-model="sessionForm.tools" value="Read" />
+                <span>Read</span>
+              </label>
+              <label class="tool-checkbox">
+                <input type="checkbox" v-model="sessionForm.tools" value="Write" />
+                <span>Write</span>
+              </label>
+              <label class="tool-checkbox">
+                <input type="checkbox" v-model="sessionForm.tools" value="Edit" />
+                <span>Edit</span>
+              </label>
+              <label class="tool-checkbox">
+                <input type="checkbox" v-model="sessionForm.tools" value="Bash" />
+                <span>Bash</span>
+              </label>
+              <label class="tool-checkbox">
+                <input type="checkbox" v-model="sessionForm.tools" value="Search" />
+                <span>Search</span>
+              </label>
+              <label class="tool-checkbox">
+                <input type="checkbox" v-model="sessionForm.tools" value="Grep" />
+                <span>Grep</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="showCreateSessionModal = false" class="btn-cancel">Cancel</button>
+            <button @click="createSessionWithOptions" class="btn-create" :disabled="!sessionForm.workingDirectory">
+              Create Session
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Resume Session Modal -->
     <div v-if="showResumeModal" class="modal-overlay" @click="showResumeModal = false">
       <div class="modal-content" @click.stop>
@@ -177,12 +264,12 @@
             </svg>
             <p>No previous sessions found</p>
           </div>
-          <div v-else class="sessions-list-modal">
+          <div v-else-if="!selectedResumeSession" class="sessions-list-modal">
             <div
               v-for="session in availableSessions"
               :key="session.conversation_id"
               class="session-item-modal"
-              @click="resumeSession(session)"
+              @click="selectSessionForResume(session)"
             >
               <div class="session-info-modal">
                 <div class="session-name-modal">{{ session.session_name || 'Unnamed Session' }}</div>
@@ -199,6 +286,85 @@
                   <path d="M5 12h14M12 5l7 7-7 7"/>
                 </svg>
               </div>
+            </div>
+          </div>
+
+          <!-- Resume Session Options -->
+          <div v-else class="resume-session-options">
+            <div class="selected-session-info">
+              <h3>{{ selectedResumeSession.session_name || 'Selected Session' }}</h3>
+              <p>Original working directory: <code>{{ selectedResumeSession.working_directory }}</code></p>
+            </div>
+
+            <div class="form-group">
+              <label for="resume-working-directory">Working Directory</label>
+              <input
+                id="resume-working-directory"
+                v-model="resumeForm.workingDirectory"
+                type="text"
+                :placeholder="selectedResumeSession.working_directory"
+                class="form-input"
+              />
+              <small class="form-help">Directory where the agent will work (defaults to original)</small>
+            </div>
+
+            <div class="form-group">
+              <label for="resume-permission-mode">Permission Mode</label>
+              <select id="resume-permission-mode" v-model="resumeForm.permissionMode" class="form-select">
+                <option value="default">Default (ask for permissions)</option>
+                <option value="allow-all">Allow All (full permissions)</option>
+                <option value="read-only">Read Only (no file modifications)</option>
+              </select>
+              <small class="form-help">Control what permissions the agent has</small>
+            </div>
+
+            <div class="form-group">
+              <label for="resume-system-prompt">System Prompt (optional)</label>
+              <textarea
+                id="resume-system-prompt"
+                v-model="resumeForm.systemPrompt"
+                placeholder="You are a helpful AI assistant."
+                class="form-textarea"
+                rows="3"
+              ></textarea>
+              <small class="form-help">Custom instructions for the agent</small>
+            </div>
+
+            <div class="form-group">
+              <label>Available Tools</label>
+              <div class="tools-grid">
+                <label class="tool-checkbox">
+                  <input type="checkbox" v-model="resumeForm.tools" value="Read" />
+                  <span>Read</span>
+                </label>
+                <label class="tool-checkbox">
+                  <input type="checkbox" v-model="resumeForm.tools" value="Write" />
+                  <span>Write</span>
+                </label>
+                <label class="tool-checkbox">
+                  <input type="checkbox" v-model="resumeForm.tools" value="Edit" />
+                  <span>Edit</span>
+                </label>
+                <label class="tool-checkbox">
+                  <input type="checkbox" v-model="resumeForm.tools" value="Bash" />
+                  <span>Bash</span>
+                </label>
+                <label class="tool-checkbox">
+                  <input type="checkbox" v-model="resumeForm.tools" value="Search" />
+                  <span>Search</span>
+                </label>
+                <label class="tool-checkbox">
+                  <input type="checkbox" v-model="resumeForm.tools" value="Grep" />
+                  <span>Grep</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="modal-actions">
+              <button @click="selectedResumeSession = null" class="btn-cancel">Back</button>
+              <button @click="resumeSessionWithOptions" class="btn-create">
+                Resume Session
+              </button>
             </div>
           </div>
         </div>
@@ -227,6 +393,24 @@ const isThinking = ref(false)
 const showResumeModal = ref(false)
 const availableSessions = ref([])
 const loadingSessions = ref(false)
+const showCreateSessionModal = ref(false)
+const selectedResumeSession = ref(null)
+
+// Session creation form
+const sessionForm = ref({
+  workingDirectory: '',
+  permissionMode: 'default',
+  systemPrompt: '',
+  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+})
+
+// Resume session form
+const resumeForm = ref({
+  workingDirectory: '',
+  permissionMode: 'default',
+  systemPrompt: '',
+  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+})
 
 // Computed
 const activeMessages = computed(() => {
