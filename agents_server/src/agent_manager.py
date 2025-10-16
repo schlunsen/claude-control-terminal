@@ -3,6 +3,8 @@
 import asyncio
 import logging
 import os
+import uuid
+from pathlib import Path
 from typing import AsyncIterator, Dict, Optional
 from uuid import UUID
 
@@ -19,13 +21,10 @@ from .models import SessionOptions, Tool
 logger = logging.getLogger(__name__)
 
 # Ensure ANTHROPIC_API_KEY is set for Claude SDK
-if not os.environ.get('ANTHROPIC_API_KEY'):
-    # Try to get from config or use a placeholder
-    api_key = getattr(settings, 'anthropic_api_key', None)
-    if api_key:
-        os.environ['ANTHROPIC_API_KEY'] = api_key
-    else:
-        logger.warning("ANTHROPIC_API_KEY not set - Claude SDK may fail to initialize")
+if os.environ.get('ANTHROPIC_API_KEY'):
+    logger.info("ANTHROPIC_API_KEY found in environment")
+else:
+    logger.warning("ANTHROPIC_API_KEY not set in environment - Claude SDK may fail to initialize")
 
 
 class AgentManager:
@@ -57,9 +56,24 @@ class AgentManager:
             # Convert our Tool enum to string list for Claude SDK
             tools = [tool.value for tool in options.tools]
 
+            # Build enhanced system prompt with history if provided
+            system_prompt = options.system_prompt or "You are a helpful AI assistant."
+            if options.conversation_history:
+                system_prompt = f"""
+{system_prompt}
+
+You are resuming an existing coding session.
+Working Directory: {options.working_directory or 'Not specified'}
+
+Recent conversation context:
+{options.conversation_history}
+
+Continue helping the user from where they left off. You have access to the project files and can use tools as needed.
+"""
+
             # Create agent options
             agent_options = ClaudeAgentOptions(
-                system_prompt=options.system_prompt,
+                system_prompt=system_prompt,
                 allowed_tools=tools,
                 cwd=options.working_directory,
                 permission_mode='default',  # Default permission mode
@@ -102,6 +116,8 @@ class AgentManager:
             ValueError: If session not found
             RuntimeError: If prompt sending fails
         """
+        logger.info(f"Sending prompt to session {session_id}: {prompt[:50]}...")
+
         # Get the client for this session
         client = self.active_agents.get(session_id)
         if not client:
@@ -109,6 +125,7 @@ class AgentManager:
 
         try:
             # Send thinking indicator immediately
+            logger.debug(f"Session {session_id}: Sending thinking indicator")
             yield {
                 "type": "agent_thinking",
                 "thinking": True
@@ -116,81 +133,113 @@ class AgentManager:
 
             # Send the prompt to the client
             await client.query(prompt)
+            logger.debug(f"Session {session_id}: Prompt sent, awaiting response")
 
             # Track message for streaming
-            current_message_id = None
+            current_message_id = str(uuid.uuid4())  # Generate unique ID for this message
             message_buffer = []
             seen_content = set()
             thinking_sent = False
+            message_count = 0
 
-            # Receive and process responses
-            async for message in client.receive_response():
-                logger.debug(f"Received message type: {type(message).__name__}")
+            # Receive and process responses with timeout
+            try:
+                async for message in client.receive_response():
+                    message_count += 1
+                    logger.debug(f"Session {session_id}: Received message #{message_count} type: {type(message).__name__}")
+                    logger.debug(f"Session {session_id}: Message content: {message}")
 
-                if isinstance(message, AssistantMessage):
-                    # Turn off thinking indicator when we get the first message
-                    if not thinking_sent:
-                        yield {
-                            "type": "agent_thinking",
-                            "thinking": False
-                        }
-                        thinking_sent = True
-
-                    # Extract text from assistant message
-                    content_parts = []
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            content_parts.append(block.text)
-
-                    if content_parts:
-                        content = "".join(content_parts)
-                        # Avoid sending duplicate content
-                        if content not in seen_content:
-                            seen_content.add(content)
-                            message_buffer.append(content)
-                            yield {
-                                "type": "agent_message",
-                                "content": content,
-                                "complete": False
-                            }
-                elif isinstance(message, dict):
-                    # Process dict messages but check for duplicates
-                    processed = self._process_agent_message(message)
-                    if processed.get("type") == "agent_message":
-                        # Turn off thinking indicator when we get actual content
+                    if isinstance(message, AssistantMessage):
+                        # Turn off thinking indicator when we get the first message
                         if not thinking_sent:
+                            logger.debug(f"Session {session_id}: Turning off thinking indicator")
                             yield {
                                 "type": "agent_thinking",
                                 "thinking": False
                             }
                             thinking_sent = True
-                        content = processed.get("content", "")
-                        if content and content not in seen_content:
-                            seen_content.add(content)
+
+                        # Extract text from assistant message
+                        content_parts = []
+                        for block in message.content:
+                            if isinstance(block, TextBlock):
+                                content_parts.append(block.text)
+
+                        if content_parts:
+                            content = "".join(content_parts)
+                            # Avoid sending duplicate content
+                            if content not in seen_content:
+                                seen_content.add(content)
+                                message_buffer.append(content)
+                                logger.debug(f"Session {session_id}: Yielding content chunk: {content[:50]}...")
+                                yield {
+                                    "type": "agent_message",
+                                    "content": content,
+                                    "complete": False,
+                                    "message_id": current_message_id
+                                }
+                            else:
+                                logger.debug(f"Session {session_id}: Skipping duplicate content")
+                    elif isinstance(message, dict):
+                        # Process dict messages but check for duplicates
+                        processed = self._process_agent_message(message)
+                        if processed.get("type") == "agent_message":
+                            # Turn off thinking indicator when we get actual content
+                            if not thinking_sent:
+                                logger.debug(f"Session {session_id}: Turning off thinking indicator (dict)")
+                                yield {
+                                    "type": "agent_thinking",
+                                    "thinking": False
+                                }
+                                thinking_sent = True
+                            content = processed.get("content", "")
+                            if content and content not in seen_content:
+                                seen_content.add(content)
+                                logger.debug(f"Session {session_id}: Yielding processed content: {content[:50]}...")
+                                processed["message_id"] = current_message_id
+                                yield processed
+                            else:
+                                logger.debug(f"Session {session_id}: Skipping duplicate processed content")
+                        elif processed.get("type") != "agent_message":
+                            # Non-message types (thinking, tool use, etc)
+                            logger.debug(f"Session {session_id}: Yielding non-message type: {processed.get('type')}")
                             yield processed
-                    elif processed.get("type") != "agent_message":
-                        # Non-message types (thinking, tool use, etc)
-                        yield processed
-                elif hasattr(message, '__class__') and 'SystemMessage' in message.__class__.__name__:
-                    # Skip system messages - they're internal to the SDK
-                    logger.debug(f"Skipping system message: {type(message).__name__}")
-                    continue
+                    elif hasattr(message, '__class__') and 'SystemMessage' in message.__class__.__name__:
+                        # Skip system messages - they're internal to the SDK
+                        logger.debug(f"Session {session_id}: Skipping system message: {type(message).__name__}")
+                        continue
+                    else:
+                        # Skip other unknown message types - they often contain duplicates
+                        logger.debug(f"Session {session_id}: Skipping unknown message type: {type(message).__name__}")
+
+                # Send completion signal and ensure thinking is off
+                if not thinking_sent:
+                    logger.debug(f"Session {session_id}: Sending final thinking off signal")
+                    yield {
+                        "type": "agent_thinking",
+                        "thinking": False
+                    }
+
+                if message_buffer:
+                    # Send the accumulated message buffer as the final message
+                    final_content = "".join(message_buffer)
+                    logger.info(f"Session {session_id}: Sending completion message with {len(final_content)} chars (processed {message_count} messages)")
+                    yield {
+                        "type": "agent_message",
+                        "content": final_content,
+                        "complete": True,
+                        "message_id": current_message_id
+                    }
                 else:
-                    # Skip other unknown message types - they often contain duplicates
-                    logger.debug(f"Skipping unknown message type: {type(message).__name__}")
+                    logger.warning(f"Session {session_id}: No content to send in completion (received {message_count} messages)")
 
-            # Send completion signal and ensure thinking is off
-            if not thinking_sent:
+            except Exception as e:
+                logger.error(f"Session {session_id}: Error processing response: {e}")
+                logger.error(f"Session {session_id}: Received {message_count} messages before error")
                 yield {
-                    "type": "agent_thinking",
-                    "thinking": False
-                }
-
-            if message_buffer:
-                yield {
-                    "type": "agent_message",
-                    "content": "",
-                    "complete": True
+                    "type": "agent_error",
+                    "message": f"Error processing response: {str(e)}",
+                    "session_id": str(session_id)
                 }
 
         except Exception as e:
@@ -277,6 +326,28 @@ class AgentManager:
             if session_id in self.agent_options:
                 del self.agent_options[session_id]
             return False
+
+    async def kill_all_agents(self) -> int:
+        """
+        Kill all active agents immediately.
+
+        Returns:
+            Number of agents killed
+        """
+        killed_count = 0
+        session_ids = list(self.active_agents.keys())
+
+        logger.info(f"Killing all {len(session_ids)} active agents")
+
+        for session_id in session_ids:
+            try:
+                await self.end_agent(session_id)
+                killed_count += 1
+            except Exception as e:
+                logger.error(f"Error killing agent for session {session_id}: {e}")
+
+        logger.info(f"Successfully killed {killed_count} agents")
+        return killed_count
 
     async def cleanup_all(self):
         """Cleanup all active agents."""

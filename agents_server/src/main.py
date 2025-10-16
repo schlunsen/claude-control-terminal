@@ -16,9 +16,11 @@ from .auth import authenticate_websocket
 from .config import settings
 from .models import (
     AgentMessage,
+    AgentsKilledMessage,
     CreateSessionMessage,
     EndSessionMessage,
     ErrorMessage,
+    KillAllAgentsMessage,
     ListSessionsMessage,
     MessageType,
     PingMessage,
@@ -230,6 +232,30 @@ class WebSocketConnection:
             logger.error(f"Error listing sessions: {e}")
             await self.send_error(f"Failed to list sessions: {e}")
 
+    async def handle_kill_all_agents(self, data: dict):
+        """Handle kill all agents request."""
+        try:
+            msg = KillAllAgentsMessage(**data)
+
+            # Kill all agents
+            killed_count = await agent_manager.kill_all_agents()
+
+            # Get list of ended sessions
+            sessions_ended = list(agent_manager.active_agents.keys())
+
+            # Send response
+            response = AgentsKilledMessage(
+                killed_count=killed_count,
+                sessions_ended=sessions_ended
+            )
+            await self.send_json(response.model_dump(mode='json'))
+
+            logger.info(f"Killed all {killed_count} agents for {self.client_address}")
+
+        except Exception as e:
+            logger.error(f"Error killing all agents: {e}")
+            await self.send_error(f"Failed to kill all agents: {e}")
+
     async def handle_ping(self, data: dict):
         """Handle ping request."""
         try:
@@ -252,6 +278,8 @@ class WebSocketConnection:
             await self.handle_end_session(data)
         elif msg_type == MessageType.LIST_SESSIONS.value:
             await self.handle_list_sessions()
+        elif msg_type == MessageType.KILL_ALL_AGENTS.value:
+            await self.handle_kill_all_agents(data)
         elif msg_type == MessageType.PING.value:
             await self.handle_ping(data)
         else:

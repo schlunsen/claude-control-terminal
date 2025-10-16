@@ -200,6 +200,9 @@ func (s *Server) setupRoutes() {
 	api.Get("/notifications/stats", s.handleGetNotificationStats)
 	api.Delete("/notifications", s.handleClearNotifications)
 
+	// Session resume endpoint
+	api.Get("/sessions/:conversation_id/resume-data", s.handleGetSessionResumeData)
+
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
 
@@ -1310,6 +1313,80 @@ func (s *Server) handleClearNotifications(c *fiber.Ctx) error {
 		"status":  "cleared",
 		"message": "All notifications have been deleted",
 		"time":    time.Now(),
+	})
+}
+
+// Handler: Get session resume data
+func (s *Server) handleGetSessionResumeData(c *fiber.Ctx) error {
+	conversationID := c.Params("conversation_id")
+
+	if conversationID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "conversation_id is required",
+		})
+	}
+
+	// Fetch recent history (last 20 messages for context)
+	query := &database.CommandHistoryQuery{
+		ConversationID: conversationID,
+		Limit:          20,
+		Offset:         0,
+	}
+
+	// Get user messages (prompts)
+	userMessages, err := s.repo.GetUserMessages(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get user messages: %v", err),
+		})
+	}
+
+	if len(userMessages) == 0 {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "no conversation found with this ID",
+		})
+	}
+
+	// Extract working directory (use the most recent one available)
+	workingDir := ""
+	sessionName := ""
+	for i := len(userMessages) - 1; i >= 0; i-- {
+		if userMessages[i].WorkingDirectory != "" {
+			workingDir = userMessages[i].WorkingDirectory
+			break
+		}
+	}
+
+	// Get session name from first message
+	if len(userMessages) > 0 {
+		sessionName = userMessages[0].SessionName
+	}
+
+	// Format context for agent (last 10 messages)
+	contextLimit := 10
+	if len(userMessages) < contextLimit {
+		contextLimit = len(userMessages)
+	}
+
+	contextMessages := userMessages[len(userMessages)-contextLimit:]
+
+	// Build formatted context string
+	var contextBuilder strings.Builder
+	contextBuilder.WriteString("Previous conversation history:\n\n")
+
+	for _, msg := range contextMessages {
+		contextBuilder.WriteString(fmt.Sprintf("User: %s\n", msg.Message))
+		contextBuilder.WriteString(fmt.Sprintf("(at %s)\n\n", msg.SubmittedAt.Format("3:04 PM")))
+	}
+
+	return c.JSON(fiber.Map{
+		"conversation_id":    conversationID,
+		"session_name":       sessionName,
+		"working_directory":  workingDir,
+		"context":            contextBuilder.String(),
+		"total_messages":     len(userMessages),
+		"last_activity":      userMessages[len(userMessages)-1].SubmittedAt,
+		"messages":           contextMessages,
 	})
 }
 

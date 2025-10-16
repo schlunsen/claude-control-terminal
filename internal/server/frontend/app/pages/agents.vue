@@ -2,8 +2,27 @@
   <div class="agents-page">
     <!-- Header -->
     <header class="header">
-      <h1>Live Agents</h1>
-      <p class="subtitle">Interactive Claude agent conversations</p>
+      <div class="header-content">
+        <div class="header-text">
+          <h1>Live Agents</h1>
+          <p class="subtitle">Interactive Claude agent conversations</p>
+        </div>
+        <div class="header-actions">
+          <button
+            @click="killAllAgents"
+            class="btn-kill-all"
+            :disabled="!agentWs.connected || sessions.length === 0"
+            title="Kill all active agents"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="15" y1="9" x2="9" y2="15"></line>
+              <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+            Kill All Agents
+          </button>
+        </div>
+      </div>
     </header>
 
     <!-- Connection Status -->
@@ -17,13 +36,21 @@
       <aside class="sessions-sidebar">
         <div class="sidebar-header">
           <h3>Sessions</h3>
-          <button @click="createNewSession" class="btn-new-session" :disabled="!agentWs.connected">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-            New Session
-          </button>
+          <div class="session-buttons">
+            <button @click="createNewSession" class="btn-new-session" :disabled="!agentWs.connected">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              New Session
+            </button>
+            <button @click="showResumeModal = true" class="btn-resume-session" :disabled="!agentWs.connected">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/>
+              </svg>
+              Resume Session
+            </button>
+          </div>
         </div>
 
         <div class="sessions-list">
@@ -126,11 +153,63 @@
         </div>
       </main>
     </div>
+
+    <!-- Resume Session Modal -->
+    <div v-if="showResumeModal" class="modal-overlay" @click="showResumeModal = false">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h2>Resume Session</h2>
+          <button @click="showResumeModal = false" class="modal-close">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div v-if="loadingSessions" class="loading-sessions">
+            <div class="loading-spinner"></div>
+            Loading available sessions...
+          </div>
+          <div v-else-if="availableSessions.length === 0" class="no-sessions-available">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+            </svg>
+            <p>No previous sessions found</p>
+          </div>
+          <div v-else class="sessions-list-modal">
+            <div
+              v-for="session in availableSessions"
+              :key="session.conversation_id"
+              class="session-item-modal"
+              @click="resumeSession(session)"
+            >
+              <div class="session-info-modal">
+                <div class="session-name-modal">{{ session.session_name || 'Unnamed Session' }}</div>
+                <div class="session-details">
+                  <span class="session-directory">{{ session.working_directory || 'No directory' }}</span>
+                  <span class="session-meta">
+                    {{ session.total_messages }} messages •
+                    {{ formatRelativeTime(session.last_activity) }}
+                  </span>
+                </div>
+              </div>
+              <div class="session-resume-indicator">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { useAgentWebSocket } from '~/composables/useAgentWebSocket'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 
 // WebSocket connection
 const agentWs = useAgentWebSocket()
@@ -145,6 +224,9 @@ const messages = ref({}) // { sessionId: [...messages] }
 const inputMessage = ref('')
 const isProcessing = ref(false)
 const isThinking = ref(false)
+const showResumeModal = ref(false)
+const availableSessions = ref([])
+const loadingSessions = ref(false)
 
 // Computed
 const activeMessages = computed(() => {
@@ -228,6 +310,85 @@ const endSession = async (sessionId) => {
   }
 }
 
+// Resume session functionality
+const loadAvailableSessions = async () => {
+  loadingSessions.value = true
+  try {
+    const response = await $fetch('/api/prompts/sessions')
+    availableSessions.value = response.sessions || []
+  } catch (error) {
+    console.error('Failed to load sessions:', error)
+    availableSessions.value = []
+  } finally {
+    loadingSessions.value = false
+  }
+}
+
+const resumeSession = async (session) => {
+  try {
+    // Fetch resume data from the backend
+    const resumeData = await $fetch(`/api/sessions/${session.conversation_id}/resume-data`)
+
+    // Create new agent session with history context
+    const sessionId = crypto.randomUUID()
+
+    agentWs.send({
+      type: 'create_session',
+      session_id: sessionId,
+      options: {
+        tools: ['Read', 'Write', 'Edit', 'Bash', 'Search'],
+        system_prompt: 'You are a helpful AI assistant.',
+        working_directory: resumeData.working_directory,
+        conversation_history: resumeData.context,
+        original_conversation_id: resumeData.conversation_id
+      }
+    })
+
+    // Close the modal
+    showResumeModal.value = false
+
+    // Add historical messages to the chat
+    if (resumeData.messages && resumeData.messages.length > 0) {
+      messages.value[sessionId] = []
+      resumeData.messages.forEach(msg => {
+        messages.value[sessionId].push({
+          id: crypto.randomUUID(),
+          role: 'user',
+          content: msg.message,
+          timestamp: new Date(msg.submitted_at),
+          isHistorical: true
+        })
+      })
+    }
+
+  } catch (error) {
+    console.error('Failed to resume session:', error)
+    alert('Failed to resume session. Please try again.')
+  }
+}
+
+const formatRelativeTime = (timestamp) => {
+  const date = new Date(timestamp)
+  const now = new Date()
+  const diffMs = now - date
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays < 7) return `${diffDays}d ago`
+  return date.toLocaleDateString()
+}
+
+// Watch for modal opening to load sessions
+watch(showResumeModal, (show) => {
+  if (show) {
+    loadAvailableSessions()
+  }
+})
+
 // Messaging
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || !activeSessionId.value) return
@@ -266,6 +427,24 @@ const focusMessageInput = () => {
   })
 }
 
+// Kill switch functionality
+const killAllAgents = async () => {
+  if (!agentWs.connected || sessions.value.length === 0) return
+
+  if (!confirm('Are you sure you want to kill all active agents? This will end all sessions immediately.')) {
+    return
+  }
+
+  try {
+    agentWs.send({
+      type: 'kill_all_agents'
+    })
+  } catch (error) {
+    console.error('Failed to kill all agents:', error)
+    alert('Failed to kill all agents. Please try again.')
+  }
+}
+
 // WebSocket event handlers
 agentWs.on('onSessionCreated', (data) => {
   console.log('Session created handler called:', data)
@@ -278,14 +457,14 @@ agentWs.on('onSessionCreated', (data) => {
 })
 
 agentWs.on('onAgentMessage', (data) => {
+  console.log('Received agent message:', data)
   if (!messages.value[data.session_id]) {
     messages.value[data.session_id] = []
   }
 
-  // Skip system messages and empty content (unless it's a completion signal)
+  // Skip only empty content (unless it's a completion signal) and system messages
   if (!data.complete && (!data.content ||
-      data.content.includes('SystemMessage') ||
-      data.content.includes('"type"') && data.content.includes('"subtype"'))) {
+      data.content.includes('SystemMessage'))) {
     return
   }
 
@@ -319,11 +498,22 @@ agentWs.on('onAgentMessage', (data) => {
   }
 
   if (data.complete) {
-    // Mark streaming as complete
-    const msg = messages.value[data.session_id].find(m => m.streaming)
-    if (msg) {
-      msg.streaming = false
+    // Handle completion message
+    if (data.content && !existingMessage) {
+      // This is a completion message with content but no existing message
+      // Create a new message with the final content
+      messages.value[data.session_id].push({
+        id: messageId,
+        role: 'assistant',
+        content: data.content,
+        timestamp: new Date(),
+        streaming: false
+      })
+    } else if (existingMessage) {
+      // Mark existing message streaming as complete
+      existingMessage.streaming = false
     }
+
     // Ensure processing is reset on completion
     isProcessing.value = false
     isThinking.value = false
@@ -390,6 +580,18 @@ agentWs.on('onSessionsList', (data) => {
   sessions.value = data.sessions
 })
 
+agentWs.on('onAgentsKilled', (data) => {
+  console.log('Agents killed response:', data)
+
+  // Clear all sessions and messages
+  sessions.value = []
+  messages.value = {}
+  activeSessionId.value = null
+
+  // Show success message
+  alert(`Successfully killed ${data.killed_count} agents`)
+})
+
 // Load existing sessions on mount
 onMounted(() => {
   if (agentWs.connected) {
@@ -419,6 +621,16 @@ watch(() => agentWs.connected, (connected) => {
   background: var(--card-bg);
 }
 
+.header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-text {
+  flex: 1;
+}
+
 .header h1 {
   font-size: 1.5rem;
   font-weight: 600;
@@ -430,6 +642,35 @@ watch(() => agentWs.connected, (connected) => {
   margin: 4px 0 0 0;
   color: var(--text-secondary);
   font-size: 0.9rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-kill-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-kill-all:hover:not(:disabled) {
+  background: #c82333;
+}
+
+.btn-kill-all:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .connection-status {
@@ -879,6 +1120,209 @@ watch(() => agentWs.connected, (connected) => {
   --bg-tertiary: #2a2a2a;
 }
 
+/* Resume Session Styles */
+.session-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-resume-session {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-resume-session:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-purple);
+}
+
+.btn-resume-session:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Modal Styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-close {
+  padding: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 24px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.loading-sessions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-purple);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.no-sessions-available {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-secondary);
+}
+
+.no-sessions-available svg {
+  margin-bottom: 16px;
+}
+
+.no-sessions-available p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.sessions-list-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.session-item-modal {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.session-item-modal:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-purple);
+}
+
+.session-info-modal {
+  flex: 1;
+  overflow: hidden;
+}
+
+.session-name-modal {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.session-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.session-directory {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-meta {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.session-resume-indicator {
+  padding: 8px;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.session-item-modal:hover .session-resume-indicator {
+  color: var(--accent-purple);
+}
+
+/* Historical message styling */
+.message.isHistorical .message-content {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  opacity: 0.7;
+}
+
+.message.isHistorical .message-role {
+  opacity: 0.7;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sessions-sidebar {
@@ -896,6 +1340,11 @@ watch(() => agentWs.connected, (connected) => {
     height: 200px;
     border-right: none;
     border-bottom: 1px solid var(--border-color);
+  }
+
+  .modal-content {
+    width: 95%;
+    margin: 20px;
   }
 }
 </style>

@@ -6,6 +6,7 @@ interface AgentWebSocketCallbacks {
   onAgentThinking: ((data: any) => void) | null
   onAgentToolUse: ((data: any) => void) | null
   onSessionsList: ((data: any) => void) | null
+  onAgentsKilled: ((data: any) => void) | null
   onError: ((data: any) => void) | null
 }
 
@@ -22,6 +23,7 @@ export const useAgentWebSocket = () => {
     onAgentThinking: null,
     onAgentToolUse: null,
     onSessionsList: null,
+    onAgentsKilled: null,
     onError: null,
   })
 
@@ -91,6 +93,10 @@ export const useAgentWebSocket = () => {
 
             case 'sessions_list':
               callbacks.onSessionsList?.(message)
+              break
+
+            case 'agents_killed':
+              callbacks.onAgentsKilled?.(message)
               break
 
             case 'error':

@@ -30,6 +30,10 @@ class MessageType(str, Enum):
     AGENT_TOOL_USE = "agent_tool_use"
     AGENT_ERROR = "agent_error"
 
+    # Kill switch
+    KILL_ALL_AGENTS = "kill_all_agents"
+    AGENTS_KILLED = "agents_killed"
+
     # System
     ERROR = "error"
     PING = "ping"
@@ -66,6 +70,8 @@ class SessionOptions(BaseModel):
     working_directory: Optional[str] = None
     max_tokens: Optional[int] = None
     temperature: Optional[float] = None
+    conversation_history: Optional[str] = None  # Formatted conversation history for resume
+    original_conversation_id: Optional[str] = None  # ID of the conversation being resumed
 
 
 class SessionStatus(str, Enum):
@@ -216,3 +222,17 @@ class PongMessage(BaseMessage):
 
     type: MessageType = MessageType.PONG
     timestamp: datetime = Field(default_factory=datetime.now)
+
+
+class KillAllAgentsMessage(BaseMessage):
+    """Kill all active agents."""
+
+    type: MessageType = MessageType.KILL_ALL_AGENTS
+
+
+class AgentsKilledMessage(BaseMessage):
+    """Response when all agents are killed."""
+
+    type: MessageType = MessageType.AGENTS_KILLED
+    killed_count: int
+    sessions_ended: List[UUID]
