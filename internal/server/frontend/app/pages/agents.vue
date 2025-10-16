@@ -223,7 +223,7 @@
               id="working-directory"
               v-model="sessionForm.workingDirectory"
               type="text"
-              placeholder="/Users/schlunsen/projects"
+              placeholder="/home/user/projects"
               class="form-input"
             />
             <small class="form-help">The directory where the agent will work</small>
@@ -456,7 +456,7 @@ const awaitingToolResults = ref(new Set()) // Track sessions awaiting tool execu
 
 // Session creation form
 const sessionForm = ref({
-  workingDirectory: '/Users/schlunsen/projects',
+  workingDirectory: '',
   permissionMode: 'default',
   systemPrompt: '',
   tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
@@ -464,7 +464,7 @@ const sessionForm = ref({
 
 // Resume session form
 const resumeForm = ref({
-  workingDirectory: '/Users/schlunsen/projects',
+  workingDirectory: '',
   permissionMode: 'default',
   systemPrompt: '',
   tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
@@ -518,7 +518,7 @@ const createNewSession = () => {
 
   // Reset form to defaults
   sessionForm.value = {
-    workingDirectory: '/Users/schlunsen/projects',
+    workingDirectory: '',
     permissionMode: 'default',
     systemPrompt: '',
     tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
@@ -603,7 +603,7 @@ const selectSessionForResume = async (session) => {
 
   // Prefill the form with the session's data
   resumeForm.value = {
-    workingDirectory: session.working_directory || '/Users/schlunsen/projects',
+    workingDirectory: session.working_directory || '',
     permissionMode: 'default',
     systemPrompt: '',
     tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
