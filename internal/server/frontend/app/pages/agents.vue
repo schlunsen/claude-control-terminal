@@ -37,14 +37,16 @@
         <div class="sidebar-header">
           <h3>Sessions</h3>
           <div class="session-buttons">
-            <button @click="createNewSession" class="btn-new-session" :disabled="!agentWs.connected">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button @click="createNewSession" class="btn-new-session" :disabled="!agentWs.connected || creatingSession">
+              <svg v-if="!creatingSession" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
-              New Session
+              <div v-if="creatingSession" class="btn-spinner-small"></div>
+              <span v-if="!creatingSession">New Session</span>
+              <span v-else>Creating...</span>
             </button>
-            <button @click="showResumeModal = true" class="btn-resume-session" :disabled="!agentWs.connected">
+            <button @click="openResumeModal" class="btn-resume-session" :disabled="!agentWs.connected">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/>
               </svg>
@@ -95,9 +97,16 @@
         <div v-else class="chat-content">
           <!-- Messages -->
           <div class="messages-container" ref="messagesContainer">
-            <div v-for="message in activeMessages" :key="message.id" class="message" :class="message.role">
+            <div v-for="message in activeMessages" :key="message.id" class="message" :class="{
+              [message.role]: true,
+              isToolResult: message.isToolResult,
+              isExecutionStatus: message.isExecutionStatus,
+              isPermissionDecision: message.isPermissionDecision,
+              isHistorical: message.isHistorical,
+              isError: message.isError
+            }">
               <div class="message-header">
-                <span class="message-role">{{ message.role === 'user' ? 'You' : 'Claude' }}</span>
+                <span class="message-role">{{ message.role === 'user' ? 'You' : message.role === 'system' ? 'System' : 'Claude' }}</span>
                 <span class="message-time">{{ formatTime(message.timestamp) }}</span>
               </div>
               <div class="message-content" v-html="formatMessage(message.content)"></div>
@@ -125,6 +134,47 @@
             <div v-if="isProcessing && !isThinking" class="processing-indicator">
               <div class="processing-spinner"></div>
               Processing your message...
+            </div>
+          </div>
+
+          <!-- Permission Requests -->
+          <div v-if="pendingPermissions.length > 0" class="permission-requests">
+            <div
+              v-for="permission in pendingPermissions"
+              :key="permission.request_id"
+              class="permission-request"
+            >
+              <div class="permission-header">
+                <div class="permission-icon">🔐</div>
+                <div class="permission-title">Permission Request</div>
+                <div class="permission-time">{{ formatTime(permission.timestamp) }}</div>
+              </div>
+              <div class="permission-description">
+                {{ permission.description }}
+              </div>
+              <div class="permission-actions">
+                <button
+                  @click="denyPermission(permission)"
+                  class="btn-deny"
+                  title="Deny this request"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  Deny
+                </button>
+                <button
+                  @click="approvePermission(permission)"
+                  class="btn-approve"
+                  title="Approve this request"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20,6 9,17 4,12"></polyline>
+                  </svg>
+                  Approve
+                </button>
+              </div>
             </div>
           </div>
 
@@ -173,7 +223,7 @@
               id="working-directory"
               v-model="sessionForm.workingDirectory"
               type="text"
-              placeholder="/path/to/your/project"
+              placeholder="/Users/schlunsen/projects"
               class="form-input"
             />
             <small class="form-help">The directory where the agent will work</small>
@@ -183,8 +233,8 @@
             <label for="permission-mode">Permission Mode</label>
             <select id="permission-mode" v-model="sessionForm.permissionMode" class="form-select">
               <option value="default">Default (ask for permissions)</option>
-              <option value="allow-all">Allow All (full permissions)</option>
-              <option value="read-only">Read Only (no file modifications)</option>
+              <option value="acceptEdits">Allow All (full permissions)</option>
+              <option value="plan">Read Only (no file modifications)</option>
             </select>
             <small class="form-help">Control what permissions the agent has</small>
           </div>
@@ -232,9 +282,11 @@
           </div>
 
           <div class="modal-actions">
-            <button @click="showCreateSessionModal = false" class="btn-cancel">Cancel</button>
-            <button @click="createSessionWithOptions" class="btn-create" :disabled="!sessionForm.workingDirectory">
-              Create Session
+            <button @click="showCreateSessionModal = false" class="btn-cancel" :disabled="creatingSession">Cancel</button>
+            <button @click="createSessionWithOptions" class="btn-create" :disabled="!sessionForm.workingDirectory || creatingSession">
+              <div v-if="creatingSession" class="btn-spinner"></div>
+              <span v-if="!creatingSession">Create Session</span>
+              <span v-else>Creating...</span>
             </button>
           </div>
         </div>
@@ -312,8 +364,8 @@
               <label for="resume-permission-mode">Permission Mode</label>
               <select id="resume-permission-mode" v-model="resumeForm.permissionMode" class="form-select">
                 <option value="default">Default (ask for permissions)</option>
-                <option value="allow-all">Allow All (full permissions)</option>
-                <option value="read-only">Read Only (no file modifications)</option>
+                <option value="acceptEdits">Allow All (full permissions)</option>
+                <option value="plan">Read Only (no file modifications)</option>
               </select>
               <small class="form-help">Control what permissions the agent has</small>
             </div>
@@ -361,9 +413,11 @@
             </div>
 
             <div class="modal-actions">
-              <button @click="selectedResumeSession = null" class="btn-cancel">Back</button>
-              <button @click="resumeSessionWithOptions" class="btn-create">
-                Resume Session
+              <button @click="selectedResumeSession = null" class="btn-cancel" :disabled="resumingSession">Back</button>
+              <button @click="resumeSessionWithOptions" class="btn-create" :disabled="resumingSession">
+                <div v-if="resumingSession" class="btn-spinner"></div>
+                <span v-if="!resumingSession">Resume Session</span>
+                <span v-else>Resuming...</span>
               </button>
             </div>
           </div>
@@ -395,10 +449,14 @@ const availableSessions = ref([])
 const loadingSessions = ref(false)
 const showCreateSessionModal = ref(false)
 const selectedResumeSession = ref(null)
+const creatingSession = ref(false)
+const resumingSession = ref(false)
+const pendingPermissions = ref([]) // Array of pending permission requests
+const awaitingToolResults = ref(new Set()) // Track sessions awaiting tool execution results
 
 // Session creation form
 const sessionForm = ref({
-  workingDirectory: '',
+  workingDirectory: '/Users/schlunsen/projects',
   permissionMode: 'default',
   systemPrompt: '',
   tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
@@ -406,7 +464,7 @@ const sessionForm = ref({
 
 // Resume session form
 const resumeForm = ref({
-  workingDirectory: '',
+  workingDirectory: '/Users/schlunsen/projects',
   permissionMode: 'default',
   systemPrompt: '',
   tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
@@ -455,19 +513,51 @@ const formatMessage = (content) => {
 }
 
 // Session management
-const createNewSession = async () => {
+const createNewSession = () => {
   if (!agentWs.connected) return
 
-  const sessionId = crypto.randomUUID()
+  // Reset form to defaults
+  sessionForm.value = {
+    workingDirectory: '/Users/schlunsen/projects',
+    permissionMode: 'default',
+    systemPrompt: '',
+    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+  }
 
-  agentWs.send({
-    type: 'create_session',
-    session_id: sessionId,
-    options: {
-      tools: ['Read', 'Write', 'Edit', 'Bash', 'Search'],
-      system_prompt: 'You are a helpful AI assistant.'
-    }
-  })
+  showCreateSessionModal.value = true
+}
+
+const createSessionWithOptions = async () => {
+  if (!agentWs.connected || !sessionForm.value.workingDirectory) return
+
+  console.log('Starting session creation...')
+  creatingSession.value = true
+
+  try {
+    const sessionId = crypto.randomUUID()
+    console.log('Creating session with ID:', sessionId)
+
+    agentWs.send({
+      type: 'create_session',
+      session_id: sessionId,
+      options: {
+        tools: sessionForm.value.tools,
+        system_prompt: sessionForm.value.systemPrompt || 'You are a helpful AI assistant.',
+        working_directory: sessionForm.value.workingDirectory,
+        permission_mode: sessionForm.value.permissionMode
+      }
+    })
+    console.log('Session creation message sent')
+
+    showCreateSessionModal.value = false
+    console.log('Create modal closed')
+  } catch (error) {
+    console.error('Failed to create session:', error)
+    alert('Failed to create session. Please try again.')
+  } finally {
+    creatingSession.value = false
+    console.log('creatingSession set to false')
+  }
 }
 
 const selectSession = (sessionId) => {
@@ -488,6 +578,7 @@ const endSession = async (sessionId) => {
   // Remove from local state
   sessions.value = sessions.value.filter(s => s.id !== sessionId)
   delete messages.value[sessionId]
+  awaitingToolResults.value.delete(sessionId)  // Clean up flag
 
   if (activeSessionId.value === sessionId) {
     activeSessionId.value = null
@@ -508,28 +599,57 @@ const loadAvailableSessions = async () => {
   }
 }
 
-const resumeSession = async (session) => {
-  try {
-    // Fetch resume data from the backend
-    const resumeData = await $fetch(`/api/sessions/${session.conversation_id}/resume-data`)
+const openResumeModal = () => {
+  console.log('Opening resume modal...')
+  showResumeModal.value = true
+}
 
-    // Create new agent session with history context
+const selectSessionForResume = async (session) => {
+  console.log('Selected session for resume:', session)
+  selectedResumeSession.value = session
+
+  // Prefill the form with the session's data
+  resumeForm.value = {
+    workingDirectory: session.working_directory || '/Users/schlunsen/projects',
+    permissionMode: 'default',
+    systemPrompt: '',
+    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+  }
+}
+
+const resumeSessionWithOptions = async () => {
+  try {
+    if (!selectedResumeSession.value) return
+
+    console.log('Starting session resume...')
+    resumingSession.value = true
+
+    // Fetch resume data from the backend
+    console.log('Fetching resume data...')
+    const resumeData = await $fetch(`/api/sessions/${selectedResumeSession.value.conversation_id}/resume-data`)
+    console.log('Resume data fetched:', resumeData)
+
+    // Create new agent session with history context and options
     const sessionId = crypto.randomUUID()
+    console.log('Creating new session with ID:', sessionId)
 
     agentWs.send({
       type: 'create_session',
       session_id: sessionId,
       options: {
-        tools: ['Read', 'Write', 'Edit', 'Bash', 'Search'],
-        system_prompt: 'You are a helpful AI assistant.',
-        working_directory: resumeData.working_directory,
+        tools: resumeForm.value.tools,
+        system_prompt: resumeForm.value.systemPrompt || 'You are a helpful AI assistant.',
+        working_directory: resumeForm.value.workingDirectory || resumeData.working_directory,
+        permission_mode: resumeForm.value.permissionMode,
         conversation_history: resumeData.context,
         original_conversation_id: resumeData.conversation_id
       }
     })
+    console.log('Session creation message sent')
 
-    // Close the modal
+    // Close the modal and reset selection
     showResumeModal.value = false
+    selectedResumeSession.value = null
 
     // Add historical messages to the chat
     if (resumeData.messages && resumeData.messages.length > 0) {
@@ -545,9 +665,14 @@ const resumeSession = async (session) => {
       })
     }
 
+    console.log('Session resume completed successfully')
+
   } catch (error) {
     console.error('Failed to resume session:', error)
     alert('Failed to resume session. Please try again.')
+  } finally {
+    resumingSession.value = false
+    console.log('resumingSession set to false')
   }
 }
 
@@ -611,6 +736,58 @@ const focusMessageInput = () => {
   })
 }
 
+// Permission request functionality
+const approvePermission = (request) => {
+  sendPermissionResponse(request, true)
+}
+
+const denyPermission = (request, reason = '') => {
+  sendPermissionResponse(request, false, reason)
+}
+
+const sendPermissionResponse = (request, approved, reason = '') => {
+  try {
+    agentWs.send({
+      type: 'permission_response',
+      session_id: request.session_id,
+      request_id: request.request_id,
+      approved: approved,
+      reason: reason
+    })
+
+    // Remove from pending permissions
+    pendingPermissions.value = pendingPermissions.value.filter(p => p.request_id !== request.request_id)
+
+    // Add a system message to show the decision
+    if (!messages.value[activeSessionId.value]) {
+      messages.value[activeSessionId.value] = []
+    }
+
+    const decisionText = approved ? '✅ Approved' : '❌ Denied'
+    const decisionMessage = reason ? `${decisionText} (Reason: ${reason})` : decisionText
+
+    messages.value[activeSessionId.value].push({
+      id: crypto.randomUUID(),
+      role: 'system',
+      content: `Permission request for "${request.description}" ${decisionMessage}`,
+      timestamp: new Date(),
+      isPermissionDecision: true
+    })
+
+    // Auto-scroll to bottom
+    nextTick(() => {
+      const container = document.querySelector('.messages-container')
+      if (container) {
+        container.scrollTop = container.scrollHeight
+      }
+    })
+
+  } catch (error) {
+    console.error('Failed to send permission response:', error)
+    alert('Failed to send permission response. Please try again.')
+  }
+}
+
 // Kill switch functionality
 const killAllAgents = async () => {
   if (!agentWs.connected || sessions.value.length === 0) return
@@ -652,6 +829,9 @@ agentWs.on('onAgentMessage', (data) => {
     return
   }
 
+  // Check if we're awaiting tool results (after permission approval)
+  const isToolResult = awaitingToolResults.value.has(data.session_id)
+
   // For streaming, use message_id or create one for this stream
   const messageId = data.message_id || 'stream-' + data.session_id
 
@@ -659,16 +839,35 @@ agentWs.on('onAgentMessage', (data) => {
     m => (m.id === messageId || m.streaming) && m.role === 'assistant'
   )
 
-  if (existingMessage && !data.complete) {
-    // Append to existing message (streaming)
+  // Force new message creation if this is a tool result
+  if (isToolResult && data.content) {
+    console.log('Creating new message for tool results')
+    // Clear the flag since we're now creating the new message
+    awaitingToolResults.value.delete(data.session_id)
+
+    // Create a new message for tool results
+    messages.value[data.session_id].push({
+      id: messageId + '-result',  // Different ID to avoid conflicts
+      role: 'assistant',
+      content: data.content,
+      timestamp: new Date(),
+      streaming: !data.complete,
+      isToolResult: true
+    })
+
+    // Reset processing when we receive content
+    isProcessing.value = false
+    isThinking.value = false
+  } else if (existingMessage && !data.complete && !isToolResult) {
+    // Append to existing message (streaming) - but not if awaiting tool results
     existingMessage.content += data.content
     // Reset processing when we receive content
     if (data.content) {
       isProcessing.value = false
       isThinking.value = false
     }
-  } else if (!existingMessage && data.content) {
-    // New message - only add if there's actual content
+  } else if (!existingMessage && data.content && !isToolResult) {
+    // New message - only add if there's actual content and not a tool result
     messages.value[data.session_id].push({
       id: messageId,
       role: 'assistant',
@@ -683,7 +882,7 @@ agentWs.on('onAgentMessage', (data) => {
 
   if (data.complete) {
     // Handle completion message
-    if (data.content && !existingMessage) {
+    if (data.content && !existingMessage && !isToolResult) {
       // This is a completion message with content but no existing message
       // Create a new message with the final content
       messages.value[data.session_id].push({
@@ -693,9 +892,17 @@ agentWs.on('onAgentMessage', (data) => {
         timestamp: new Date(),
         streaming: false
       })
-    } else if (existingMessage) {
+    } else if (existingMessage && !isToolResult) {
       // Mark existing message streaming as complete
       existingMessage.streaming = false
+    } else {
+      // If this was a tool result completion, find and mark it complete
+      const toolResultMessage = messages.value[data.session_id].find(
+        m => m.id === messageId + '-result' && m.role === 'assistant'
+      )
+      if (toolResultMessage) {
+        toolResultMessage.streaming = false
+      }
     }
 
     // Ensure processing is reset on completion
@@ -736,11 +943,63 @@ agentWs.on('onAgentToolUse', (data) => {
   }
 })
 
+agentWs.on('onPermissionRequest', (data) => {
+  console.log('Permission request received:', data)
+  if (data.session_id === activeSessionId.value) {
+    // Add to pending permissions for this session
+    pendingPermissions.value.push({
+      ...data,
+      timestamp: new Date()
+    })
+  }
+})
+
+agentWs.on('onPermissionAcknowledged', (data) => {
+  console.log('Permission acknowledged:', data)
+  if (data.session_id === activeSessionId.value) {
+    // Add a status message showing execution started
+    if (!messages.value[data.session_id]) {
+      messages.value[data.session_id] = []
+    }
+
+    const statusText = data.approved ?
+      `⚡ Executing ${data.tool} command...` :
+      `🚫 ${data.tool} command denied`
+
+    messages.value[data.session_id].push({
+      id: crypto.randomUUID(),
+      role: 'system',
+      content: statusText,
+      timestamp: new Date(),
+      isExecutionStatus: true
+    })
+
+    // If approved, mark that we're awaiting tool results (should appear as new message)
+    if (data.approved) {
+      awaitingToolResults.value.add(data.session_id)
+      console.log('Marked session as awaiting tool results:', data.session_id)
+    }
+
+    // Auto-scroll to bottom
+    nextTick(() => {
+      const container = document.querySelector('.messages-container')
+      if (container) {
+        container.scrollTop = container.scrollHeight
+      }
+    })
+  }
+})
+
 agentWs.on('onError', (data) => {
   console.error('Agent error:', data.message)
   // Always reset on error
   isProcessing.value = false
   isThinking.value = false
+
+  // Clear awaiting tool results flag on error
+  if (data.session_id) {
+    awaitingToolResults.value.delete(data.session_id)
+  }
 
   // Show error message to user
   if (data.session_id && messages.value[data.session_id]) {
@@ -771,6 +1030,7 @@ agentWs.on('onAgentsKilled', (data) => {
   sessions.value = []
   messages.value = {}
   activeSessionId.value = null
+  awaitingToolResults.value.clear()  // Clear all flags
 
   // Show success message
   alert(`Successfully killed ${data.killed_count} agents`)
@@ -1507,6 +1767,318 @@ watch(() => agentWs.connected, (connected) => {
   opacity: 0.7;
 }
 
+/* Form Styles */
+.form-group {
+  margin-bottom: 24px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  transition: all 0.2s;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent-purple);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+}
+
+.form-help {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.tool-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tool-checkbox:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-purple);
+}
+
+.tool-checkbox input[type="checkbox"] {
+  margin: 0;
+}
+
+.tool-checkbox span {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn-cancel {
+  padding: 12px 24px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background: var(--bg-tertiary);
+}
+
+.btn-create {
+  padding: 12px 24px;
+  background: var(--accent-purple);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-create:hover:not(:disabled) {
+  background: var(--accent-purple-hover);
+}
+
+.btn-create:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  position: relative;
+}
+
+.btn-create:disabled .btn-spinner {
+  opacity: 1;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+}
+
+.btn-spinner-small {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--accent-purple);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 0;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.selected-session-info {
+  padding: 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.selected-session-info h3 {
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
+}
+
+.selected-session-info p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.selected-session-info code {
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85em;
+}
+
+.resume-session-options {
+  padding: 24px 0;
+}
+
+/* Permission Requests */
+.permission-requests {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.permission-request {
+  background: linear-gradient(135deg, #fff3cd, #fef5e7);
+  border: 1px solid #ffc107;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+  animation: slideIn 0.3s ease-out;
+}
+
+.permission-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.permission-icon {
+  font-size: 1.2rem;
+}
+
+.permission-title {
+  font-weight: 600;
+  color: #856404;
+  flex: 1;
+}
+
+.permission-time {
+  font-size: 0.8rem;
+  color: #856404;
+  opacity: 0.7;
+}
+
+.permission-description {
+  color: #856404;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin-bottom: 12px;
+  padding: 8px 0;
+}
+
+.permission-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-approve,
+.btn-deny {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-approve {
+  background: #28a745;
+  color: white;
+}
+
+.btn-approve:hover {
+  background: #218838;
+}
+
+.btn-deny {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-deny:hover {
+  background: #c82333;
+}
+
+/* Permission decision messages */
+.message.isPermissionDecision .message-content {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  opacity: 0.8;
+  font-style: italic;
+}
+
+/* Execution status messages */
+.message.isExecutionStatus .message-content {
+  background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+  border-color: #4caf50;
+  color: #2e7d32;
+  font-weight: 500;
+  font-style: normal;
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Tool result messages */
+.message.isToolResult .message-content {
+  background: var(--bg-secondary);
+  border: 2px solid var(--accent-purple);
+  border-left: 4px solid var(--accent-purple);
+  animation: slideIn 0.3s ease-out;
+}
+
+/* System messages styling */
+.message.system .message-role {
+  color: var(--text-secondary);
+}
+
+.message.system .message-content {
+  background: transparent;
+  border: none;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .sessions-sidebar {
@@ -1529,6 +2101,19 @@ watch(() => agentWs.connected, (connected) => {
   .modal-content {
     width: 95%;
     margin: 20px;
+  }
+
+  .tools-grid {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .btn-cancel,
+  .btn-create {
+    width: 100%;
   }
 }
 </style>

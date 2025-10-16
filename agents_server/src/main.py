@@ -23,6 +23,7 @@ from .models import (
     KillAllAgentsMessage,
     ListSessionsMessage,
     MessageType,
+    PermissionResponseMessage,
     PingMessage,
     PongMessage,
     SendPromptMessage,
@@ -157,10 +158,24 @@ class WebSocketConnection:
             await session_manager.increment_message_count(msg.session_id)
 
             # Send prompt to agent and stream responses
+            # Create a callback for permission requests and acknowledgments to send them directly
+            async def send_permission_message(permission_data):
+                """Send permission-related messages directly to WebSocket."""
+                permission_data["session_id"] = str(msg.session_id)
+
+                # Map message types
+                if permission_data.get("type") == "permission_request":
+                    permission_data["type"] = MessageType.PERMISSION_REQUEST.value
+                elif permission_data.get("type") == "permission_acknowledged":
+                    permission_data["type"] = MessageType.PERMISSION_ACKNOWLEDGED.value
+
+                await self.send_json(permission_data)
+
             try:
                 async for response in agent_manager.send_prompt(
                     msg.session_id,
-                    msg.prompt
+                    msg.prompt,
+                    send_message_callback=send_permission_message
                 ):
                     # Add session_id to response
                     response["session_id"] = str(msg.session_id)
@@ -172,6 +187,8 @@ class WebSocketConnection:
                         response["type"] = MessageType.AGENT_THINKING.value
                     elif response.get("type") == "agent_tool_use":
                         response["type"] = MessageType.AGENT_TOOL_USE.value
+                    elif response.get("type") == "permission_request":
+                        response["type"] = MessageType.PERMISSION_REQUEST.value
                     elif response.get("type") == "agent_error":
                         response["type"] = MessageType.AGENT_ERROR.value
 
@@ -256,6 +273,33 @@ class WebSocketConnection:
             logger.error(f"Error killing all agents: {e}")
             await self.send_error(f"Failed to kill all agents: {e}")
 
+    async def handle_permission_response(self, data: dict):
+        """Handle permission response request."""
+        try:
+            logger.debug(f"handle_permission_response called with data: {data}")
+            msg = PermissionResponseMessage(**data)
+            logger.info(f"Processing permission response for session {msg.session_id}, request {msg.request_id}, approved={msg.approved}")
+
+            # Handle the permission response
+            success = await agent_manager.handle_permission_response(
+                msg.session_id,
+                msg.request_id,
+                msg.approved,
+                msg.reason
+            )
+
+            if not success:
+                await self.send_error(
+                    f"Permission request {msg.request_id} not found",
+                    session_id=msg.session_id
+                )
+
+            logger.info(f"Handled permission response for session {msg.session_id}: {msg.request_id} = {msg.approved}")
+
+        except Exception as e:
+            logger.error(f"Error handling permission response: {e}")
+            await self.send_error(f"Failed to handle permission response: {e}")
+
     async def handle_ping(self, data: dict):
         """Handle ping request."""
         try:
@@ -273,13 +317,16 @@ class WebSocketConnection:
         if msg_type == MessageType.CREATE_SESSION.value:
             await self.handle_create_session(data)
         elif msg_type == MessageType.SEND_PROMPT.value:
-            await self.handle_send_prompt(data)
+            # Run prompt handling in background to not block permission responses
+            asyncio.create_task(self.handle_send_prompt(data))
         elif msg_type == MessageType.END_SESSION.value:
             await self.handle_end_session(data)
         elif msg_type == MessageType.LIST_SESSIONS.value:
             await self.handle_list_sessions()
         elif msg_type == MessageType.KILL_ALL_AGENTS.value:
             await self.handle_kill_all_agents(data)
+        elif msg_type == MessageType.PERMISSION_RESPONSE.value:
+            await self.handle_permission_response(data)
         elif msg_type == MessageType.PING.value:
             await self.handle_ping(data)
         else:

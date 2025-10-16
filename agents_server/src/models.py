@@ -30,6 +30,11 @@ class MessageType(str, Enum):
     AGENT_TOOL_USE = "agent_tool_use"
     AGENT_ERROR = "agent_error"
 
+    # Permission requests
+    PERMISSION_REQUEST = "permission_request"
+    PERMISSION_RESPONSE = "permission_response"
+    PERMISSION_ACKNOWLEDGED = "permission_acknowledged"
+
     # Kill switch
     KILL_ALL_AGENTS = "kill_all_agents"
     AGENTS_KILLED = "agents_killed"
@@ -70,6 +75,7 @@ class SessionOptions(BaseModel):
     working_directory: Optional[str] = None
     max_tokens: Optional[int] = None
     temperature: Optional[float] = None
+    permission_mode: Optional[str] = "default"  # Permission mode: default, allow-all, read-only
     conversation_history: Optional[str] = None  # Formatted conversation history for resume
     original_conversation_id: Optional[str] = None  # ID of the conversation being resumed
 
@@ -172,6 +178,38 @@ class AgentToolUseMessage(BaseMessage):
     tool: str
     parameters: Dict[str, Any]
     result: Optional[Any] = None
+
+
+class PermissionRequestMessage(BaseMessage):
+    """Agent is requesting permission for an action."""
+
+    type: MessageType = MessageType.PERMISSION_REQUEST
+    session_id: UUID
+    tool: str
+    parameters: Dict[str, Any]
+    description: str
+    request_id: str = Field(default_factory=lambda: str(uuid4()))
+
+
+class PermissionResponseMessage(BaseMessage):
+    """User response to a permission request."""
+
+    type: MessageType = MessageType.PERMISSION_RESPONSE
+    session_id: UUID
+    request_id: str
+    approved: bool
+    reason: Optional[str] = None
+
+
+class PermissionAcknowledgedMessage(BaseMessage):
+    """Acknowledgment that permission was received and tool is executing."""
+
+    type: MessageType = MessageType.PERMISSION_ACKNOWLEDGED
+    session_id: UUID
+    request_id: str
+    approved: bool
+    tool: str
+    status: str  # "executing" or "denied"
 
 
 class EndSessionMessage(BaseMessage):

@@ -5,6 +5,8 @@ interface AgentWebSocketCallbacks {
   onAgentMessage: ((data: any) => void) | null
   onAgentThinking: ((data: any) => void) | null
   onAgentToolUse: ((data: any) => void) | null
+  onPermissionRequest: ((data: any) => void) | null
+  onPermissionAcknowledged: ((data: any) => void) | null
   onSessionsList: ((data: any) => void) | null
   onAgentsKilled: ((data: any) => void) | null
   onError: ((data: any) => void) | null
@@ -22,6 +24,8 @@ export const useAgentWebSocket = () => {
     onAgentMessage: null,
     onAgentThinking: null,
     onAgentToolUse: null,
+    onPermissionRequest: null,
+    onPermissionAcknowledged: null,
     onSessionsList: null,
     onAgentsKilled: null,
     onError: null,
@@ -89,6 +93,16 @@ export const useAgentWebSocket = () => {
 
             case 'agent_tool_use':
               callbacks.onAgentToolUse?.(message)
+              break
+
+            case 'permission_request':
+              console.log('Received permission_request:', message)
+              callbacks.onPermissionRequest?.(message)
+              break
+
+            case 'permission_acknowledged':
+              console.log('Received permission_acknowledged:', message)
+              callbacks.onPermissionAcknowledged?.(message)
               break
 
             case 'sessions_list':

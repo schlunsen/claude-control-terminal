@@ -5,7 +5,7 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import AsyncIterator, Dict, Optional
+from typing import Any, AsyncIterator, Dict, Optional
 from uuid import UUID
 
 from claude_agent_sdk import (
@@ -13,6 +13,8 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     AssistantMessage,
     TextBlock,
+    ToolUseBlock,
+    HookMatcher,
 )
 
 from .config import settings
@@ -33,6 +35,131 @@ class AgentManager:
     def __init__(self):
         self.active_agents: Dict[UUID, ClaudeSDKClient] = {}
         self.agent_options: Dict[UUID, ClaudeAgentOptions] = {}
+        self.pending_permissions: Dict[UUID, Dict[str, any]] = {}  # session_id -> {request_id: permission_data}
+        self.permission_futures: Dict[str, asyncio.Future] = {}  # request_id -> Future[bool]
+        self.permission_callbacks: Dict[UUID, Any] = {}  # session_id -> callback for sending permission requests
+
+    def _create_pretool_hook(self, session_id: UUID):
+        """
+        Create a PreToolUse hook for permission handling.
+
+        Args:
+            session_id: The session ID
+
+        Returns:
+            Async hook function that handles permission requests
+        """
+        async def pretool_hook(input_data, tool_use_id, context):
+            """Hook called before any tool execution."""
+            tool_name = input_data.get("tool_name", "")
+            tool_input = input_data.get("tool_input", {})
+
+            logger.debug(f"Session {session_id}: PreToolUse hook called for {tool_name}")
+
+            # Check if this tool requires permission
+            requires_perm = self._requires_permission(session_id, tool_name, tool_input)
+            logger.debug(f"Session {session_id}: Tool {tool_name} requires_permission={requires_perm}")
+
+            if not requires_perm:
+                # No permission needed, allow execution
+                logger.debug(f"Session {session_id}: Allowing {tool_name} without permission")
+                return {}
+
+            logger.info(f"Session {session_id}: Tool {tool_name} requires permission (tool_use_id: {tool_use_id})")
+
+            # Get the callback first (before we use it)
+            callback = self.permission_callbacks.get(session_id)
+
+            # Create permission request
+            request_id = str(uuid.uuid4())
+
+            # Store pending permission
+            if session_id not in self.pending_permissions:
+                self.pending_permissions[session_id] = {}
+
+            self.pending_permissions[session_id][request_id] = {
+                'tool': tool_name,
+                'parameters': tool_input,
+                'tool_use_id': tool_use_id,
+                'timestamp': asyncio.get_event_loop().time(),
+                'send_callback': callback  # Store callback for acknowledgment
+            }
+
+            # Create a future for the permission response
+            future = asyncio.Future()
+            self.permission_futures[request_id] = future
+
+            # Create human-readable description
+            description = self._create_permission_description(tool_name, tool_input)
+
+            # Send permission request via callback
+            if callback:
+                try:
+                    await callback({
+                        "type": "permission_request",
+                        "session_id": str(session_id),
+                        "request_id": request_id,
+                        "tool": tool_name,
+                        "parameters": tool_input,
+                        "description": description
+                    })
+                    logger.info(f"Session {session_id}: Sent permission request {request_id}, waiting for response...")
+                except Exception as e:
+                    logger.error(f"Session {session_id}: Failed to send permission request: {e}")
+                    # Clean up and deny
+                    if request_id in self.permission_futures:
+                        del self.permission_futures[request_id]
+                    return {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "deny",
+                            "permissionDecisionReason": f"Failed to send permission request: {e}",
+                        }
+                    }
+            else:
+                logger.warning(f"Session {session_id}: No callback registered for permission requests, denying by default")
+                return {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": "No permission callback registered",
+                    }
+                }
+
+            # Wait for user response (with timeout)
+            try:
+                approved = await asyncio.wait_for(future, timeout=30.0)  # 30 second timeout
+
+                # Clean up
+                if request_id in self.permission_futures:
+                    del self.permission_futures[request_id]
+
+                if approved:
+                    logger.info(f"Session {session_id}: Permission {request_id} approved")
+                    return {}  # Empty dict = allow execution
+                else:
+                    logger.info(f"Session {session_id}: Permission {request_id} denied")
+                    return {
+                        "hookSpecificOutput": {
+                            "hookEventName": "PreToolUse",
+                            "permissionDecision": "deny",
+                            "permissionDecisionReason": "User denied permission",
+                        }
+                    }
+            except asyncio.TimeoutError:
+                logger.warning(f"Session {session_id}: Permission request {request_id} timed out")
+                # Clean up
+                if request_id in self.permission_futures:
+                    del self.permission_futures[request_id]
+                return {
+                    "hookSpecificOutput": {
+                        "hookEventName": "PreToolUse",
+                        "permissionDecision": "deny",
+                        "permissionDecisionReason": "Permission request timed out",
+                    }
+                }
+
+        return pretool_hook
 
     async def create_agent(
         self,
@@ -56,6 +183,9 @@ class AgentManager:
             # Convert our Tool enum to string list for Claude SDK
             tools = [tool.value for tool in options.tools]
 
+            # Log the permission mode for debugging
+            logger.info(f"Creating agent with permission_mode: {options.permission_mode}")
+
             # Build enhanced system prompt with history if provided
             system_prompt = options.system_prompt or "You are a helpful AI assistant."
             if options.conversation_history:
@@ -71,12 +201,24 @@ Recent conversation context:
 Continue helping the user from where they left off. You have access to the project files and can use tools as needed.
 """
 
+            # Create PreToolUse hooks for permission handling (only if in default mode)
+            hooks = {}
+            if options.permission_mode == 'default':
+                pretool_hook = self._create_pretool_hook(session_id)
+                hooks = {
+                    "PreToolUse": [
+                        HookMatcher(matcher="*", hooks=[pretool_hook]),  # Match all tools
+                    ]
+                }
+                logger.info(f"Session {session_id}: Registered PreToolUse hook for permission handling")
+
             # Create agent options
             agent_options = ClaudeAgentOptions(
                 system_prompt=system_prompt,
                 allowed_tools=tools,
                 cwd=options.working_directory,
-                permission_mode='default',  # Default permission mode
+                permission_mode=options.permission_mode or 'default',
+                hooks=hooks if hooks else None,  # Only set hooks if we have them
             )
 
             # Create and connect the client using async context manager
@@ -100,7 +242,8 @@ Continue helping the user from where they left off. You have access to the proje
     async def send_prompt(
         self,
         session_id: UUID,
-        prompt: str
+        prompt: str,
+        send_message_callback=None
     ) -> AsyncIterator[Dict]:
         """
         Send a prompt to an agent and yield responses.
@@ -123,6 +266,19 @@ Continue helping the user from where they left off. You have access to the proje
         if not client:
             raise ValueError(f"No agent found for session {session_id}")
 
+        # Create permission callback that sends directly if callback provided
+        async def permission_callback(permission_request):
+            """Callback to send permission requests to the frontend."""
+            if send_message_callback:
+                # Send directly to WebSocket
+                logger.info(f"Session {session_id}: Sending permission request directly via callback")
+                await send_message_callback(permission_request)
+            else:
+                logger.warning(f"Session {session_id}: No send_message_callback provided for permission request")
+
+        # Register the callback
+        self.permission_callbacks[session_id] = permission_callback
+
         try:
             # Send thinking indicator immediately
             logger.debug(f"Session {session_id}: Sending thinking indicator")
@@ -143,6 +299,7 @@ Continue helping the user from where they left off. You have access to the proje
             message_count = 0
 
             # Receive and process responses with timeout
+            # Permission requests are now sent directly via callback, not through the generator
             try:
                 async for message in client.receive_response():
                     message_count += 1
@@ -167,6 +324,7 @@ Continue helping the user from where they left off. You have access to the proje
 
                         if content_parts:
                             content = "".join(content_parts)
+
                             # Avoid sending duplicate content
                             if content not in seen_content:
                                 seen_content.add(content)
@@ -245,6 +403,172 @@ Continue helping the user from where they left off. You have access to the proje
         except Exception as e:
             logger.error(f"Error sending prompt to session {session_id}: {e}")
             raise RuntimeError(f"Failed to send prompt: {e}")
+        finally:
+            # Clean up permission callback
+            if session_id in self.permission_callbacks:
+                del self.permission_callbacks[session_id]
+                logger.debug(f"Session {session_id}: Cleaned up permission callback")
+
+    async def handle_permission_response(
+        self,
+        session_id: UUID,
+        request_id: str,
+        approved: bool,
+        reason: Optional[str] = None
+    ) -> bool:
+        """
+        Handle user response to a permission request.
+
+        Args:
+            session_id: The session ID
+            request_id: The permission request ID
+            approved: Whether the user approved the request
+            reason: Optional reason for denial
+
+        Returns:
+            True if handled successfully, False if request not found
+        """
+        logger.info(f"Session {session_id}: Received permission response for {request_id}, approved={approved}")
+
+        # Look up the future for this permission request
+        future = self.permission_futures.get(request_id)
+        logger.debug(f"Session {session_id}: Future found={future is not None}")
+        if not future:
+            logger.warning(f"Permission future {request_id} not found for session {session_id}")
+            return False
+
+        # Check if we have the pending permission data
+        session_permissions = self.pending_permissions.get(session_id)
+        if session_permissions and request_id in session_permissions:
+            permission_data = session_permissions[request_id]
+            tool_name = permission_data.get('tool', 'unknown')
+            send_callback = permission_data.get('send_callback')
+
+            if approved:
+                logger.info(f"Session {session_id}: Permission {request_id} approved for {tool_name}")
+            else:
+                logger.info(f"Session {session_id}: Permission {request_id} denied for {tool_name}. Reason: {reason}")
+
+            # Send immediate acknowledgment to frontend
+            if send_callback:
+                try:
+                    await send_callback({
+                        "type": "permission_acknowledged",
+                        "session_id": str(session_id),
+                        "request_id": request_id,
+                        "approved": approved,
+                        "tool": tool_name,
+                        "status": "executing" if approved else "denied"
+                    })
+                    logger.info(f"Session {session_id}: Sent permission acknowledgment for {request_id}")
+                except Exception as e:
+                    logger.error(f"Session {session_id}: Failed to send permission acknowledgment: {e}")
+
+            # Remove from pending permissions
+            del session_permissions[request_id]
+            if not session_permissions:
+                del self.pending_permissions[session_id]
+        else:
+            logger.warning(f"Permission data {request_id} not found for session {session_id}, but future exists")
+
+        # Resolve the future with the approval decision
+        if not future.done():
+            future.set_result(approved)
+            logger.info(f"Session {session_id}: Resolved permission future {request_id} with approved={approved}")
+        else:
+            logger.warning(f"Session {session_id}: Future {request_id} was already resolved")
+
+        return True
+
+    def _requires_permission(self, session_id: UUID, tool_name: str, parameters: Dict[str, Any]) -> bool:
+        """
+        Check if a tool use requires permission based on session settings.
+
+        Args:
+            session_id: The session ID
+            tool_name: The name of the tool being used
+            parameters: The tool parameters
+
+        Returns:
+            True if permission is required, False otherwise
+        """
+        # Get the session options
+        agent_options = self.agent_options.get(session_id)
+        if not agent_options:
+            logger.warning(f"Session {session_id}: No agent options found, denying permission")
+            return False
+
+        permission_mode = getattr(agent_options, 'permission_mode', None)
+        logger.debug(f"Session {session_id}: permission_mode = {permission_mode}")
+
+        # If permission mode is not 'default', no permission requests needed
+        if permission_mode != 'default':
+            logger.debug(f"Session {session_id}: Permission mode is '{permission_mode}', not requiring permission")
+            return False
+
+        # Define tools that require permission
+        permission_required_tools = {'Write', 'Edit', 'Bash'}
+
+        requires = tool_name in permission_required_tools
+        logger.debug(f"Session {session_id}: Tool '{tool_name}' in permission_required_tools = {requires}")
+
+        return requires
+
+    def _create_permission_request(self, session_id: UUID, tool_name: str, parameters: Dict[str, Any]) -> Dict:
+        """
+        Create a permission request for a tool use.
+
+        Args:
+            session_id: The session ID
+            tool_name: The name of the tool being used
+            parameters: The tool parameters
+
+        Returns:
+            Permission request message dict
+        """
+        request_id = str(uuid.uuid4())
+
+        # Store the pending permission
+        if session_id not in self.pending_permissions:
+            self.pending_permissions[session_id] = {}
+
+        self.pending_permissions[session_id][request_id] = {
+            'tool': tool_name,
+            'parameters': parameters,
+            'timestamp': asyncio.get_event_loop().time()
+        }
+
+        # Create a human-readable description
+        description = self._create_permission_description(tool_name, parameters)
+
+        logger.info(f"Session {session_id}: Permission request created for {tool_name}")
+
+        return {
+            "type": "permission_request",
+            "session_id": str(session_id),
+            "request_id": request_id,
+            "tool": tool_name,
+            "parameters": parameters,
+            "description": description
+        }
+
+    def _create_permission_description(self, tool_name: str, parameters: Dict[str, Any]) -> str:
+        """Create a human-readable description of the permission request."""
+        if tool_name == "Write":
+            file_path = parameters.get("file_path", "unknown file")
+            return f"Agent wants to create or modify the file: {file_path}"
+        elif tool_name == "Edit":
+            file_path = parameters.get("file_path", "unknown file")
+            return f"Agent wants to edit the file: {file_path}"
+        elif tool_name == "Bash":
+            command = parameters.get("command", "unknown command")
+            return f"Agent wants to run the command: {command}"
+        else:
+            return f"Agent wants to use the {tool_name} tool with parameters: {parameters}"
+
+    # NOTE: Permission detection is now handled by PreToolUse hooks, not text-based detection.
+    # The _detect_permission_request method has been removed because it was causing false positives
+    # by matching conversational phrases like "would you like me to" which are just the agent being polite.
 
     def _process_agent_message(self, message: Dict) -> Dict:
         """
@@ -270,10 +594,18 @@ Continue helping the user from where they left off. You have access to the proje
                 "thinking": True
             }
         elif msg_type == "tool_use":
+            tool_name = message.get("tool", "")
+            parameters = message.get("parameters", {})
+
+            # Check if this tool requires permission and the session is in default mode
+            session_id = message.get("session_id")
+            if session_id and self._requires_permission(session_id, tool_name, parameters):
+                return self._create_permission_request(session_id, tool_name, parameters)
+
             return {
                 "type": "agent_tool_use",
-                "tool": message.get("tool", ""),
-                "parameters": message.get("parameters", {}),
+                "tool": tool_name,
+                "parameters": parameters,
                 "result": message.get("result")
             }
         elif msg_type == "error":
