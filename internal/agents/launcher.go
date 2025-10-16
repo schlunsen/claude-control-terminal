@@ -2,6 +2,7 @@ package agents
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -15,9 +16,12 @@ import (
 
 // Launcher manages the agent server process
 type Launcher struct {
-	Config    *Config
-	ServerDir string
-	Quiet     bool
+	Config      *Config
+	ServerDir   string
+	Quiet       bool
+	logFile     *os.File // Keep reference for cleanup
+	cmd         *exec.Cmd // Keep reference to the process
+	cancelFunc  context.CancelFunc // Context for cancellation
 }
 
 // NewLauncher creates a new launcher instance
@@ -33,6 +37,22 @@ func NewLauncher(config *Config, quiet bool) *Launcher {
 func (l *Launcher) log(format string, args ...interface{}) {
 	if !l.Quiet {
 		fmt.Printf(format+"\n", args...)
+	}
+}
+
+// heartbeatUpdater updates the heartbeat file periodically
+func (l *Launcher) heartbeatUpdater(heartbeatFile string) {
+	ticker := time.NewTicker(500 * time.Millisecond) // Update every 500ms
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// Only update if the Go process is still running
+		if isProcessRunning(os.Getpid()) {
+			os.WriteFile(heartbeatFile, []byte("alive"), 0644)
+		} else {
+			// Parent process died, stop updating
+			return
+		}
 	}
 }
 
@@ -82,42 +102,66 @@ func (l *Launcher) Start() error {
 		return fmt.Errorf("failed to update agent server: %w", err)
 	}
 
+	// Create a context that can be cancelled
+	ctx, cancel := context.WithCancel(context.Background())
+	l.cancelFunc = cancel
+
 	// Start the server
 	l.log("→ Starting agent server on http://%s:%d", l.Config.Host, l.Config.Port)
 
 	pythonPath := l.venvPythonPath()
 	mainPath := filepath.Join(l.ServerDir, "main.py")
 
-	cmd := exec.Command(pythonPath, mainPath)
+	cmd := exec.CommandContext(ctx, pythonPath, mainPath)
 	cmd.Dir = l.ServerDir
-	cmd.Env = l.Config.ToEnvVars()
+
+	// Set up process group for proper cleanup
+	if runtime.GOOS != "windows" {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Setpgid: true, // Create new process group
+			Pgid:    0,   // Make this process the group leader
+		}
+	}
+
+	// Set up environment variables
+	heartbeatFile := filepath.Join(l.ServerDir, ".heartbeat")
+	cmd.Env = append(l.Config.ToEnvVars(), "HEARTBEAT_FILE="+heartbeatFile)
 
 	// Set up log file
 	logFile, err := os.OpenFile(l.Config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}
+	defer logFile.Close() // Always close the file handle
 
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 
+	// Store reference to the command
+	l.cmd = cmd
+
 	// Start the process in the background
 	if err := cmd.Start(); err != nil {
-		logFile.Close()
 		return fmt.Errorf("failed to start agent server: %w", err)
 	}
 
 	// Write PID file
 	if err := l.writePIDFile(cmd.Process.Pid); err != nil {
-		logFile.Close()
 		cmd.Process.Kill()
 		return fmt.Errorf("failed to write PID file: %w", err)
 	}
 
+	// Create initial heartbeat file
+	if err := os.WriteFile(heartbeatFile, []byte("alive"), 0644); err != nil {
+		l.log("Warning: failed to create heartbeat file: %v", err)
+	}
+
+	// Start heartbeat updater in background
+	go l.heartbeatUpdater(heartbeatFile)
+
 	// Wait a moment and check if it's still running
 	time.Sleep(1 * time.Second)
 	if !isProcessRunning(cmd.Process.Pid) {
-		logFile.Close()
 		return fmt.Errorf("agent server failed to start. Check logs: %s", l.Config.LogFile)
 	}
 
@@ -126,6 +170,38 @@ func (l *Launcher) Start() error {
 	l.log("  Endpoint: http://%s:%d", l.Config.Host, l.Config.Port)
 
 	return nil
+}
+
+// Cleanup gracefully shuts down the agent server
+func (l *Launcher) Cleanup() {
+	if l.cancelFunc != nil {
+		l.cancelFunc()
+	}
+
+	// Wait a moment for graceful shutdown
+	time.Sleep(500 * time.Millisecond)
+
+	// If we have a stored command reference and it's still running, kill the process group
+	if l.cmd != nil && l.cmd.Process != nil {
+		if isProcessRunning(l.cmd.Process.Pid) {
+			if runtime.GOOS != "windows" {
+				// Kill the entire process group (-PID)
+				syscall.Kill(-l.cmd.Process.Pid, syscall.SIGTERM)
+				time.Sleep(1 * time.Second)
+
+				// If still running, force kill
+				if isProcessRunning(l.cmd.Process.Pid) {
+					syscall.Kill(-l.cmd.Process.Pid, syscall.SIGKILL)
+				}
+			} else {
+				// Windows fallback
+				l.cmd.Process.Kill()
+			}
+		}
+	}
+
+	// Clean up PID file
+	os.Remove(l.Config.PIDFile)
 }
 
 // Stop stops the agent server
