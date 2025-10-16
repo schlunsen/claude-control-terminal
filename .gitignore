@@ -48,3 +48,14 @@ Thumbs.db
 /website/.nitro
 /website/.cache
 south_park/
+
+# Python agent server
+/agents_server/.venv/
+/agents_server/__pycache__/
+/agents_server/src/__pycache__/
+/agents_server/*.pyc
+/agents_server/.pytest_cache/
+/agents_server/.mypy_cache/
+/agents_server/dist/
+/agents_server/build/
+/agents_server/*.egg-info/

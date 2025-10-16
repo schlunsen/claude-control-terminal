@@ -266,8 +266,7 @@ func handleCommand(cmd *cobra.Command, args []string) {
 
 	// Agents dashboard
 	if agents {
-		fmt.Println("🤖 Launching Agents Dashboard...")
-		fmt.Println("(Implementation coming soon)")
+		LaunchAgentServer()
 		return
 	}
 

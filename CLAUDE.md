@@ -9,11 +9,12 @@ This file provides guidance to Claude Code when working with code in this reposi
 ### Key Features
 - 🎮 **Control Center**: Comprehensive wrapper for Claude Code environments
 - 🚀 **CLI Tool**: Component installation (agents, commands, MCPs, settings, hooks)
+- 🤖 **Agent Server**: Python FastAPI WebSocket server for real-time Claude agent conversations
 - 🐳 **Docker Support**: Containerize Claude environments with one command
 - 📊 **Analytics Dashboard**: Real-time conversation monitoring with WebSocket support
 - 🔧 **Component Management**: 600+ agents, 200+ commands, MCPs from GitHub
 - ⚡ **Performance**: 10-50x faster startup, 3-5x lower memory vs Node.js
-- 📦 **Single Binary**: No dependencies, just one executable
+- 📦 **Single Binary**: No dependencies, just one executable (Python embedded for agent server)
 - 🌐 **Web Server**: Fiber-based REST API with real-time updates
 
 ## Technology Stack
@@ -34,6 +35,15 @@ claude-control-terminal/
 ├── cmd/cct/                    # CLI entry point
 │   └── main.go                 # Application bootstrap
 ├── internal/                   # Private application code
+│   ├── agents/                 # Agent server (Python FastAPI)
+│   │   ├── embed.go           # Embedded Python source
+│   │   ├── installer.go       # Python dependency installer
+│   │   ├── launcher.go        # Process lifecycle manager
+│   │   ├── config.go          # Configuration
+│   │   └── agents_server/     # Python source (embedded)
+│   │       ├── main.py        # Entry point
+│   │       ├── pyproject.toml # Python dependencies
+│   │       └── src/           # FastAPI application
 │   ├── analytics/              # Analytics backend modules
 │   │   ├── state_calculator.go       # Conversation state logic
 │   │   ├── process_detector.go       # Process monitoring
@@ -41,6 +51,7 @@ claude-control-terminal/
 │   │   └── file_watcher.go          # Real-time file watching
 │   ├── cmd/                    # CLI commands & UI
 │   │   ├── root.go            # Cobra root command
+│   │   ├── agents.go          # Agent server commands
 │   │   └── banner.go          # Pterm UI helpers
 │   ├── components/             # Component installers
 │   │   ├── agent.go           # Agent installation
@@ -139,6 +150,159 @@ curl -k https://localhost:3333/api/data
 curl -k https://localhost:3333/api/conversations
 curl -k https://localhost:3333/api/processes
 curl -k https://localhost:3333/api/stats
+```
+
+### Agent Server
+
+The agent server is a Python FastAPI WebSocket server that provides real-time agent conversations using the Claude Agent SDK.
+
+#### Features
+- WebSocket-based real-time communication
+- Full Claude Agent SDK integration
+- API key authentication (uses same key as analytics server)
+- Session management for multiple concurrent agent conversations
+- Tool support (Read, Write, Edit, Bash, etc.)
+- Automatic dependency installation with Python virtual environments
+
+#### Quick Start
+
+```bash
+# Start the agent server (auto-installs dependencies on first run)
+./cct agents start
+# or
+./cct --agents
+
+# Check server status
+./cct agents status
+
+# View logs
+./cct agents logs
+
+# Follow logs in real-time
+./cct agents logs --follow
+
+# Stop the server
+./cct agents stop
+
+# Restart the server
+./cct agents restart
+
+# Force reinstall dependencies
+./cct agents install
+```
+
+#### Architecture
+
+The agent server is automatically managed by `cct`:
+
+1. **Embedded Source**: Python source code is embedded in the Go binary
+2. **Auto-Installation**: On first run, `cct` extracts the source to `~/.claude/agents_server/`
+3. **Dependency Management**: Creates a Python virtual environment and installs dependencies using `uv` (if available) or `pip`
+4. **Process Management**: Go launcher manages the Python process lifecycle
+5. **Version Tracking**: Automatically updates when `cct` is updated
+
+**Installation Directory:**
+```text
+~/.claude/agents_server/
+├── .venv/                  # Python virtual environment
+├── .pid                    # Process ID file
+├── .version                # Installed version
+├── server.log              # Server logs
+├── main.py                 # Entry point
+├── pyproject.toml          # Python dependencies
+└── src/                    # Source code
+    ├── main.py            # FastAPI application
+    ├── agent_manager.py   # Claude Agent SDK integration
+    ├── session.py         # Session management
+    ├── auth.py            # Authentication
+    ├── models.py          # Pydantic models
+    └── config.py          # Configuration
+```
+
+#### Configuration
+
+The agent server uses environment variables for configuration:
+
+```bash
+# Server configuration (defaults shown)
+export AGENT_SERVER_HOST=127.0.0.1
+export AGENT_SERVER_PORT=8001
+export AGENT_SERVER_LOG_LEVEL=INFO
+export AGENT_SERVER_RELOAD=false
+export AGENT_SERVER_AUTH_ENABLED=true
+export AGENT_SERVER_MAX_CONCURRENT_SESSIONS=10
+```
+
+#### Requirements
+
+- **Python**: 3.12+ (Python 3.13+ recommended)
+- **uv** (optional): For faster dependency installation
+  ```bash
+  # Install uv (optional, but recommended)
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+
+#### WebSocket API
+
+Connect to `ws://localhost:8001/ws?token=<api_key>`
+
+The API key is the same one used by the analytics server, stored in `~/.claude/analytics/.secret`.
+
+**Message Types:**
+- `create_session`: Create a new agent session
+- `send_prompt`: Send a prompt to the agent
+- `end_session`: End an agent session
+- `list_sessions`: List all active sessions
+- `kill_all_agents`: Kill all running agents
+- `permission_response`: Respond to permission requests
+
+See `internal/agents/agents_server/README.md` for full API documentation.
+
+#### Troubleshooting
+
+**Python version too old:**
+```bash
+# Check Python version
+python3 --version
+
+# The agent server requires Python 3.12+
+# Install Python 3.13 from https://www.python.org/downloads/
+```
+
+**Port 8001 already in use:**
+```bash
+# Find process using port 8001
+lsof -i :8001
+
+# Kill the process
+kill -9 <PID>
+
+# Or configure a different port
+export AGENT_SERVER_PORT=8002
+./cct agents start
+```
+
+**Dependencies installation fails:**
+```bash
+# Force reinstall
+./cct agents install
+
+# If using uv, make sure it's up to date
+uv self update
+
+# Fall back to pip if needed (uv not required)
+```
+
+**Server won't start:**
+```bash
+# Check logs for errors
+./cct agents logs
+
+# Verify Python installation
+python3 -c "import sys; print(sys.version)"
+
+# Check if ANTHROPIC_API_KEY is set (required for agent functionality)
+echo $ANTHROPIC_API_KEY
 ```
 
 ### Frontend Development
