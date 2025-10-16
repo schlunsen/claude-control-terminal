@@ -330,6 +330,10 @@
                 <input type="checkbox" v-model="sessionForm.tools" value="Grep" />
                 <span>Grep</span>
               </label>
+              <label class="tool-checkbox">
+                <input type="checkbox" v-model="sessionForm.tools" value="TodoWrite" />
+                <span>TodoWrite</span>
+              </label>
             </div>
           </div>
 
@@ -461,6 +465,10 @@
                   <input type="checkbox" v-model="resumeForm.tools" value="Grep" />
                   <span>Grep</span>
                 </label>
+                <label class="tool-checkbox">
+                  <input type="checkbox" v-model="resumeForm.tools" value="TodoWrite" />
+                  <span>TodoWrite</span>
+                </label>
               </div>
             </div>
 
@@ -529,7 +537,7 @@ const sessionForm = ref({
   workingDirectory: '',
   permissionMode: 'default',
   systemPrompt: '',
-  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
 })
 
 // Resume session form
@@ -537,7 +545,7 @@ const resumeForm = ref({
   workingDirectory: '',
   permissionMode: 'default',
   systemPrompt: '',
-  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
 })
 
 // Computed
@@ -609,7 +617,7 @@ const createNewSession = () => {
     workingDirectory: '',
     permissionMode: 'default',
     systemPrompt: '',
-    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
   }
 
   showCreateSessionModal.value = true
@@ -697,7 +705,7 @@ const selectSessionForResume = async (session) => {
     workingDirectory: session.working_directory || '',
     permissionMode: 'default',
     systemPrompt: '',
-    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
   }
 }
 

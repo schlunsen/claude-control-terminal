@@ -341,11 +341,27 @@ Continue helping the user from where they left off. You have access to the proje
 
                         last_message_had_tool_use = has_tool_use
 
-                        # Extract text from assistant message
+                        # Extract text from assistant message and handle tool use blocks
                         content_parts = []
                         for block in message.content:
                             if isinstance(block, TextBlock):
                                 content_parts.append(block.text)
+                            elif isinstance(block, ToolUseBlock):
+                                # Yield tool use event immediately
+                                tool_data = {
+                                    "type": "agent_tool_use",
+                                    "tool": block.name,
+                                    "parameters": block.input,
+                                    "tool_use_id": block.id
+                                }
+
+                                # Special handling for TodoWrite - capture the full input data
+                                if block.name == "TodoWrite" and block.input:
+                                    tool_data["input"] = block.input
+                                    logger.debug(f"Session {session_id}: Enhanced TodoWrite tool with input data")
+
+                                logger.debug(f"Session {session_id}: Yielding tool use event for {block.name}")
+                                yield tool_data
 
                         if content_parts:
                             content = "".join(content_parts)
