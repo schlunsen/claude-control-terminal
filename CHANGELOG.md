@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - Live Agent TodoWrite & Tool Tracking - 2025-10-16
+
+### Added
+- Real-time TodoWrite event streaming for live agent sessions in analytics dashboard
+- Tool execution tracking with live updates showing tool calls and results
+- Enhanced TodoWrite parsing to capture structured task updates from agents
+- Live visualization of agent task progress with status indicators
+- Tool event timeline showing execution history and results
+
+### Changed
+- Improved agent manager to emit TodoWrite and tool execution events via WebSocket
+- Enhanced agents.vue page with dedicated TodoWrite panel showing live task updates
+- Refined todo auto-hide timing with 2-second delay after completion for better visibility
+
+### Fixed
+- TodoWrite parsing now handles new agent SDK input format correctly
+- Todo cleanup logic improved to prevent premature hiding of active tasks
+- Better signal handling and cleanup for agent server process lifecycle
+
 ## [0.4.1] - UI Default Value Cleanup - 2025-01-16
 
 ### Fixed
@@ -529,6 +548,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.4.2]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.5...v0.4.0
 [0.3.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.3.4...v0.3.5
