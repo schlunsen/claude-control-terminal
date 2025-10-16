@@ -530,12 +530,10 @@ const createNewSession = () => {
 const createSessionWithOptions = async () => {
   if (!agentWs.connected || !sessionForm.value.workingDirectory) return
 
-  console.log('Starting session creation...')
   creatingSession.value = true
 
   try {
     const sessionId = crypto.randomUUID()
-    console.log('Creating session with ID:', sessionId)
 
     agentWs.send({
       type: 'create_session',
@@ -547,16 +545,13 @@ const createSessionWithOptions = async () => {
         permission_mode: sessionForm.value.permissionMode
       }
     })
-    console.log('Session creation message sent')
 
     showCreateSessionModal.value = false
-    console.log('Create modal closed')
   } catch (error) {
     console.error('Failed to create session:', error)
     alert('Failed to create session. Please try again.')
   } finally {
     creatingSession.value = false
-    console.log('creatingSession set to false')
   }
 }
 
@@ -600,12 +595,10 @@ const loadAvailableSessions = async () => {
 }
 
 const openResumeModal = () => {
-  console.log('Opening resume modal...')
   showResumeModal.value = true
 }
 
 const selectSessionForResume = async (session) => {
-  console.log('Selected session for resume:', session)
   selectedResumeSession.value = session
 
   // Prefill the form with the session's data
@@ -621,17 +614,13 @@ const resumeSessionWithOptions = async () => {
   try {
     if (!selectedResumeSession.value) return
 
-    console.log('Starting session resume...')
     resumingSession.value = true
 
     // Fetch resume data from the backend
-    console.log('Fetching resume data...')
     const resumeData = await $fetch(`/api/sessions/${selectedResumeSession.value.conversation_id}/resume-data`)
-    console.log('Resume data fetched:', resumeData)
 
     // Create new agent session with history context and options
     const sessionId = crypto.randomUUID()
-    console.log('Creating new session with ID:', sessionId)
 
     agentWs.send({
       type: 'create_session',
@@ -645,7 +634,6 @@ const resumeSessionWithOptions = async () => {
         original_conversation_id: resumeData.conversation_id
       }
     })
-    console.log('Session creation message sent')
 
     // Close the modal and reset selection
     showResumeModal.value = false
@@ -665,14 +653,11 @@ const resumeSessionWithOptions = async () => {
       })
     }
 
-    console.log('Session resume completed successfully')
-
   } catch (error) {
     console.error('Failed to resume session:', error)
     alert('Failed to resume session. Please try again.')
   } finally {
     resumingSession.value = false
-    console.log('resumingSession set to false')
   }
 }
 
@@ -808,7 +793,6 @@ const killAllAgents = async () => {
 
 // WebSocket event handlers
 agentWs.on('onSessionCreated', (data) => {
-  console.log('Session created handler called:', data)
   sessions.value.push(data.session)
   activeSessionId.value = data.session_id
   messages.value[data.session_id] = []
@@ -818,7 +802,6 @@ agentWs.on('onSessionCreated', (data) => {
 })
 
 agentWs.on('onAgentMessage', (data) => {
-  console.log('Received agent message:', data)
   if (!messages.value[data.session_id]) {
     messages.value[data.session_id] = []
   }
@@ -841,7 +824,6 @@ agentWs.on('onAgentMessage', (data) => {
 
   // Force new message creation if this is a tool result
   if (isToolResult && data.content) {
-    console.log('Creating new message for tool results')
     // Clear the flag since we're now creating the new message
     awaitingToolResults.value.delete(data.session_id)
 
@@ -944,7 +926,6 @@ agentWs.on('onAgentToolUse', (data) => {
 })
 
 agentWs.on('onPermissionRequest', (data) => {
-  console.log('Permission request received:', data)
   if (data.session_id === activeSessionId.value) {
     // Add to pending permissions for this session
     pendingPermissions.value.push({
@@ -955,7 +936,6 @@ agentWs.on('onPermissionRequest', (data) => {
 })
 
 agentWs.on('onPermissionAcknowledged', (data) => {
-  console.log('Permission acknowledged:', data)
   if (data.session_id === activeSessionId.value) {
     // Add a status message showing execution started
     if (!messages.value[data.session_id]) {
@@ -977,14 +957,12 @@ agentWs.on('onPermissionAcknowledged', (data) => {
     // If approved, mark that we're awaiting tool results (should appear as new message)
     if (data.approved) {
       awaitingToolResults.value.add(data.session_id)
-      console.log('Marked session as awaiting tool results:', data.session_id)
 
       // Mark the last assistant message as complete (not streaming) so new messages
       // after tool execution don't get appended to it
       const lastMessage = messages.value[data.session_id].findLast(m => m.role === 'assistant')
       if (lastMessage && lastMessage.streaming) {
         lastMessage.streaming = false
-        console.log('Finalized last assistant message to prevent appending')
       }
     }
 
@@ -1027,12 +1005,10 @@ agentWs.on('onError', (data) => {
 })
 
 agentWs.on('onSessionsList', (data) => {
-  console.log('Sessions list received:', data)
   sessions.value = data.sessions
 })
 
 agentWs.on('onAgentsKilled', (data) => {
-  console.log('Agents killed response:', data)
 
   // Clear all sessions and messages
   sessions.value = []
