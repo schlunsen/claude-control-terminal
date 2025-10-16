@@ -531,6 +531,7 @@ const awaitingToolResults = ref(new Set()) // Track sessions awaiting tool execu
 // Live agents state
 const sessionTodos = ref(new Map<string, TodoItem[]>()) // { sessionId: [...todos] }
 const sessionToolExecution = ref(new Map<string, ToolExecution | null>()) // { sessionId: toolExecution }
+const todoHideTimers = ref(new Map<string, NodeJS.Timeout>()) // { sessionId: timeoutId }
 
 // Session creation form
 const sessionForm = ref({
@@ -670,6 +671,13 @@ const endSession = async (sessionId) => {
   sessions.value = sessions.value.filter(s => s.id !== sessionId)
   delete messages.value[sessionId]
   awaitingToolResults.value.delete(sessionId)  // Clean up flag
+
+  // Clean up any pending timers
+  const existingTimer = todoHideTimers.value.get(sessionId)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    todoHideTimers.value.delete(sessionId)
+  }
 
   // Clean up live agents session data
   cleanupSessionData(sessionId)
@@ -961,6 +969,32 @@ watch(showResumeModal, (show) => {
   }
 })
 
+// Watch for all todos completed and auto-hide after 5 seconds
+watch(activeSessionTodos, (todos) => {
+  if (!activeSessionId.value) return
+
+  // Clear any existing timer for this session
+  const existingTimer = todoHideTimers.value.get(activeSessionId.value)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    todoHideTimers.value.delete(activeSessionId.value)
+  }
+
+  // If all todos are completed, set a new timer
+  if (todos.length > 0 && todos.every(todo => todo.status === 'completed')) {
+    console.log('All todos completed, setting 5 second auto-hide timer')
+    const timer = setTimeout(() => {
+      const currentTodos = sessionTodos.value.get(activeSessionId.value)
+      if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
+        sessionTodos.value.delete(activeSessionId.value)
+        todoHideTimers.value.delete(activeSessionId.value)
+        console.log('Auto-hid todos after 5 seconds')
+      }
+    }, 5000)
+    todoHideTimers.value.set(activeSessionId.value, timer)
+  }
+}, { deep: true })
+
 // Messaging
 const sendMessage = async () => {
   if (!inputMessage.value.trim() || !activeSessionId.value) return
@@ -981,6 +1015,15 @@ const sendMessage = async () => {
   })
 
   isProcessing.value = true
+
+  // Clear previous todos when sending a new message (moving to new task)
+  const sessionId = activeSessionId.value
+  const existingTimer = todoHideTimers.value.get(sessionId)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    todoHideTimers.value.delete(sessionId)
+  }
+  sessionTodos.value.delete(sessionId)
 
   // Send to agent
   agentWs.send({
@@ -1086,6 +1129,16 @@ agentWs.on('onAgentMessage', (data) => {
 
   // Clear tool execution when we receive a message
   clearSessionToolExecution(data.session_id)
+
+  // Clear todos when message completes (agent moving to next task)
+  if (data.complete) {
+    const existingTimer = todoHideTimers.value.get(data.session_id)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      todoHideTimers.value.delete(data.session_id)
+    }
+    sessionTodos.value.delete(data.session_id)
+  }
 
   // Skip only empty content (unless it's a completion signal) and system messages
   if (!data.complete && (!data.content ||
@@ -1230,15 +1283,15 @@ agentWs.on('onAgentToolUse', (data) => {
       // Set up auto-hide timer if all todos are completed
       const allCompleted = todos.every(todo => todo.status === 'completed')
       if (allCompleted) {
-        console.log('All todos completed, setting auto-hide timer')
+        console.log('All todos completed, setting auto-hide timer for 5 seconds')
         setTimeout(() => {
-          // Clear todos after delay, but only if still the same session and todos
+          // Clear todos after delay, only if all are still completed
           const currentTodos = sessionTodos.value.get(data.session_id)
-          if (currentTodos && currentTodos === todos) {
+          if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
             sessionTodos.value.delete(data.session_id)
             console.log('Auto-hiding todos for session', data.session_id)
           }
-        }, 2000)
+        }, 5000)
       }
     }
   } else {
@@ -1340,6 +1393,10 @@ agentWs.on('onAgentsKilled', (data) => {
   messages.value = {}
   activeSessionId.value = null
   awaitingToolResults.value.clear()  // Clear all flags
+
+  // Clear all pending timers
+  todoHideTimers.value.forEach((timer) => clearTimeout(timer))
+  todoHideTimers.value.clear()
 
   // Clear all live agents session data
   sessionTodos.value.clear()
