@@ -18,7 +18,7 @@ from claude_agent_sdk import (
 )
 
 from .config import settings
-from .models import SessionOptions, Tool
+from .models import SessionOptions, Tool, MCPServerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ class AgentManager:
         self.pending_permissions: Dict[UUID, Dict[str, any]] = {}  # session_id -> {request_id: permission_data}
         self.permission_futures: Dict[str, asyncio.Future] = {}  # request_id -> Future[bool]
         self.permission_callbacks: Dict[UUID, Any] = {}  # session_id -> callback for sending permission requests
+        self.mcp_server_configs: Dict[UUID, Dict[str, MCPServerConfig]] = {}  # session_id -> {server_name: config}
 
     def _create_pretool_hook(self, session_id: UUID):
         """
@@ -161,6 +162,65 @@ class AgentManager:
 
         return pretool_hook
 
+    def _build_mcp_servers(self, session_id: UUID, mcp_configs: Optional[list]) -> Dict[str, Any]:
+        """
+        Build MCP servers configuration for ClaudeAgentOptions.
+
+        Args:
+            session_id: The session ID
+            mcp_configs: List of MCPServerConfig objects
+
+        Returns:
+            Dictionary of MCP servers for ClaudeAgentOptions
+        """
+        mcp_servers = {}
+
+        if not mcp_configs:
+            logger.debug(f"Session {session_id}: No MCP servers configured")
+            return mcp_servers
+
+        # Store configurations for permission checking later
+        if session_id not in self.mcp_server_configs:
+            self.mcp_server_configs[session_id] = {}
+
+        for config in mcp_configs:
+            try:
+                server_config: MCPServerConfig = config if isinstance(config, MCPServerConfig) else MCPServerConfig(**config)
+                logger.info(f"Session {session_id}: Configuring MCP server '{server_config.name}' of type '{server_config.type}'")
+
+                # Store configuration for permission checking
+                self.mcp_server_configs[session_id][server_config.name] = server_config
+
+                # Build server config for Claude SDK
+                if server_config.type == "stdio":
+                    if not server_config.command:
+                        logger.error(f"Session {session_id}: stdio MCP server '{server_config.name}' missing command")
+                        continue
+
+                    server_dict = {
+                        "type": "stdio",
+                        "command": server_config.command,
+                    }
+
+                    if server_config.args:
+                        server_dict["args"] = server_config.args
+
+                    if server_config.env:
+                        server_dict["env"] = server_config.env
+
+                    mcp_servers[server_config.name] = server_dict
+                    logger.info(f"Session {session_id}: Registered stdio MCP server '{server_config.name}' with command: {server_config.command}")
+
+                else:
+                    logger.warning(f"Session {session_id}: Unknown MCP server type '{server_config.type}', skipping")
+
+            except Exception as e:
+                logger.error(f"Session {session_id}: Error configuring MCP server: {e}")
+                continue
+
+        logger.info(f"Session {session_id}: Configured {len(mcp_servers)} MCP servers")
+        return mcp_servers
+
     async def create_agent(
         self,
         session_id: UUID,
@@ -201,6 +261,9 @@ Recent conversation context:
 Continue helping the user from where they left off. You have access to the project files and can use tools as needed.
 """
 
+            # Build MCP servers configuration
+            mcp_servers = self._build_mcp_servers(session_id, options.mcp_servers)
+
             # Create PreToolUse hooks for permission handling (only if in default mode)
             hooks = {}
             if options.permission_mode == 'default':
@@ -213,13 +276,23 @@ Continue helping the user from where they left off. You have access to the proje
                 logger.info(f"Session {session_id}: Registered PreToolUse hook for permission handling")
 
             # Create agent options
-            agent_options = ClaudeAgentOptions(
-                system_prompt=system_prompt,
-                allowed_tools=tools,
-                cwd=options.working_directory,
-                permission_mode=options.permission_mode or 'default',
-                hooks=hooks if hooks else None,  # Only set hooks if we have them
-            )
+            agent_options_dict = {
+                "system_prompt": system_prompt,
+                "allowed_tools": tools,
+                "cwd": options.working_directory,
+                "permission_mode": options.permission_mode or 'default',
+            }
+
+            # Add hooks if we have them
+            if hooks:
+                agent_options_dict["hooks"] = hooks
+
+            # Add MCP servers if configured
+            if mcp_servers:
+                agent_options_dict["mcp_servers"] = mcp_servers
+                logger.info(f"Session {session_id}: Added {len(mcp_servers)} MCP servers to agent options")
+
+            agent_options = ClaudeAgentOptions(**agent_options_dict)
 
             # Create and connect the client using async context manager
             client = ClaudeSDKClient(options=agent_options)
@@ -550,6 +623,28 @@ Continue helping the user from where they left off. You have access to the proje
         # Define tools that require permission
         permission_required_tools = {'Write', 'Edit', 'Bash'}
 
+        # Check if this is an MCP tool
+        if tool_name.startswith('mcp__'):
+            # Extract server name from mcp__<server_name>__<tool_name>
+            parts = tool_name.split('__')
+            if len(parts) >= 3:
+                server_name = parts[1]
+                mcp_configs = self.mcp_server_configs.get(session_id, {})
+                if server_name in mcp_configs:
+                    mcp_config = mcp_configs[server_name]
+                    # Use require_permission flag from MCP server config
+                    requires = mcp_config.require_permission
+                    logger.debug(f"Session {session_id}: MCP tool '{tool_name}' from server '{server_name}' require_permission={requires}")
+                    return requires
+                else:
+                    # Default to requiring permission for unknown MCP servers
+                    logger.debug(f"Session {session_id}: MCP tool '{tool_name}' server config not found, requiring permission by default")
+                    return True
+            else:
+                # Malformed MCP tool name, require permission
+                logger.warning(f"Session {session_id}: Malformed MCP tool name: {tool_name}")
+                return True
+
         requires = tool_name in permission_required_tools
         logger.debug(f"Session {session_id}: Tool '{tool_name}' in permission_required_tools = {requires}")
 
@@ -604,6 +699,15 @@ Continue helping the user from where they left off. You have access to the proje
         elif tool_name == "Bash":
             command = parameters.get("command", "unknown command")
             return f"Agent wants to run the command: {command}"
+        elif tool_name.startswith('mcp__'):
+            # Handle MCP tool names: mcp__<server_name>__<tool_name>
+            parts = tool_name.split('__')
+            if len(parts) >= 3:
+                server_name = parts[1]
+                actual_tool_name = '__'.join(parts[2:])  # In case tool name has __ in it
+                return f"Agent wants to use the '{actual_tool_name}' tool from the MCP server '{server_name}' with parameters: {parameters}"
+            else:
+                return f"Agent wants to use the MCP tool '{tool_name}' with parameters: {parameters}"
         else:
             return f"Agent wants to use the {tool_name} tool with parameters: {parameters}"
 
@@ -695,6 +799,8 @@ Continue helping the user from where they left off. You have access to the proje
             del self.active_agents[session_id]
             if session_id in self.agent_options:
                 del self.agent_options[session_id]
+            if session_id in self.mcp_server_configs:
+                del self.mcp_server_configs[session_id]
 
             logger.info(f"Ended agent for session {session_id}")
             return True
@@ -706,6 +812,8 @@ Continue helping the user from where they left off. You have access to the proje
                 del self.active_agents[session_id]
             if session_id in self.agent_options:
                 del self.agent_options[session_id]
+            if session_id in self.mcp_server_configs:
+                del self.mcp_server_configs[session_id]
             return False
 
     async def kill_all_agents(self) -> int:
