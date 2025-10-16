@@ -19,6 +19,7 @@ from claude_agent_sdk import (
 
 from .config import settings
 from .models import SessionOptions, Tool, MCPServerConfig
+from .agent_loader import get_agent_loader
 
 logger = logging.getLogger(__name__)
 
@@ -254,8 +255,56 @@ class AgentManager:
             logger.debug(f"Session {session_id}: Temperature: {options.temperature}")
             logger.debug(f"Session {session_id}: Has conversation history: {bool(options.conversation_history)}")
 
+            # Load agent by name if provided, otherwise use system_prompt
+            if options.agent_name:
+                logger.info(f"Session {session_id}: Loading agent by name: {options.agent_name}")
+                # Pass working directory to load agents from project-specific directory if available
+                agent_loader = get_agent_loader(options.working_directory)
+                agent = agent_loader.get_agent(options.agent_name)
+                if agent:
+                    system_prompt = agent.system_prompt
+                    logger.info(f"Session {session_id}: Loaded agent '{options.agent_name}' ({len(system_prompt)} chars) from {agent_loader.agents_dir}")
+                else:
+                    logger.error(f"Session {session_id}: Agent '{options.agent_name}' not found in {agent_loader.agents_dir}")
+                    raise ValueError(f"Agent '{options.agent_name}' not found in {agent_loader.agents_dir}")
+            else:
+                logger.debug(f"Session {session_id}: No agent_name specified, using provided system_prompt")
+                system_prompt = options.system_prompt or "You are a helpful AI assistant."
+
             # Build enhanced system prompt with history if provided
-            system_prompt = options.system_prompt or "You are a helpful AI assistant."
+            system_prompt = system_prompt or "You are a helpful AI assistant."
+
+            # Append available project-specific agents to system prompt
+            if options.working_directory:
+                try:
+                    agent_loader = get_agent_loader(options.working_directory)
+                    available_agents = agent_loader.list_agents()
+
+                    if available_agents:
+                        logger.info(f"Session {session_id}: Found {len(available_agents)} project-specific agents to inject into system prompt")
+                        agent_descriptions = []
+
+                        for agent_name, agent_info in available_agents.items():
+                            description = agent_info.get('description', 'No description available')
+                            model = agent_info.get('model', 'default')
+                            agent_descriptions.append(f'- "{agent_name}": {description} (model: {model})')
+
+                        agents_section = "\n".join(agent_descriptions)
+                        system_prompt += f"""
+
+## Project-Specific Agents
+
+The following specialized agents are available for this project via the Task tool. Use these agents by setting the `subagent_type` parameter to the agent name:
+
+{agents_section}
+
+When a user's request matches one of these agent descriptions, use the Task tool with the corresponding agent name as the `subagent_type`.
+"""
+                        logger.debug(f"Session {session_id}: Injected {len(available_agents)} agents into system prompt")
+                except Exception as e:
+                    logger.warning(f"Session {session_id}: Failed to load project-specific agents: {e}")
+
+
             if options.conversation_history:
                 logger.debug(f"Session {session_id}: Building system prompt with conversation history")
                 system_prompt = f"""

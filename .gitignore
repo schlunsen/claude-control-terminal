@@ -39,6 +39,7 @@ Thumbs.db
 .env
 .env.local
 .claude/
+!.claude/agents/
 .mcp.json
 
 # Website build output (source is committed, only ignore build artifacts)
