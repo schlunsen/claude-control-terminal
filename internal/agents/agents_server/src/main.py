@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .agent_manager import agent_manager
+from .agent_loader import get_agent_loader, initialize_agent_loader
 from .auth import authenticate_websocket
 from .config import settings
 from .models import (
@@ -47,6 +48,10 @@ async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
     # Startup
     logger.info("Starting agent server...")
+    # Initialize agent loader
+    logger.info("Initializing agent loader...")
+    initialize_agent_loader()
+    logger.info("Agent loader initialized")
     await session_manager.start()
     yield
     # Shutdown
@@ -87,6 +92,61 @@ async def root():
 async def health():
     """Health check endpoint."""
     return JSONResponse({"status": "healthy"})
+
+
+@app.get("/agents")
+async def list_agents(working_directory: str = None):
+    """List all available agents.
+
+    Query Parameters:
+        working_directory: Optional path to project directory to load project-specific agents
+    """
+    try:
+        agent_loader = get_agent_loader(working_directory)
+        agents = agent_loader.list_agents()
+        logger.info(f"Listed {len(agents)} available agents from {agent_loader.agents_dir}")
+        return JSONResponse({
+            "status": "ok",
+            "agents": agents,
+            "count": len(agents),
+            "agents_dir": str(agent_loader.agents_dir)
+        })
+    except Exception as e:
+        logger.error(f"Error listing agents: {e}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=500
+        )
+
+
+@app.get("/agents/{agent_name}")
+async def get_agent(agent_name: str, working_directory: str = None):
+    """Get details about a specific agent, including full system prompt.
+
+    Query Parameters:
+        working_directory: Optional path to project directory to load project-specific agents
+    """
+    try:
+        agent_loader = get_agent_loader(working_directory)
+        agent = agent_loader.get_agent(agent_name)
+        if not agent:
+            logger.warning(f"Agent '{agent_name}' not found in {agent_loader.agents_dir}")
+            return JSONResponse(
+                {"status": "error", "message": f"Agent '{agent_name}' not found in {agent_loader.agents_dir}"},
+                status_code=404
+            )
+        logger.info(f"Retrieved agent: {agent_name} from {agent_loader.agents_dir}")
+        return JSONResponse({
+            "status": "ok",
+            "agent": agent.to_dict(include_system_prompt=True),
+            "agents_dir": str(agent_loader.agents_dir)
+        })
+    except Exception as e:
+        logger.error(f"Error getting agent '{agent_name}': {e}")
+        return JSONResponse(
+            {"status": "error", "message": str(e)},
+            status_code=500
+        )
 
 
 class WebSocketConnection:
