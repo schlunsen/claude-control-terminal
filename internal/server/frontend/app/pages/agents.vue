@@ -836,7 +836,7 @@ agentWs.on('onAgentMessage', (data) => {
   const messageId = data.message_id || 'stream-' + data.session_id
 
   const existingMessage = messages.value[data.session_id].find(
-    m => (m.id === messageId || m.streaming) && m.role === 'assistant'
+    m => (m.id === messageId || (m.streaming && !isToolResult)) && m.role === 'assistant'
   )
 
   // Force new message creation if this is a tool result
@@ -858,8 +858,8 @@ agentWs.on('onAgentMessage', (data) => {
     // Reset processing when we receive content
     isProcessing.value = false
     isThinking.value = false
-  } else if (existingMessage && !data.complete && !isToolResult) {
-    // Append to existing message (streaming) - but not if awaiting tool results
+  } else if (existingMessage && !data.complete && !isToolResult && existingMessage.streaming) {
+    // Append to existing streaming message only if it's still marked as streaming
     existingMessage.content += data.content
     // Reset processing when we receive content
     if (data.content) {
@@ -978,6 +978,14 @@ agentWs.on('onPermissionAcknowledged', (data) => {
     if (data.approved) {
       awaitingToolResults.value.add(data.session_id)
       console.log('Marked session as awaiting tool results:', data.session_id)
+
+      // Mark the last assistant message as complete (not streaming) so new messages
+      // after tool execution don't get appended to it
+      const lastMessage = messages.value[data.session_id].findLast(m => m.role === 'assistant')
+      if (lastMessage && lastMessage.streaming) {
+        lastMessage.streaming = false
+        console.log('Finalized last assistant message to prevent appending')
+      }
     }
 
     // Auto-scroll to bottom

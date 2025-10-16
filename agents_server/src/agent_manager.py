@@ -297,6 +297,7 @@ Continue helping the user from where they left off. You have access to the proje
             seen_content = set()
             thinking_sent = False
             message_count = 0
+            last_message_had_tool_use = False  # Track if last message had tool use
 
             # Receive and process responses with timeout
             # Permission requests are now sent directly via callback, not through the generator
@@ -315,6 +316,30 @@ Continue helping the user from where they left off. You have access to the proje
                                 "thinking": False
                             }
                             thinking_sent = True
+
+                        # Check if this message contains tool use - if so, we'll start a new message for the next response
+                        has_tool_use = any(isinstance(block, ToolUseBlock) for block in message.content)
+
+                        # If last message had tool use and this one has text, start a new message ID
+                        # This separates responses before and after tool execution
+                        if last_message_had_tool_use and any(isinstance(block, TextBlock) for block in message.content):
+                            logger.debug(f"Session {session_id}: Tool execution detected, creating new message for response after tool")
+                            # Flush previous message buffer if any
+                            if message_buffer:
+                                final_content = "".join(message_buffer)
+                                yield {
+                                    "type": "agent_message",
+                                    "content": final_content,
+                                    "complete": True,
+                                    "message_id": current_message_id
+                                }
+                                message_buffer = []
+                                seen_content = set()
+                            # Generate new message ID for post-tool-execution content
+                            current_message_id = str(uuid.uuid4())
+                            logger.debug(f"Session {session_id}: New message ID after tool execution: {current_message_id}")
+
+                        last_message_had_tool_use = has_tool_use
 
                         # Extract text from assistant message
                         content_parts = []
