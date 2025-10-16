@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -239,7 +241,10 @@ func NewModelWithServers(targetDir, claudeDir string, analyticsServer *server.Se
 
 // Init initializes the model
 func (m Model) Init() tea.Cmd {
-	return m.spinner.Tick
+	return tea.Batch(
+		m.spinner.Tick,
+		watchForShutdownSignals(),
+	)
 }
 
 // Update handles messages and updates the model
@@ -358,6 +363,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agentServerEnabled = msg.enabled
 		m.agentServerPID = msg.pid
 		return m, nil
+
+	case shutdownMsg:
+		// Handle shutdown signal gracefully
+		m.quitting = true
+		return m, tea.Quit
 	}
 
 	return m, nil
@@ -1771,4 +1781,16 @@ func openBrowser(url string) error {
 	}
 
 	return cmd.Start()
+}
+
+// watchForShutdownSignals watches for SIGINT and SIGTERM signals
+func watchForShutdownSignals() tea.Cmd {
+	return func() tea.Msg {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+		// Wait for a signal
+		sig := <-sigChan
+		return shutdownMsg{signal: sig}
+	}
 }
