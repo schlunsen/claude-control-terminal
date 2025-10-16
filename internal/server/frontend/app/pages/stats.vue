@@ -179,12 +179,14 @@ function confirmPurgeDatabase() {
 
 async function purgeDatabase() {
   isPurging.value = true
-  
+
+  const { fetchWithAuth } = useAuthenticatedFetch()
+
   try {
-    const response = await fetch('/api/history', {
+    const response = await fetchWithAuth('/api/history', {
       method: 'DELETE'
     })
-    
+
     if (response.ok) {
       // Reload database stats to show updated size
       await loadDbStats()

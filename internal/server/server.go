@@ -6,6 +6,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -208,6 +209,11 @@ func (s *Server) setupRoutes() {
 
 	// Config endpoints (for frontend to get API key securely)
 	api.Get("/config/api-key", s.handleGetAPIKey)
+	api.Get("/config/cwd", s.handleGetCWD)
+
+	// Agent endpoints (serve agents from project directory)
+	api.Get("/agents", s.handleListAgents)
+	api.Get("/agents/:name", s.handleGetAgentDetail)
 
 	// Agent server proxy endpoints (if agent server is running)
 	api.All("/agent/*", s.handleAgentProxy)
@@ -1436,6 +1442,241 @@ func (s *Server) handleGetAPIKey(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"apiKey": apiKey,
 	})
+}
+
+// Handler: Get current working directory where cct was launched
+func (s *Server) handleGetCWD(c *fiber.Ctx) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get current working directory",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"cwd": cwd,
+	})
+}
+
+// Handler: List all available agents from .claude/agents/ directory
+func (s *Server) handleListAgents(c *fiber.Ctx) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get current working directory",
+		})
+	}
+
+	agentsDir := filepath.Join(cwd, ".claude", "agents")
+
+	// Check if agents directory exists
+	if _, err := os.Stat(agentsDir); os.IsNotExist(err) {
+		return c.JSON(fiber.Map{
+			"agents": make(map[string]interface{}),
+			"count":  0,
+			"dir":    agentsDir,
+		})
+	}
+
+	// Read all markdown files in agents directory
+	entries, err := os.ReadDir(agentsDir)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to read agents directory: %v", err),
+		})
+	}
+
+	agents := make(map[string]interface{})
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		// Only process markdown files
+		if !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
+
+		agentName := strings.TrimSuffix(entry.Name(), ".md")
+		filePath := filepath.Join(agentsDir, entry.Name())
+
+		// Read file
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
+		}
+
+		// Parse frontmatter
+		agentData := parseFrontmatter(string(content))
+		if agentData != nil && agentData["name"] != nil {
+			agents[agentName] = agentData
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"agents": agents,
+		"count":  len(agents),
+		"dir":    agentsDir,
+	})
+}
+
+// Handler: Get specific agent details with full system prompt
+func (s *Server) handleGetAgentDetail(c *fiber.Ctx) error {
+	agentName := c.Params("name")
+	if agentName == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Agent name is required",
+		})
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get current working directory",
+		})
+	}
+
+	agentFile := filepath.Join(cwd, ".claude", "agents", agentName+".md")
+
+	// Check if agent file exists
+	if _, err := os.Stat(agentFile); os.IsNotExist(err) {
+		return c.Status(404).JSON(fiber.Map{
+			"error": fmt.Sprintf("Agent '%s' not found", agentName),
+		})
+	}
+
+	// Read file
+	content, err := os.ReadFile(agentFile)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to read agent file: %v", err),
+		})
+	}
+
+	// Parse frontmatter and system prompt
+	agentData := parseFrontmatterWithPrompt(string(content))
+	if agentData == nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to parse agent file",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"agent": agentData,
+	})
+}
+
+// parseFrontmatter extracts YAML frontmatter from markdown content
+func parseFrontmatter(content string) map[string]interface{} {
+	// Look for frontmatter between --- markers
+	lines := strings.Split(content, "\n")
+	if len(lines) < 3 || lines[0] != "---" {
+		return nil
+	}
+
+	// Find closing ---
+	var endLine int
+	for i := 1; i < len(lines); i++ {
+		if lines[i] == "---" {
+			endLine = i
+			break
+		}
+	}
+
+	if endLine == 0 {
+		return nil
+	}
+
+	// Extract YAML lines
+	yamlLines := lines[1:endLine]
+	data := make(map[string]interface{})
+
+	for _, line := range yamlLines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Simple YAML parsing (key: value format)
+		if idx := strings.Index(line, ":"); idx > 0 {
+			key := strings.TrimSpace(line[:idx])
+			value := strings.TrimSpace(line[idx+1:])
+
+			// Remove quotes if present
+			if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
+				value = value[1 : len(value)-1]
+			}
+
+			data[key] = value
+		}
+	}
+
+	return data
+}
+
+// parseFrontmatterWithPrompt extracts frontmatter AND system prompt from markdown
+func parseFrontmatterWithPrompt(content string) map[string]interface{} {
+	// Look for frontmatter between --- markers
+	lines := strings.Split(content, "\n")
+	if len(lines) < 3 || lines[0] != "---" {
+		return nil
+	}
+
+	// Find closing ---
+	var endLine int
+	for i := 1; i < len(lines); i++ {
+		if lines[i] == "---" {
+			endLine = i
+			break
+		}
+	}
+
+	if endLine == 0 {
+		return nil
+	}
+
+	// Extract YAML lines
+	yamlLines := lines[1:endLine]
+	data := make(map[string]interface{})
+
+	for _, line := range yamlLines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Simple YAML parsing (key: value format)
+		if idx := strings.Index(line, ":"); idx > 0 {
+			key := strings.TrimSpace(line[:idx])
+			value := strings.TrimSpace(line[idx+1:])
+
+			// Remove quotes if present
+			if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
+				value = value[1 : len(value)-1]
+			}
+
+			data[key] = value
+		}
+	}
+
+	// Extract system prompt (everything after the closing ---)
+	if endLine+1 < len(lines) {
+		promptLines := lines[endLine+1:]
+		// Skip empty lines at start
+		for i := 0; i < len(promptLines); i++ {
+			if strings.TrimSpace(promptLines[i]) != "" {
+				promptLines = promptLines[i:]
+				break
+			}
+		}
+		systemPrompt := strings.Join(promptLines, "\n")
+		systemPrompt = strings.TrimSpace(systemPrompt)
+		data["system_prompt"] = systemPrompt
+		data["system_prompt_length"] = len(systemPrompt)
+	}
+
+	return data
 }
 
 // Handler: Proxy requests to agent server

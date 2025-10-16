@@ -290,6 +290,8 @@
             <input
               id="working-directory"
               v-model="sessionForm.workingDirectory"
+              @change="handleWorkingDirectoryChange"
+              @blur="handleWorkingDirectoryChange"
               type="text"
               placeholder="/home/user/projects"
               class="form-input"
@@ -308,15 +310,86 @@
           </div>
 
           <div class="form-group">
-            <label for="system-prompt">System Prompt (optional)</label>
+            <label for="prompt-mode">System Prompt</label>
+            <div class="prompt-mode-toggle">
+              <button
+                type="button"
+                class="mode-btn"
+                :class="{ active: sessionForm.promptMode === 'agent' }"
+                @click="sessionForm.promptMode = 'agent'"
+              >
+                📦 Project Agent
+              </button>
+              <button
+                type="button"
+                class="mode-btn"
+                :class="{ active: sessionForm.promptMode === 'custom' }"
+                @click="sessionForm.promptMode = 'custom'"
+              >
+                ✏️ Custom
+              </button>
+            </div>
+            <small class="form-help">Choose a project agent or write a custom system prompt</small>
+          </div>
+
+          <!-- Agent Selection Mode -->
+          <div v-if="sessionForm.promptMode === 'agent'" class="form-group">
+            <label for="agent-select">Select Agent</label>
+            <div v-if="loadingAgents" class="agents-loading">
+              <div class="loading-spinner-small"></div>
+              <span>Loading agents...</span>
+            </div>
+            <div v-else-if="availableAgents.length === 0" class="agents-empty">
+              No agents found. Make sure you've set a valid working directory.
+            </div>
+            <div v-else class="agents-grid">
+              <button
+                v-for="agent in availableAgents"
+                :key="agent.name"
+                type="button"
+                class="agent-card"
+                :class="{ selected: sessionForm.selectedAgent === agent.name }"
+                @click="sessionForm.selectedAgent = agent.name; loadSelectedAgent()"
+              >
+                <div class="agent-card-color" :style="{ backgroundColor: agent.color || '#8B5CF6' }"></div>
+                <div class="agent-card-content">
+                  <div class="agent-card-name">{{ agent.name }}</div>
+                  <div v-if="agent.model" class="agent-card-model">{{ agent.model }}</div>
+                </div>
+                <div v-if="sessionForm.selectedAgent === agent.name" class="agent-card-checkmark">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+              </button>
+            </div>
+            <small class="form-help">Select from available agents</small>
+
+            <!-- Agent Preview -->
+            <div v-if="sessionForm.selectedAgent && selectedAgentPreview" class="agent-preview">
+              <div class="agent-preview-header">
+                <strong>{{ selectedAgentPreview.name }}</strong>
+                <span v-if="selectedAgentPreview.model" class="agent-model">{{ selectedAgentPreview.model }}</span>
+              </div>
+              <p v-if="selectedAgentPreview.description" class="agent-description">{{ selectedAgentPreview.description }}</p>
+              <div class="agent-prompt-preview">
+                <p class="preview-label">System Prompt Preview:</p>
+                <div class="prompt-content">{{ selectedAgentPreview.system_prompt.substring(0, 300) }}...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom Prompt Mode -->
+          <div v-if="sessionForm.promptMode === 'custom'" class="form-group">
+            <label for="system-prompt">Custom System Prompt</label>
             <textarea
               id="system-prompt"
               v-model="sessionForm.systemPrompt"
               placeholder="You are a helpful AI assistant."
               class="form-textarea"
-              rows="3"
+              rows="4"
             ></textarea>
-            <small class="form-help">Custom instructions for the agent</small>
+            <small class="form-help">Enter custom instructions for the agent</small>
           </div>
 
           <div class="form-group">
@@ -352,15 +425,15 @@
               </label>
             </div>
           </div>
+        </div>
 
-          <div class="modal-actions">
-            <button @click="showCreateSessionModal = false" class="btn-cancel" :disabled="creatingSession">Cancel</button>
-            <button @click="createSessionWithOptions" class="btn-create" :disabled="!sessionForm.workingDirectory || creatingSession">
-              <div v-if="creatingSession" class="btn-spinner"></div>
-              <span v-if="!creatingSession">Create Session</span>
-              <span v-else>Creating...</span>
-            </button>
-          </div>
+        <div class="modal-actions">
+          <button @click="showCreateSessionModal = false" class="btn-cancel" :disabled="creatingSession">Cancel</button>
+          <button @click="createSessionWithOptions" class="btn-create" :disabled="!sessionForm.workingDirectory || creatingSession">
+            <div v-if="creatingSession" class="btn-spinner"></div>
+            <span v-if="!creatingSession">Create Session</span>
+            <span v-else>Creating...</span>
+          </button>
         </div>
       </div>
     </div>
@@ -392,20 +465,26 @@
             <div
               v-for="session in availableSessions"
               :key="session.conversation_id"
-              class="session-item-modal"
+              class="session-card-modal"
               @click="selectSessionForResume(session)"
             >
-              <div class="session-info-modal">
-                <div class="session-name-modal">{{ session.session_name || 'Unnamed Session' }}</div>
-                <div class="session-details">
-                  <span class="session-directory">{{ session.working_directory || 'No directory' }}</span>
-                  <span class="session-meta">
-                    {{ session.total_messages }} messages •
-                    {{ formatRelativeTime(session.last_activity) }}
-                  </span>
+              <div class="session-card-avatar">
+                <img
+                  :src="`/avatars/${session.session_name || 'default'}.png`"
+                  :alt="session.session_name"
+                  @error="$event.target.src = '/avatars/default.png'"
+                  class="avatar-image"
+                />
+              </div>
+              <div class="session-card-info">
+                <div class="session-card-name">{{ session.session_name || 'Unnamed Session' }}</div>
+                <div class="session-card-directory">📁 {{ session.working_directory || 'No directory' }}</div>
+                <div class="session-card-meta">
+                  <span class="session-card-messages">💬 {{ session.total_messages }} messages</span>
+                  <span class="session-card-time">⏱️ {{ formatRelativeTime(session.last_activity) }}</span>
                 </div>
               </div>
-              <div class="session-resume-indicator">
+              <div class="session-card-arrow">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M5 12h14M12 5l7 7-7 7"/>
                 </svg>
@@ -559,6 +638,8 @@ const sessionForm = ref({
   workingDirectory: '',
   permissionMode: 'default',
   systemPrompt: '',
+  promptMode: 'agent', // 'agent' or 'custom'
+  selectedAgent: '',
   tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
 })
 
@@ -569,6 +650,11 @@ const resumeForm = ref({
   systemPrompt: '',
   tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
 })
+
+// Agent selection state
+const availableAgents = ref([])
+const selectedAgentPreview = ref(null)
+const loadingAgents = ref(false)
 
 // Computed
 const activeMessages = computed(() => {
@@ -641,7 +727,7 @@ const formatMessage = (content) => {
 }
 
 // Session management
-const createNewSession = () => {
+const createNewSession = async () => {
   if (!agentWs.connected) return
 
   // Reset form to defaults
@@ -649,7 +735,25 @@ const createNewSession = () => {
     workingDirectory: '',
     permissionMode: 'default',
     systemPrompt: '',
+    promptMode: 'agent',
+    selectedAgent: '',
     tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
+  }
+
+  // Fetch current working directory
+  try {
+    const response = await fetch('/api/config/cwd')
+    if (response.ok) {
+      const data = await response.json()
+      if (data.cwd) {
+        sessionForm.value.workingDirectory = data.cwd
+        console.log('Auto-populated working directory:', data.cwd)
+        // Load agents from this directory
+        await loadAvailableAgents()
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching current working directory:', error)
   }
 
   showCreateSessionModal.value = true
@@ -663,15 +767,23 @@ const createSessionWithOptions = async () => {
   try {
     const sessionId = crypto.randomUUID()
 
+    const options: any = {
+      tools: sessionForm.value.tools,
+      working_directory: sessionForm.value.workingDirectory,
+      permission_mode: sessionForm.value.permissionMode
+    }
+
+    // Use agent_name if agent mode is selected, otherwise use system_prompt
+    if (sessionForm.value.promptMode === 'agent' && sessionForm.value.selectedAgent) {
+      options.agent_name = sessionForm.value.selectedAgent
+    } else {
+      options.system_prompt = sessionForm.value.systemPrompt || 'You are a helpful AI assistant.'
+    }
+
     agentWs.send({
       type: 'create_session',
       session_id: sessionId,
-      options: {
-        tools: sessionForm.value.tools,
-        system_prompt: sessionForm.value.systemPrompt || 'You are a helpful AI assistant.',
-        working_directory: sessionForm.value.workingDirectory,
-        permission_mode: sessionForm.value.permissionMode
-      }
+      options
     })
 
     showCreateSessionModal.value = false
@@ -680,6 +792,50 @@ const createSessionWithOptions = async () => {
     alert('Failed to create session. Please try again.')
   } finally {
     creatingSession.value = false
+  }
+}
+
+const loadAvailableAgents = async () => {
+  loadingAgents.value = true
+  try {
+    const response = await fetch('/api/agents')
+    if (!response.ok) throw new Error(`Failed to fetch agents: ${response.status}`)
+    const data = await response.json()
+    availableAgents.value = data.agents ? Object.values(data.agents) : []
+    console.log(`Loaded ${availableAgents.value.length} agents from project`, availableAgents.value)
+  } catch (error) {
+    console.error('Error loading agents:', error)
+    availableAgents.value = []
+  } finally {
+    loadingAgents.value = false
+  }
+}
+
+// Reload agents (agents auto-load from cwd)
+const handleWorkingDirectoryChange = async () => {
+  if (sessionForm.value.workingDirectory) {
+    await loadAvailableAgents()
+    // Clear selected agent when working directory changes
+    sessionForm.value.selectedAgent = ''
+    selectedAgentPreview.value = null
+  }
+}
+
+const loadSelectedAgent = async () => {
+  if (!sessionForm.value.selectedAgent) {
+    selectedAgentPreview.value = null
+    return
+  }
+
+  try {
+    const response = await fetch(`/api/agents/${sessionForm.value.selectedAgent}`)
+    if (!response.ok) throw new Error('Failed to fetch agent')
+    const data = await response.json()
+    selectedAgentPreview.value = data.agent
+    console.log(`Loaded agent: ${sessionForm.value.selectedAgent}`, data.agent)
+  } catch (error) {
+    console.error('Error loading agent:', error)
+    selectedAgentPreview.value = null
   }
 }
 
@@ -2137,8 +2293,17 @@ watch(() => agentWs.connected, (connected) => {
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   width: 90%;
   max-width: 600px;
-  max-height: 80vh;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  .modal-content {
+    max-width: 750px;
+    max-height: 90vh;
+  }
 }
 
 .modal-header {
@@ -2147,6 +2312,7 @@ watch(() => agentWs.connected, (connected) => {
   justify-content: space-between;
   padding: 20px 24px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .modal-header h2 {
@@ -2173,8 +2339,9 @@ watch(() => agentWs.connected, (connected) => {
 
 .modal-body {
   padding: 24px;
-  max-height: 400px;
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
 }
 
 .loading-sessions {
@@ -2213,66 +2380,98 @@ watch(() => agentWs.connected, (connected) => {
 .sessions-list-modal {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.session-item-modal {
+.session-card-modal {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   padding: 16px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid transparent;
 }
 
-.session-item-modal:hover {
+.session-card-modal:hover {
   background: var(--bg-tertiary);
   border-color: var(--accent-purple);
+  transform: translateX(4px);
 }
 
-.session-info-modal {
+.session-card-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, var(--accent-purple), #A78BFA);
+  border-radius: 8px;
+  color: white;
+  font-weight: 700;
+  font-size: 1rem;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+  overflow: hidden;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.session-card-info {
   flex: 1;
   overflow: hidden;
 }
 
-.session-name-modal {
+.session-card-name {
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.session-details {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.session-directory {
+.session-card-directory {
   font-size: 0.85rem;
   color: var(--text-secondary);
+  margin-bottom: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.session-meta {
+.session-card-meta {
+  display: flex;
+  gap: 12px;
   font-size: 0.8rem;
   color: var(--text-secondary);
-  opacity: 0.8;
 }
 
-.session-resume-indicator {
+.session-card-messages,
+.session-card-time {
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.session-card-arrow {
   padding: 8px;
   color: var(--text-secondary);
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
-.session-item-modal:hover .session-resume-indicator {
+.session-card-modal:hover .session-card-arrow {
   color: var(--accent-purple);
+  transform: translateX(4px);
 }
 
 /* Historical message styling */
@@ -2331,6 +2530,200 @@ watch(() => agentWs.connected, (connected) => {
   color: var(--text-secondary);
 }
 
+/* Prompt Mode Toggle */
+.prompt-mode-toggle {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-purple);
+}
+
+.mode-btn.active {
+  background: var(--accent-purple);
+  border-color: var(--accent-purple);
+  color: white;
+}
+
+/* Agent Grid Selection */
+.agents-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  justify-content: center;
+}
+
+.loading-spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-purple);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.agents-empty {
+  padding: 24px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.agent-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  flex: 1;
+  position: relative;
+}
+
+.agent-card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-purple);
+  transform: translateY(-2px);
+}
+
+.agent-card.selected {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-purple);
+}
+
+.agent-card-color {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.agent-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-card-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-card-model {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.agent-card-checkmark {
+  color: var(--accent-purple);
+  flex-shrink: 0;
+}
+
+/* Agent Preview */
+.agent-preview {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.agent-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.agent-preview-header strong {
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.agent-model {
+  display: inline-block;
+  padding: 4px 8px;
+  background: var(--accent-purple);
+  color: white;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.agent-description {
+  margin: 0 0 12px 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.agent-prompt-preview {
+  margin-top: 12px;
+}
+
+.preview-label {
+  margin: 0 0 8px 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.prompt-content {
+  padding: 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .tools-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -2367,9 +2760,10 @@ watch(() => agentWs.connected, (connected) => {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
-  margin-top: 32px;
-  padding-top: 24px;
+  padding: 24px;
   border-top: 1px solid var(--border-color);
+  background: var(--card-bg);
+  flex-shrink: 0;
 }
 
 .btn-cancel {
