@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	agentspkg "github.com/schlunsen/claude-control-terminal/internal/agents"
 	"github.com/schlunsen/claude-control-terminal/internal/server"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -37,16 +38,41 @@ func Launch(targetDir string) error {
 		analyticsServer = nil
 	}
 
+	// Start agent server in background (enabled by default)
+	var agentServerPID int
+	var agentServerEnabled bool
+	agentConfig := agentspkg.DefaultConfig()
+	agentLauncher := agentspkg.NewLauncher(agentConfig, true) // quiet mode
+
+	// Check if already running
+	running, pid, _ := agentLauncher.IsRunning()
+	if running {
+		agentServerEnabled = true
+		agentServerPID = pid
+	} else {
+		// Try to start it
+		if err := agentLauncher.Start(); err == nil {
+			// Get the PID
+			running, pid, _ := agentLauncher.IsRunning()
+			if running {
+				agentServerEnabled = true
+				agentServerPID = pid
+			}
+		}
+	}
+
 	defer func() {
 		// Cleanup analytics server on exit
 		if analyticsServer != nil {
 			analyticsServer.Shutdown()
 		}
+		// Note: We don't stop the agent server on exit - let it keep running
+		// Users can stop it manually with `cct agents stop` if needed
 	}()
 
 	for {
-		// Create the model with analytics server reference
-		m := NewModelWithServer(targetDir, claudeDir, analyticsServer)
+		// Create the model with analytics and agent server references
+		m := NewModelWithServers(targetDir, claudeDir, analyticsServer, agentServerEnabled, agentServerPID)
 
 		// Update analytics enabled state based on server status
 		if m.analyticsServer == nil {
@@ -66,6 +92,10 @@ func Launch(targetDir string) error {
 		if model, ok := finalModel.(Model); ok {
 			// Sync analytics server reference from model
 			analyticsServer = model.analyticsServer
+
+			// Sync agent server state from model
+			agentServerEnabled = model.agentServerEnabled
+			agentServerPID = model.agentServerPID
 
 			if model.shouldLaunchClaude {
 				// Launch Claude CLI with appropriate flags

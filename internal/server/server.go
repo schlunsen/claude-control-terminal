@@ -5,6 +5,7 @@ package server
 
 import (
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/websocket/v2"
+	gorillaws "github.com/gorilla/websocket"
 )
 
 // Server wraps the Fiber app and analytics components.
@@ -198,8 +200,20 @@ func (s *Server) setupRoutes() {
 	api.Get("/notifications/stats", s.handleGetNotificationStats)
 	api.Delete("/notifications", s.handleClearNotifications)
 
+	// Session resume endpoint
+	api.Get("/sessions/:conversation_id/resume-data", s.handleGetSessionResumeData)
+
 	// WebSocket endpoint
 	s.app.Get("/ws", websocket.New(s.wsHub.HandleWebSocket()))
+
+	// Config endpoints (for frontend to get API key securely)
+	api.Get("/config/api-key", s.handleGetAPIKey)
+
+	// Agent server proxy endpoints (if agent server is running)
+	api.All("/agent/*", s.handleAgentProxy)
+
+	// Agent WebSocket proxy
+	s.app.Get("/agent/ws", websocket.New(s.handleAgentWebSocketProxy()))
 }
 
 // Handler: Health check
@@ -1300,4 +1314,244 @@ func (s *Server) handleClearNotifications(c *fiber.Ctx) error {
 		"message": "All notifications have been deleted",
 		"time":    time.Now(),
 	})
+}
+
+// Handler: Get session resume data
+func (s *Server) handleGetSessionResumeData(c *fiber.Ctx) error {
+	conversationID := c.Params("conversation_id")
+
+	if conversationID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "conversation_id is required",
+		})
+	}
+
+	// Fetch recent history (last 20 messages for context)
+	query := &database.CommandHistoryQuery{
+		ConversationID: conversationID,
+		Limit:          20,
+		Offset:         0,
+	}
+
+	// Get user messages (prompts)
+	userMessages, err := s.repo.GetUserMessages(query)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get user messages: %v", err),
+		})
+	}
+
+	if len(userMessages) == 0 {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "no conversation found with this ID",
+		})
+	}
+
+	// Extract working directory (use the most recent one available)
+	workingDir := ""
+	sessionName := ""
+	for i := len(userMessages) - 1; i >= 0; i-- {
+		if userMessages[i].WorkingDirectory != "" {
+			workingDir = userMessages[i].WorkingDirectory
+			break
+		}
+	}
+
+	// Get session name from first message
+	if len(userMessages) > 0 {
+		sessionName = userMessages[0].SessionName
+	}
+
+	// Format context for agent (last 10 messages)
+	contextLimit := 10
+	if len(userMessages) < contextLimit {
+		contextLimit = len(userMessages)
+	}
+
+	contextMessages := userMessages[len(userMessages)-contextLimit:]
+
+	// Build formatted context string
+	var contextBuilder strings.Builder
+	contextBuilder.WriteString("Previous conversation history:\n\n")
+
+	for _, msg := range contextMessages {
+		contextBuilder.WriteString(fmt.Sprintf("User: %s\n", msg.Message))
+		contextBuilder.WriteString(fmt.Sprintf("(at %s)\n\n", msg.SubmittedAt.Format("3:04 PM")))
+	}
+
+	return c.JSON(fiber.Map{
+		"conversation_id":    conversationID,
+		"session_name":       sessionName,
+		"working_directory":  workingDir,
+		"context":            contextBuilder.String(),
+		"total_messages":     len(userMessages),
+		"last_activity":      userMessages[len(userMessages)-1].SubmittedAt,
+		"messages":           contextMessages,
+	})
+}
+
+// Handler: Get API key for frontend (secured endpoint)
+func (s *Server) handleGetAPIKey(c *fiber.Ctx) error {
+	// Only allow GET requests from same origin (browser)
+	// This prevents external services from stealing the key
+	origin := c.Get("Origin")
+	if origin == "" {
+		// Allow requests without Origin header (same-origin requests)
+		configManager := NewConfigManager(s.claudeDir)
+		apiKey, err := configManager.EnsureAPIKey()
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{
+				"error": "Failed to get API key",
+			})
+		}
+
+		return c.JSON(fiber.Map{
+			"apiKey": apiKey,
+		})
+	}
+
+	// If Origin is present, it must match allowed origins
+	allowed := false
+	for _, allowedOrigin := range s.config.CORS.AllowedOrigins {
+		if origin == allowedOrigin {
+			allowed = true
+			break
+		}
+	}
+
+	if !allowed {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "Forbidden",
+		})
+	}
+
+	configManager := NewConfigManager(s.claudeDir)
+	apiKey, err := configManager.EnsureAPIKey()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get API key",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"apiKey": apiKey,
+	})
+}
+
+// Handler: Proxy requests to agent server
+func (s *Server) handleAgentProxy(c *fiber.Ctx) error {
+	// Extract the path after /agent/
+	path := c.Params("*")
+
+	// Build target URL for agent server
+	agentURL := fmt.Sprintf("http://localhost:8001/%s", path)
+
+	// Check if it's a WebSocket upgrade request
+	if c.Get("Upgrade") == "websocket" {
+		// For WebSocket, we need special handling
+		// The Fiber WebSocket middleware should handle this
+		return fiber.ErrUpgradeRequired
+	}
+
+	// For regular HTTP requests, proxy to agent server
+	agent := fiber.AcquireAgent()
+	defer fiber.ReleaseAgent(agent)
+
+	req := agent.Request()
+	req.Header.SetMethod(c.Method())
+	req.SetRequestURI(agentURL)
+
+	// Copy headers
+	c.Request().Header.VisitAll(func(key, value []byte) {
+		req.Header.SetBytesKV(key, value)
+	})
+
+	// Copy body if present
+	if len(c.Body()) > 0 {
+		req.SetBody(c.Body())
+	}
+
+	// Execute request
+	if err := agent.Parse(); err != nil {
+		return c.Status(502).JSON(fiber.Map{
+			"error": "Failed to connect to agent server",
+		})
+	}
+
+	statusCode, body, errs := agent.Bytes()
+	if len(errs) > 0 {
+		return c.Status(502).JSON(fiber.Map{
+			"error": "Agent server error",
+		})
+	}
+
+	// Response headers are already included in the body response from Fiber's agent
+
+	// Return response
+	return c.Status(statusCode).Send(body)
+}
+
+// handleAgentWebSocketProxy returns a WebSocket handler that proxies to the agent server
+func (s *Server) handleAgentWebSocketProxy() func(*websocket.Conn) {
+	return func(clientConn *websocket.Conn) {
+		defer clientConn.Close()
+
+		// Connect to agent server WebSocket
+		agentURL := "ws://localhost:8001/ws"
+
+		// Get the token from query params
+		token := clientConn.Query("token")
+		if token != "" {
+			agentURL += "?token=" + token
+		}
+
+		// Connect to agent server
+		agentConn, _, err := gorillaws.DefaultDialer.Dial(agentURL, http.Header{})
+		if err != nil {
+			clientConn.WriteJSON(fiber.Map{
+				"type":    "error",
+				"message": "Failed to connect to agent server",
+			})
+			return
+		}
+		defer agentConn.Close()
+
+		// Create channels for bidirectional proxying
+		clientDone := make(chan struct{})
+		agentDone := make(chan struct{})
+
+		// Proxy from client to agent
+		go func() {
+			defer close(clientDone)
+			for {
+				messageType, data, err := clientConn.ReadMessage()
+				if err != nil {
+					return
+				}
+				if err := agentConn.WriteMessage(messageType, data); err != nil {
+					return
+				}
+			}
+		}()
+
+		// Proxy from agent to client
+		go func() {
+			defer close(agentDone)
+			for {
+				messageType, data, err := agentConn.ReadMessage()
+				if err != nil {
+					return
+				}
+				if err := clientConn.WriteMessage(messageType, data); err != nil {
+					return
+				}
+			}
+		}()
+
+		// Wait for either connection to close
+		select {
+		case <-clientDone:
+		case <-agentDone:
+		}
+	}
 }

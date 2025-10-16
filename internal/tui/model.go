@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	tea "github.com/charmbracelet/bubbletea"
+	agentspkg "github.com/schlunsen/claude-control-terminal/internal/agents"
 	"github.com/schlunsen/claude-control-terminal/internal/components"
 	"github.com/schlunsen/claude-control-terminal/internal/database"
 	"github.com/schlunsen/claude-control-terminal/internal/fileops"
@@ -88,6 +89,10 @@ type Model struct {
 	analyticsServer  *server.Server  // Reference to analytics server
 	claudeDir        string          // Claude directory for analytics
 
+	// Agent server state
+	agentServerEnabled bool   // Whether agent server is running
+	agentServerPID     int    // PID of agent server process
+
 	// Hooks state
 	hookLoggerEnabled       bool  // Whether user-prompt-logger hook is installed
 	hookToolLoggerEnabled   bool  // Whether tool-logger hook is installed
@@ -131,6 +136,11 @@ func NewModel(targetDir string) Model {
 
 // NewModelWithServer creates a new TUI model with analytics server reference
 func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Server) Model {
+	return NewModelWithServers(targetDir, claudeDir, analyticsServer, false, 0)
+}
+
+// NewModelWithServers creates a new TUI model with analytics and agent server references
+func NewModelWithServers(targetDir, claudeDir string, analyticsServer *server.Server, agentServerEnabled bool, agentServerPID int) Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = SpinnerStyle
@@ -211,6 +221,8 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 		analyticsEnabled:       analyticsEnabled,
 		analyticsServer:        analyticsServer,
 		claudeDir:              claudeDir,
+		agentServerEnabled:     agentServerEnabled,
+		agentServerPID:         agentServerPID,
 		permissionsCurrentTab:  fileops.SettingsSourceLocal, // Default to local tab
 		permissionsCustomInput: customInput,
 		providerAPIKeyInput:    apiKeyInput,
@@ -340,6 +352,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.hookNotificationEnabled = msg.notificationEnabled
 		m.hookInstallError = msg.err
 		return m, nil
+
+	case toggleAgentServerMsg:
+		// Handle agent server toggle result
+		m.agentServerEnabled = msg.enabled
+		m.agentServerPID = msg.pid
+		return m, nil
 	}
 
 	return m, nil
@@ -464,6 +482,9 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "h", "H":
 		// Toggle all logging hooks (user-prompt, tool, notification)
 		return m, toggleHookCmd(m.hookLoggerEnabled, m.hookToolLoggerEnabled, m.hookNotificationEnabled)
+	case "s", "S":
+		// Toggle agent server on/off
+		return m, toggleAgentServerCmd(m.agentServerEnabled, m.agentServerPID)
 	case "o", "O":
 		// Open analytics dashboard in browser
 		if m.analyticsEnabled {
@@ -900,11 +921,21 @@ func (m Model) viewMainScreen() string {
 	details += ")"
 	b.WriteString(SubtitleStyle.Render(details) + "\n")
 
+	// Agent server status
+	agentServerStatus := "OFF"
+	agentServerStyle := StatusErrorStyle
+	if m.agentServerEnabled {
+		agentServerStatus = fmt.Sprintf("ON (PID: %d)", m.agentServerPID)
+		agentServerStyle = StatusSuccessStyle
+	}
+	b.WriteString(SubtitleStyle.Render("Agent Server: ") + agentServerStyle.Render(agentServerStatus))
+	b.WriteString(SubtitleStyle.Render(" (http://localhost:8001)") + "\n")
+
 	b.WriteString("\n")
 	if m.analyticsEnabled {
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • O: Open Dashboard • H: Hooks • Q/Esc: Quit"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • O: Open Dashboard • H: Hooks • S: Agent Server • Q/Esc: Quit"))
 	} else {
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Logging Hooks • Q/Esc: Quit"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Logging Hooks • S: Agent Server • Q/Esc: Quit"))
 	}
 
 	content := BoxStyle.Render(b.String())
@@ -1679,6 +1710,48 @@ func toggleHookCmd(userPromptEnabled, toolEnabled, notificationEnabled bool) tea
 				toolEnabled:         err == nil,
 				notificationEnabled: err == nil,
 				err:                 err,
+			}
+		}
+	}
+}
+
+type toggleAgentServerMsg struct {
+	enabled bool
+	pid     int
+}
+
+func toggleAgentServerCmd(enabled bool, currentPID int) tea.Cmd {
+	return func() tea.Msg {
+		agentConfig := agentspkg.DefaultConfig()
+		agentLauncher := agentspkg.NewLauncher(agentConfig, true) // quiet mode
+
+		if enabled {
+			// Stop the agent server
+			if err := agentLauncher.Stop(); err != nil {
+				// Failed to stop, return current state
+				return toggleAgentServerMsg{
+					enabled: enabled,
+					pid:     currentPID,
+				}
+			}
+			return toggleAgentServerMsg{
+				enabled: false,
+				pid:     0,
+			}
+		} else {
+			// Start the agent server
+			if err := agentLauncher.Start(); err != nil {
+				// Failed to start, return disabled state
+				return toggleAgentServerMsg{
+					enabled: false,
+					pid:     0,
+				}
+			}
+			// Get the PID
+			running, pid, _ := agentLauncher.IsRunning()
+			return toggleAgentServerMsg{
+				enabled: running,
+				pid:     pid,
 			}
 		}
 	}
