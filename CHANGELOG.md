@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - Real-Time Session Metrics Dashboard - 2025-01-16
+
+### Added
+- Real-time session metrics dashboard in agents page with comprehensive conversation visibility
+- SessionMetrics.vue component displaying live session statistics:
+  - Session status and duration tracking
+  - Message count tracking with visual progress bars
+  - Tool usage statistics and breakdown by tool type
+  - Permission approval/denial rates with visual indicators
+  - Working directory and configuration details
+- Comprehensive debug logging to agent server for full conversation visibility
+- Live tracking of tool executions, permissions, and message counts
+- Detailed tool execution information extraction (files, commands, patterns) in execution bars
+- Status updates during message streaming and tool execution phases
+- Responsive design supporting desktop, tablet, and mobile views
+
+### Changed
+- Enhanced agents page with integrated metrics sidebar for better monitoring
+- Improved real-time WebSocket updates for session metrics
+
 ## [0.4.3] - MCP Server Integration - 2025-10-16
 
 ### Added
@@ -563,6 +583,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.4.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.0...v0.4.1
