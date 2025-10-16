@@ -5,15 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0] - Release Workflow & Documentation Improvements - 2025-10-16
+## [0.4.0] - Agent Server & Live Agent Integration - 2025-10-16
+
+### Added
+- 🤖 **Agent Server**: New Python FastAPI WebSocket server for real-time Claude agent conversations
+- Full Claude Agent SDK integration with WebSocket support
+- Session management for multiple concurrent agent conversations
+- Embedded Python runtime for agent server functionality
+- Automatic Python dependency management via virtual environments
+- Comprehensive tool support (Read, Write, Edit, Bash, etc.)
+- Real-time agent communication with streaming responses
 
 ### Changed
 - Enhanced release workflow documentation with descriptive release names in CHANGELOG format
 - Improved release process guide in workflow documentation for better clarity
-- Streamlined CHANGELOG format by removing unreleased section placeholder
+- Streamlined project structure to support agent server integration
+- Updated CLI commands to support agent server management
 
 ### Fixed
 - Disabled Windows builds in GitHub Actions release workflow due to compilation issues
+- Improved process management for agent server lifecycle
+
+### Security
+- API key authentication for agent server
+- Secure session management
+- Isolated Python virtual environment for dependencies
 
 ## [0.3.5] - TLS/HTTPS Security & API Authentication - 2025-10-16
 
