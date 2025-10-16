@@ -95,6 +95,34 @@
         </div>
 
         <div v-else class="chat-content">
+          <!-- TodoWrite Box -->
+          <div v-if="shouldShowTodoBox" class="todo-write-box">
+            <div class="todo-box-header">
+              <div class="todo-box-icon">📋</div>
+              <div class="todo-box-title">Tasks</div>
+            </div>
+            <div class="todo-list">
+              <div
+                v-for="(todo, index) in activeSessionTodos"
+                :key="index"
+                class="todo-item"
+                :class="todo.status"
+              >
+                <div class="todo-status-icon">
+                  <span v-if="todo.status === 'completed'">✅</span>
+                  <span v-else-if="todo.status === 'in_progress'" class="in-progress-icon">🔄</span>
+                  <span v-else>📝</span>
+                </div>
+                <div class="todo-content">
+                  <div class="todo-text">{{ todo.content }}</div>
+                  <div v-if="todo.activeForm && todo.status === 'in_progress'" class="todo-active-form">
+                    {{ todo.activeForm }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Messages -->
           <div class="messages-container" ref="messagesContainer">
             <div v-for="message in activeMessages" :key="message.id" class="message" :class="{
@@ -175,6 +203,30 @@
                   Approve
                 </button>
               </div>
+            </div>
+          </div>
+
+          <!-- Tool Execution Bar -->
+          <div v-if="shouldShowToolBar" class="tool-execution-bar">
+            <div class="tool-execution-content">
+              <div class="tool-execution-icon">
+                <span v-if="activeSessionToolExecution?.toolName === 'Bash'">⚡</span>
+                <span v-else-if="activeSessionToolExecution?.toolName === 'Read'">📖</span>
+                <span v-else-if="activeSessionToolExecution?.toolName === 'Write'">✏️</span>
+                <span v-else-if="activeSessionToolExecution?.toolName === 'Edit'">🔧</span>
+                <span v-else-if="activeSessionToolExecution?.toolName === 'Search' || activeSessionToolExecution?.toolName === 'Grep'">🔍</span>
+                <span v-else>🛠️</span>
+              </div>
+              <div class="tool-execution-details">
+                <div class="tool-execution-name">{{ activeSessionToolExecution?.toolName }}</div>
+                <div class="tool-execution-info">
+                  <span v-if="activeSessionToolExecution?.command">{{ activeSessionToolExecution.command }}</span>
+                  <span v-else-if="activeSessionToolExecution?.filePath">{{ truncatePath(activeSessionToolExecution.filePath) }}</span>
+                  <span v-else-if="activeSessionToolExecution?.pattern">{{ activeSessionToolExecution.pattern }}</span>
+                  <span v-else>Executing...</span>
+                </div>
+              </div>
+              <div class="tool-execution-pulse"></div>
             </div>
           </div>
 
@@ -277,6 +329,10 @@
               <label class="tool-checkbox">
                 <input type="checkbox" v-model="sessionForm.tools" value="Grep" />
                 <span>Grep</span>
+              </label>
+              <label class="tool-checkbox">
+                <input type="checkbox" v-model="sessionForm.tools" value="TodoWrite" />
+                <span>TodoWrite</span>
               </label>
             </div>
           </div>
@@ -409,6 +465,10 @@
                   <input type="checkbox" v-model="resumeForm.tools" value="Grep" />
                   <span>Grep</span>
                 </label>
+                <label class="tool-checkbox">
+                  <input type="checkbox" v-model="resumeForm.tools" value="TodoWrite" />
+                  <span>TodoWrite</span>
+                </label>
               </div>
             </div>
 
@@ -427,9 +487,23 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { useAgentWebSocket } from '~/composables/useAgentWebSocket'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
+
+interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm?: string
+}
+
+interface ToolExecution {
+  toolName: string
+  filePath?: string
+  command?: string
+  pattern?: string
+  timestamp: Date
+}
 
 // WebSocket connection
 const agentWs = useAgentWebSocket()
@@ -454,12 +528,17 @@ const resumingSession = ref(false)
 const pendingPermissions = ref([]) // Array of pending permission requests
 const awaitingToolResults = ref(new Set()) // Track sessions awaiting tool execution results
 
+// Live agents state
+const sessionTodos = ref(new Map<string, TodoItem[]>()) // { sessionId: [...todos] }
+const sessionToolExecution = ref(new Map<string, ToolExecution | null>()) // { sessionId: toolExecution }
+const todoHideTimers = ref(new Map<string, NodeJS.Timeout>()) // { sessionId: timeoutId }
+
 // Session creation form
 const sessionForm = ref({
   workingDirectory: '',
   permissionMode: 'default',
   systemPrompt: '',
-  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
 })
 
 // Resume session form
@@ -467,13 +546,31 @@ const resumeForm = ref({
   workingDirectory: '',
   permissionMode: 'default',
   systemPrompt: '',
-  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+  tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
 })
 
 // Computed
 const activeMessages = computed(() => {
   if (!activeSessionId.value) return []
   return messages.value[activeSessionId.value] || []
+})
+
+const activeSessionTodos = computed(() => {
+  if (!activeSessionId.value) return []
+  return sessionTodos.value.get(activeSessionId.value) || []
+})
+
+const activeSessionToolExecution = computed(() => {
+  if (!activeSessionId.value) return null
+  return sessionToolExecution.value.get(activeSessionId.value) || null
+})
+
+const shouldShowTodoBox = computed(() => {
+  return activeSessionTodos.value.length > 0
+})
+
+const shouldShowToolBar = computed(() => {
+  return activeSessionToolExecution.value !== null
 })
 
 // Message formatting
@@ -521,7 +618,7 @@ const createNewSession = () => {
     workingDirectory: '',
     permissionMode: 'default',
     systemPrompt: '',
-    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
   }
 
   showCreateSessionModal.value = true
@@ -575,6 +672,16 @@ const endSession = async (sessionId) => {
   delete messages.value[sessionId]
   awaitingToolResults.value.delete(sessionId)  // Clean up flag
 
+  // Clean up any pending timers
+  const existingTimer = todoHideTimers.value.get(sessionId)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    todoHideTimers.value.delete(sessionId)
+  }
+
+  // Clean up live agents session data
+  cleanupSessionData(sessionId)
+
   if (activeSessionId.value === sessionId) {
     activeSessionId.value = null
   }
@@ -606,7 +713,7 @@ const selectSessionForResume = async (session) => {
     workingDirectory: session.working_directory || '',
     permissionMode: 'default',
     systemPrompt: '',
-    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search']
+    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
   }
 }
 
@@ -676,12 +783,217 @@ const formatRelativeTime = (timestamp) => {
   return date.toLocaleDateString()
 }
 
+// Helper methods for parsing TodoWrite and tool execution data
+const parseTodoWrite = (content: string): TodoItem[] | null => {
+  if (!content || typeof content !== 'string') return null
+
+  try {
+    console.log('Parsing TodoWrite from content:', content)
+
+    // Pattern 1: Look for numbered lists (1. task, 2. task, etc.)
+    const numberedListMatch = content.match(/(?:\d+\.\s+)([^\n]+)/g)
+    if (numberedListMatch) {
+      console.log('Found numbered list matches:', numberedListMatch)
+      const todos: TodoItem[] = []
+      for (let i = 0; i < numberedListMatch.length; i++) {
+        const taskContent = numberedListMatch[i].replace(/^\d+\.\s+/, '').trim()
+        if (taskContent) {
+          todos.push({
+            content: taskContent,
+            status: i === 0 ? 'in_progress' : 'pending'
+          })
+        }
+      }
+      if (todos.length > 0) {
+        console.log('Successfully parsed todos from numbered list:', todos)
+        return todos
+      }
+    }
+
+    // Pattern 2: Look for checkmark-style lists (- task, * task, etc.)
+    const bulletListMatch = content.match(/[-*]\s+([^\n]+)/g)
+    if (bulletListMatch) {
+      console.log('Found bullet list matches:', bulletListMatch)
+      const todos: TodoItem[] = []
+      for (const match of bulletListMatch) {
+        const taskContent = match.replace(/^[-*]\s+/, '').trim()
+        if (taskContent) {
+          todos.push({
+            content: taskContent,
+            status: 'pending'
+          })
+        }
+      }
+      if (todos.length > 0) {
+        console.log('Successfully parsed todos from bullet list:', todos)
+        return todos
+      }
+    }
+
+    // Pattern 3: Look for explicit todo markers ("Todo:", "Task:", etc.)
+    const todoMarkerMatch = content.match(/(?:todo|task|items?):\s*([\s\S]*?)(?=\n\n|\n\w+:|$)/i)
+    if (todoMarkerMatch) {
+      const todoText = todoMarkerMatch[1].trim()
+      const items = todoText.split(/\n\s*\n/).filter(item => item.trim())
+      if (items.length > 0) {
+        const todos = items.map(item => ({
+          content: item.trim(),
+          status: 'pending'
+        }))
+        console.log('Successfully parsed todos from todo marker:', todos)
+        return todos
+      }
+    }
+
+    // Pattern 4: Look for task-related patterns (common task descriptions)
+    const taskPatterns = [
+      /(?:i'll create|let me create|creating|here are)\s+a\s+(?:todo|task|list):\s*([\s\S]*?)(?=\n\n|\n|$)/i,
+      /(?:tasks?:\s*\n)((?:\d+\.\s+[^\n]+\n)+)/i,
+      /(?:items?:\s*\n)((?:[-*]\s+[^\n]+\n)+)/i
+    ]
+
+    for (const pattern of taskPatterns) {
+      const match = content.match(pattern)
+      if (match) {
+        const taskContent = match[1] || match[0]
+        const lines = taskContent.split('\n').filter(line => line.trim())
+        const todos = lines.map(line => ({
+          content: line.trim().replace(/^\d+\.\s+/, '').replace(/^[-*]\s+/, ''),
+          status: 'pending'
+        })).filter(todo => todo.content)
+
+        if (todos.length > 0) {
+          console.log('Successfully parsed todos from task pattern:', todos)
+          return todos
+        }
+      }
+    }
+
+    console.log('No TodoWrite data found in content')
+    return null
+  } catch (e) {
+    console.warn('Failed to parse TodoWrite content:', e)
+    return null
+  }
+}
+
+const parseToolUse = (content: string): ToolExecution | null => {
+  if (!content || typeof content !== 'string') return null
+
+  try {
+    // Look for tool use patterns
+    const patterns = [
+      /Using (\w+)/g,
+      /(\w+)\s*\(/g, // Function calls
+      /Running (\w+)/g,
+      /Executing (\w+)/g
+    ]
+
+    for (const pattern of patterns) {
+      const matches = [...content.matchAll(pattern)]
+      if (matches.length > 0) {
+        const toolName = matches[0][1]
+
+        // Extract additional details based on tool type
+        let filePath, command, patternStr
+
+        if (toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') {
+          const fileMatch = content.match(/(?:file|path):\s*([^\s\n]+)/i)
+          if (fileMatch) filePath = fileMatch[1]
+        } else if (toolName === 'Bash') {
+          const commandMatch = content.match(/(?:command|cmd):\s*([^\n]+)/i)
+          if (commandMatch) command = commandMatch[1].trim()
+        } else if (toolName === 'Search' || toolName === 'Grep') {
+          const patternMatch = content.match(/(?:pattern|search):\s*([^\n]+)/i)
+          if (patternMatch) patternStr = patternMatch[1].trim()
+        }
+
+        return {
+          toolName,
+          filePath,
+          command,
+          pattern: patternStr,
+          timestamp: new Date()
+        }
+      }
+    }
+
+    return null
+  } catch (e) {
+    console.warn('Failed to parse tool use:', e)
+    return null
+  }
+}
+
+// Update session data methods
+const updateSessionTodos = (sessionId: string, todos: TodoItem[]) => {
+  sessionTodos.value.set(sessionId, todos)
+}
+
+// Helper to format todos for TodoWrite tool (includes activeForm only when present)
+const formatTodosForTool = (todos: TodoItem[]): any[] => {
+  return todos.map(todo => ({
+    content: todo.content,
+    status: todo.status,
+    ...(todo.activeForm && { activeForm: todo.activeForm })
+  }))
+}
+
+const updateSessionToolExecution = (sessionId: string, toolExecution: ToolExecution | null) => {
+  sessionToolExecution.value.set(sessionId, toolExecution)
+}
+
+const clearSessionToolExecution = (sessionId: string) => {
+  sessionToolExecution.value.delete(sessionId)
+}
+
+const cleanupSessionData = (sessionId: string) => {
+  sessionTodos.value.delete(sessionId)
+  sessionToolExecution.value.delete(sessionId)
+}
+
+const truncatePath = (path: string): string => {
+  if (!path) return ''
+  if (path.length <= 50) return path
+
+  // Truncate from the middle, keeping the beginning and end
+  const start = path.substring(0, 25)
+  const end = path.substring(path.length - 20)
+  return `${start}...${end}`
+}
+
 // Watch for modal opening to load sessions
 watch(showResumeModal, (show) => {
   if (show) {
     loadAvailableSessions()
   }
 })
+
+// Watch for all todos completed and auto-hide after 5 seconds
+watch(activeSessionTodos, (todos) => {
+  if (!activeSessionId.value) return
+
+  // Clear any existing timer for this session
+  const existingTimer = todoHideTimers.value.get(activeSessionId.value)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    todoHideTimers.value.delete(activeSessionId.value)
+  }
+
+  // If all todos are completed, set a new timer
+  if (todos.length > 0 && todos.every(todo => todo.status === 'completed')) {
+    console.log('All todos completed, setting 5 second auto-hide timer')
+    const timer = setTimeout(() => {
+      const currentTodos = sessionTodos.value.get(activeSessionId.value)
+      if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
+        sessionTodos.value.delete(activeSessionId.value)
+        todoHideTimers.value.delete(activeSessionId.value)
+        console.log('Auto-hid todos after 5 seconds')
+      }
+    }, 5000)
+    todoHideTimers.value.set(activeSessionId.value, timer)
+  }
+}, { deep: true })
 
 // Messaging
 const sendMessage = async () => {
@@ -703,6 +1015,15 @@ const sendMessage = async () => {
   })
 
   isProcessing.value = true
+
+  // Clear previous todos when sending a new message (moving to new task)
+  const sessionId = activeSessionId.value
+  const existingTimer = todoHideTimers.value.get(sessionId)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    todoHideTimers.value.delete(sessionId)
+  }
+  sessionTodos.value.delete(sessionId)
 
   // Send to agent
   agentWs.send({
@@ -804,6 +1125,19 @@ agentWs.on('onSessionCreated', (data) => {
 agentWs.on('onAgentMessage', (data) => {
   if (!messages.value[data.session_id]) {
     messages.value[data.session_id] = []
+  }
+
+  // Clear tool execution when we receive a message
+  clearSessionToolExecution(data.session_id)
+
+  // Clear todos when message completes (agent moving to next task)
+  if (data.complete) {
+    const existingTimer = todoHideTimers.value.get(data.session_id)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      todoHideTimers.value.delete(data.session_id)
+    }
+    sessionTodos.value.delete(data.session_id)
   }
 
   // Skip only empty content (unless it's a completion signal) and system messages
@@ -923,6 +1257,50 @@ agentWs.on('onAgentToolUse', (data) => {
   if (lastMessage && lastMessage.role === 'assistant') {
     lastMessage.toolUse = data.tool
   }
+
+  // Handle TodoWrite specifically
+  if (data.tool && data.tool.includes('TodoWrite')) {
+    console.log('TodoWrite tool used with data:', data)
+
+    // Try to extract todos from the data.input property (for new format)
+    let todos: TodoItem[] | null = null
+
+    // If data has input with todos (new enhanced format), use that
+    if (data.input && typeof data.input === 'object' && data.input.todos) {
+      todos = data.input.todos
+      console.log('Extracted todos from data.input:', todos)
+    } else {
+      // Try legacy parsing from tool string representation
+      const toolStr = String(data.tool || '')
+      todos = parseTodoWrite(toolStr)
+      console.log('Parsed todos from legacy tool string:', todos)
+    }
+
+    if (todos && Array.isArray(todos)) {
+      console.log('Updating session', data.session_id, 'with todos:', todos)
+      updateSessionTodos(data.session_id, todos)
+
+      // Set up auto-hide timer if all todos are completed
+      const allCompleted = todos.every(todo => todo.status === 'completed')
+      if (allCompleted) {
+        console.log('All todos completed, setting auto-hide timer for 5 seconds')
+        setTimeout(() => {
+          // Clear todos after delay, only if all are still completed
+          const currentTodos = sessionTodos.value.get(data.session_id)
+          if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
+            sessionTodos.value.delete(data.session_id)
+            console.log('Auto-hiding todos for session', data.session_id)
+          }
+        }, 5000)
+      }
+    }
+  } else {
+    // Parse tool execution from the tool use data (for non-TodoWrite tools)
+    const toolExecution = parseToolUse(data.tool || '')
+    if (toolExecution) {
+      updateSessionToolExecution(data.session_id, toolExecution)
+    }
+  }
 })
 
 agentWs.on('onPermissionRequest', (data) => {
@@ -1015,6 +1393,14 @@ agentWs.on('onAgentsKilled', (data) => {
   messages.value = {}
   activeSessionId.value = null
   awaitingToolResults.value.clear()  // Clear all flags
+
+  // Clear all pending timers
+  todoHideTimers.value.forEach((timer) => clearTimeout(timer))
+  todoHideTimers.value.clear()
+
+  // Clear all live agents session data
+  sessionTodos.value.clear()
+  sessionToolExecution.value.clear()
 
   // Show success message
   alert(`Successfully killed ${data.killed_count} agents`)
@@ -1297,6 +1683,7 @@ watch(() => agentWs.connected, (connected) => {
   flex-direction: column;
   overflow: hidden; /* Contain children */
   min-height: 0; /* Important for flex children */
+  position: relative; /* For absolutely positioned TodoWrite box */
 }
 
 .messages-container {
@@ -2063,10 +2450,220 @@ watch(() => agentWs.connected, (connected) => {
   color: var(--text-secondary);
 }
 
-/* Responsive */
+/* TodoWrite Box Styles */
+.todo-write-box {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 320px;
+  max-height: 400px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  animation: fadeIn 0.3s ease-out;
+  overflow: hidden;
+}
+
+.todo-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-purple-hover));
+  color: white;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.todo-box-icon {
+  font-size: 1.2rem;
+}
+
+.todo-box-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.todo-list {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  animation: slideInRight 0.3s ease-out;
+}
+
+.todo-item:hover {
+  background: var(--bg-tertiary);
+  transform: translateX(-2px);
+}
+
+.todo-item.completed {
+  opacity: 0.7;
+}
+
+.todo-item.completed .todo-text {
+  text-decoration: line-through;
+  color: var(--text-secondary);
+}
+
+.todo-status-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.in-progress-icon {
+  animation: spin 2s linear infinite;
+}
+
+.todo-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.todo-text {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.todo-active-form {
+  font-size: 0.85rem;
+  color: var(--accent-purple);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* Tool Execution Bar Styles */
+.tool-execution-bar {
+  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+  border: 1px solid #2196f3;
+  border-radius: 12px;
+  margin: 0 24px 12px 24px;
+  padding: 12px 16px;
+  animation: slideInTop 0.3s ease-out;
+  box-shadow: 0 4px 16px rgba(33, 150, 243, 0.25);
+  position: relative;
+  z-index: 50;
+}
+
+.tool-execution-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+
+.tool-execution-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.tool-execution-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.tool-execution-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1565c0;
+  margin-bottom: 2px;
+}
+
+.tool-execution-info {
+  font-size: 0.85rem;
+  color: #1976d2;
+  font-family: 'Monaco', 'Menlo', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-execution-pulse {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  background: #2196f3;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInTop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: translateY(-50%) scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1.2);
+  }
+}
+
+/* Responsive adjustments for live agents components */
 @media (max-width: 768px) {
   .sessions-sidebar {
     width: 240px;
+  }
+
+  .todo-write-box {
+    width: 280px;
+    right: 8px;
+    top: 8px;
   }
 }
 
@@ -2098,6 +2695,19 @@ watch(() => agentWs.connected, (connected) => {
   .btn-cancel,
   .btn-create {
     width: 100%;
+  }
+
+  .todo-write-box {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    margin: 0 0 12px 0;
+    border-radius: 8px;
+  }
+
+  .tool-execution-bar {
+    margin: 0 0 12px 0;
   }
 }
 </style>
