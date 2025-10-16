@@ -77,6 +77,7 @@ class SessionOptions(BaseModel):
     """Options for creating an agent session."""
 
     system_prompt: Optional[str] = None
+    agent_name: Optional[str] = None  # Alternative to system_prompt: name of a registered agent
     tools: List[Tool] = Field(
         default_factory=lambda: [
             Tool.READ,
