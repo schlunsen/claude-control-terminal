@@ -14,6 +14,11 @@ import (
 
 // Removed global analyticsServer - now managed in Model
 
+// shutdownMsg is sent when we receive a shutdown signal
+type shutdownMsg struct {
+	signal os.Signal
+}
+
 // Launch starts the TUI application with optional analytics server
 func Launch(targetDir string) error {
 	// Get Claude directory
@@ -66,8 +71,8 @@ func Launch(targetDir string) error {
 		if analyticsServer != nil {
 			analyticsServer.Shutdown()
 		}
-		// Note: We don't stop the agent server on exit - let it keep running
-		// Users can stop it manually with `cct agents stop` if needed
+		// Clean up agent server if we started it in this session
+		agentLauncher.Cleanup()
 	}()
 
 	for {
