@@ -20,7 +20,7 @@ var agentsCmd = &cobra.Command{
 	Short: "Manage the Claude agent WebSocket server",
 	Long: `Manage the Claude agent WebSocket server for running agent conversations.
 
-The agent server is a Python FastAPI WebSocket server that integrates with the
+The agent server is a Go-based WebSocket server that integrates with the
 Claude Agent SDK to provide real-time agent conversations with tool support.
 
 Examples:
@@ -29,8 +29,7 @@ Examples:
   cct agents restart         Restart the agent server
   cct agents status          Show server status
   cct agents logs            Show recent logs
-  cct agents logs --follow   Follow logs in real-time
-  cct agents install         Force reinstall dependencies`,
+  cct agents logs --follow   Follow logs in real-time`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// If no subcommand, show status or help
 		config := agentspkg.DefaultConfig()
@@ -130,27 +129,6 @@ var agentsLogsCmd = &cobra.Command{
 	},
 }
 
-// agentsInstallCmd forces reinstallation of dependencies
-var agentsInstallCmd = &cobra.Command{
-	Use:   "install",
-	Short: "Install or reinstall agent server dependencies",
-	Long: `Force installation or reinstallation of the agent server and its dependencies.
-This will remove the existing virtual environment and reinstall from scratch.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		config := agentspkg.DefaultConfig()
-		installer := agentspkg.NewInstaller(config.ServerDir, agentsQuiet)
-
-		pterm.Info.Println("Installing agent server...")
-
-		if err := installer.Reinstall(); err != nil {
-			pterm.Error.Println("Failed to install agent server:", err)
-			return
-		}
-
-		pterm.Success.Println("Agent server installed successfully")
-	},
-}
-
 func init() {
 	rootCmd.AddCommand(agentsCmd)
 
@@ -160,7 +138,6 @@ func init() {
 	agentsCmd.AddCommand(agentsRestartCmd)
 	agentsCmd.AddCommand(agentsStatusCmd)
 	agentsCmd.AddCommand(agentsLogsCmd)
-	agentsCmd.AddCommand(agentsInstallCmd)
 
 	// Flags for agents command
 	agentsCmd.PersistentFlags().BoolVarP(&agentsQuiet, "quiet", "q", false, "Suppress output")
