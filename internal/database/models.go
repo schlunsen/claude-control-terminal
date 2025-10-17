@@ -136,3 +136,36 @@ type NotificationStats struct {
 	MostRequestedTool      string `json:"most_requested_tool"`
 	MostRequestedToolCount int64  `json:"most_requested_tool_count"`
 }
+
+// AgentSession represents a live agent session
+type AgentSession struct {
+	ID               string    `json:"id"`
+	SessionID        string    `json:"session_id"`
+	SessionName      string    `json:"session_name"`
+	AvatarName       string    `json:"avatar_name"`
+	WorkingDirectory string    `json:"working_directory"`
+	AgentName        string    `json:"agent_name,omitempty"`
+	SystemPrompt     string    `json:"system_prompt,omitempty"`
+	Status           string    `json:"status"` // 'active', 'paused', 'ended'
+	PermissionMode   string    `json:"permission_mode"`
+	Tools            string    `json:"tools"` // JSON array as string
+	MessageCount     int       `json:"message_count"`
+	TotalTokens      int       `json:"total_tokens"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	EndedAt          *time.Time `json:"ended_at,omitempty"`
+}
+
+// AgentSessionMessage represents a message in an agent session
+type AgentSessionMessage struct {
+	ID           int64     `json:"id"`
+	SessionID    string    `json:"session_id"`
+	MessageID    string    `json:"message_id"`
+	Role         string    `json:"role"` // 'user', 'assistant', 'system'
+	Content      string    `json:"content"`
+	ToolName     string    `json:"tool_name,omitempty"`
+	ToolResult   string    `json:"tool_result,omitempty"`
+	TokenCount   int       `json:"token_count,omitempty"`
+	Timestamp    time.Time `json:"timestamp"`
+	CreatedAt    time.Time `json:"created_at"`
+}

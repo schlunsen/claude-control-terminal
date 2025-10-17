@@ -1,6 +1,7 @@
 """Session management for agent conversations."""
 
 import asyncio
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional
@@ -22,6 +23,59 @@ class SessionManager:
 
     async def start(self):
         """Start the session manager and cleanup task."""
+        # Import here to avoid circular imports
+        from .persistence import persistence_client
+
+        # Initialize persistence client
+        await persistence_client.init()
+
+        # Load active sessions from database
+        try:
+            sessions_data = await persistence_client.load_active_sessions()
+            if sessions_data:
+                logger.info(f"Loading {len(sessions_data)} active sessions from database...")
+                for session_data in sessions_data:
+                    try:
+                        session_id = UUID(session_data["session_id"])
+
+                        # Recreate session from database data
+                        tools = []
+                        if session_data.get("tools"):
+                            try:
+                                tools_str = session_data["tools"]
+                                if isinstance(tools_str, str):
+                                    tools = json.loads(tools_str)
+                                else:
+                                    tools = tools_str
+                            except (json.JSONDecodeError, TypeError):
+                                tools = []
+
+                        options = SessionOptions(
+                            system_prompt=session_data.get("system_prompt", ""),
+                            agent_name=session_data.get("agent_name", ""),
+                            tools=tools or [],
+                            working_directory=session_data.get("working_directory", ""),
+                            permission_mode=session_data.get("permission_mode", "default")
+                        )
+
+                        session = AgentSession(
+                            id=session_id,
+                            options=options,
+                            status=SessionStatus.IDLE
+                        )
+                        session.message_count = session_data.get("message_count", 0)
+
+                        self.sessions[session.id] = session
+                        self.session_locks[session.id] = asyncio.Lock()
+                        logger.info(f"Restored session {session_id} with {session.message_count} messages")
+
+                    except Exception as e:
+                        logger.warning(f"Failed to restore session from database: {e}")
+                        continue
+
+        except Exception as e:
+            logger.warning(f"Error loading active sessions from database: {e}")
+
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
         logger.info("Session manager started")
 
@@ -37,6 +91,10 @@ class SessionManager:
         # End all active sessions
         for session_id in list(self.sessions.keys()):
             await self.end_session(session_id)
+
+        # Close persistence client
+        from .persistence import persistence_client
+        await persistence_client.close()
 
         logger.info("Session manager stopped")
 
