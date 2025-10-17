@@ -1,5 +1,15 @@
 <template>
   <div class="session-metrics" v-if="session">
+    <!-- Avatar Section -->
+    <div class="avatar-section">
+      <img
+        :src="`/avatars/${avatarName || 'default'}.png`"
+        :alt="avatarName"
+        class="session-avatar"
+        @error="$event.target.src = '/avatars/default.png'"
+      />
+    </div>
+
     <!-- Header with Session ID and Status -->
     <div class="metrics-header">
       <div class="header-left">
@@ -122,6 +132,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import { useAvatar } from '~/composables/useAvatar'
 
 interface SessionMetricsData {
   id: string
@@ -146,6 +157,10 @@ const props = defineProps<{
     total: number
   }
 }>()
+
+// Avatar setup
+const { getRandomAvatar, loadAvatars } = useAvatar()
+const avatarName = ref('')
 
 // Reactive data
 const toolStats = ref({ count: 0, byName: {} as Record<string, number> })
@@ -268,6 +283,24 @@ watch(sessionStartTime, (newVal) => {
     sessionDuration.value = formatDuration(newVal)
   }
 })
+
+// Initialize avatar when session changes
+watch(
+  () => props.session?.id,
+  (newSessionId) => {
+    if (newSessionId) {
+      loadAvatars()
+      // Use the stored avatar_name from the session, don't generate a new one
+      avatarName.value = (props.session as any)?.avatar_name || 'default'
+    }
+  },
+  { immediate: true }
+)
+
+// Load avatars on mount
+onMounted(() => {
+  loadAvatars()
+})
 </script>
 
 <style scoped>
@@ -283,6 +316,31 @@ watch(sessionStartTime, (newVal) => {
 .session-metrics:hover {
   border-color: var(--accent-purple);
   box-shadow: 0 8px 24px rgba(139, 92, 246, 0.15);
+}
+
+/* Avatar Section */
+.avatar-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.session-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid var(--accent-purple);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+  transition: all 0.3s ease;
+}
+
+.session-avatar:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.3);
 }
 
 /* Header */
@@ -665,6 +723,16 @@ watch(sessionStartTime, (newVal) => {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .session-avatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .avatar-section {
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+
   .metrics-grid {
     grid-template-columns: 1fr;
   }

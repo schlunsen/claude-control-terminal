@@ -4,6 +4,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -220,6 +221,16 @@ func (s *Server) setupRoutes() {
 
 	// Agent WebSocket proxy
 	s.app.Get("/agent/ws", websocket.New(s.handleAgentWebSocketProxy()))
+
+	// Agent session endpoints
+	api.Get("/agent-sessions", s.handleGetActiveSessions)
+	api.Post("/agent-sessions", s.handleCreateAgentSession)
+	api.Get("/agent-sessions/:id", s.handleGetAgentSession)
+	api.Post("/agent-sessions/:id/messages", s.handleAddSessionMessage)
+	api.Put("/agent-sessions/:id", s.handleUpdateAgentSession)
+
+	// Avatars endpoint
+	api.Get("/avatars", s.handleListAvatars)
 }
 
 // Handler: Health check
@@ -1795,4 +1806,292 @@ func (s *Server) handleAgentWebSocketProxy() func(*websocket.Conn) {
 		case <-agentDone:
 		}
 	}
+}
+
+// Handler: Get all active agent sessions
+func (s *Server) handleGetActiveSessions(c *fiber.Ctx) error {
+	sessions, err := s.repo.GetActiveAgentSessions()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get active sessions: %v", err),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"sessions": sessions,
+		"count":    len(sessions),
+	})
+}
+
+// Handler: Create a new agent session
+func (s *Server) handleCreateAgentSession(c *fiber.Ctx) error {
+	type CreateSessionRequest struct {
+		SessionID        string   `json:"session_id"`
+		SessionName      string   `json:"session_name"`
+		AvatarName       string   `json:"avatar_name"`
+		WorkingDirectory string   `json:"working_directory"`
+		AgentName        string   `json:"agent_name"`
+		SystemPrompt     string   `json:"system_prompt"`
+		PermissionMode   string   `json:"permission_mode"`
+		Tools            []string `json:"tools"`
+	}
+
+	var req CreateSessionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	if req.SessionID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id is required",
+		})
+	}
+
+	// Convert tools slice to JSON string
+	toolsJSON := "[]"
+	if len(req.Tools) > 0 {
+		toolsData, _ := json.Marshal(req.Tools)
+		toolsJSON = string(toolsData)
+	}
+
+	session := &database.AgentSession{
+		ID:               req.SessionID,
+		SessionID:        req.SessionID,
+		SessionName:      req.SessionName,
+		AvatarName:       req.AvatarName,
+		WorkingDirectory: req.WorkingDirectory,
+		AgentName:        req.AgentName,
+		SystemPrompt:     req.SystemPrompt,
+		Status:           "active",
+		PermissionMode:   req.PermissionMode,
+		Tools:            toolsJSON,
+		MessageCount:     0,
+		TotalTokens:      0,
+	}
+
+	if err := s.repo.SaveAgentSession(session); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to create session: %v", err),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":  "created",
+		"session": session,
+	})
+}
+
+// Handler: Get a specific agent session
+func (s *Server) handleGetAgentSession(c *fiber.Ctx) error {
+	sessionID := c.Params("id")
+	if sessionID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id is required",
+		})
+	}
+
+	session, err := s.repo.GetAgentSession(sessionID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get session: %v", err),
+		})
+	}
+
+	if session == nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "session not found",
+		})
+	}
+
+	// Get messages for this session
+	messages, err := s.repo.GetAgentSessionMessages(sessionID, 0)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get messages: %v", err),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"session":  session,
+		"messages": messages,
+		"count":    len(messages),
+	})
+}
+
+// Handler: Add a message to a session
+func (s *Server) handleAddSessionMessage(c *fiber.Ctx) error {
+	sessionID := c.Params("id")
+	fmt.Printf("🔵 [MESSAGE SAVE] Handler called for session: %s\n", sessionID)
+	if sessionID == "" {
+		fmt.Printf("❌ [MESSAGE SAVE] No session_id\n")
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id is required",
+		})
+	}
+
+	type AddMessageRequest struct {
+		MessageID  string `json:"message_id"`
+		Role       string `json:"role"`
+		Content    string `json:"content"`
+		ToolName   string `json:"tool_name"`
+		ToolResult string `json:"tool_result"`
+		TokenCount int    `json:"token_count"`
+	}
+
+	var req AddMessageRequest
+	if err := c.BodyParser(&req); err != nil {
+		fmt.Printf("❌ [MESSAGE SAVE] Body parser error: %v\n", err)
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	fmt.Printf("📝 [MESSAGE SAVE] Received: id=%s role=%s len=%d\n", req.MessageID, req.Role, len(req.Content))
+
+	if req.Role == "" || req.Content == "" {
+		fmt.Printf("❌ [MESSAGE SAVE] Missing role or content\n")
+		return c.Status(400).JSON(fiber.Map{
+			"error": "role and content are required",
+		})
+	}
+
+	msg := &database.AgentSessionMessage{
+		SessionID:  sessionID,
+		MessageID:  req.MessageID,
+		Role:       req.Role,
+		Content:    req.Content,
+		ToolName:   req.ToolName,
+		ToolResult: req.ToolResult,
+		TokenCount: req.TokenCount,
+		Timestamp:  time.Now(),
+	}
+
+	fmt.Printf("💾 [MESSAGE SAVE] Saving to database...\n")
+	if err := s.repo.SaveAgentSessionMessage(msg); err != nil {
+		fmt.Printf("❌ [MESSAGE SAVE] Save error: %v\n", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to save message: %v", err),
+		})
+	}
+
+	// Update session message count and tokens
+	fmt.Printf("📊 [MESSAGE SAVE] Updating session stats...\n")
+	session, err := s.repo.GetAgentSession(sessionID)
+	if err == nil && session != nil {
+		session.MessageCount++
+		session.TotalTokens += req.TokenCount
+		if err := s.repo.UpdateAgentSession(session); err != nil {
+			fmt.Printf("⚠️  [MESSAGE SAVE] Failed to update session stats: %v\n", err)
+		} else {
+			fmt.Printf("📊 [MESSAGE SAVE] Session stats updated: messages=%d tokens=%d\n", session.MessageCount, session.TotalTokens)
+		}
+	}
+
+	fmt.Printf("✅ [MESSAGE SAVE] Message saved successfully\n")
+	return c.JSON(fiber.Map{
+		"status":  "saved",
+		"message": msg,
+	})
+}
+
+// Handler: Update an agent session
+func (s *Server) handleUpdateAgentSession(c *fiber.Ctx) error {
+	sessionID := c.Params("id")
+	if sessionID == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "session_id is required",
+		})
+	}
+
+	type UpdateSessionRequest struct {
+		SessionName  string     `json:"session_name"`
+		Status       string     `json:"status"`
+		MessageCount int        `json:"message_count"`
+		TotalTokens  int        `json:"total_tokens"`
+		EndedAt      *time.Time `json:"ended_at"`
+	}
+
+	var req UpdateSessionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Get existing session
+	session, err := s.repo.GetAgentSession(sessionID)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get session: %v", err),
+		})
+	}
+
+	if session == nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": "session not found",
+		})
+	}
+
+	// Update fields
+	if req.SessionName != "" {
+		session.SessionName = req.SessionName
+	}
+	if req.Status != "" {
+		session.Status = req.Status
+	}
+	session.MessageCount = req.MessageCount
+	session.TotalTokens = req.TotalTokens
+	session.EndedAt = req.EndedAt
+
+	if err := s.repo.UpdateAgentSession(session); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to update session: %v", err),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status":  "updated",
+		"session": session,
+	})
+}
+
+// Handler: List available avatars
+func (s *Server) handleListAvatars(c *fiber.Ctx) error {
+	// Path to frontend avatars
+	avatarsDir := filepath.Join("internal", "server", "frontend", "public", "avatars")
+
+	entries, err := os.ReadDir(avatarsDir)
+	if err != nil {
+		// Return empty list if directory doesn't exist or can't be read
+		return c.JSON(fiber.Map{
+			"avatars": []string{},
+			"count":   0,
+		})
+	}
+
+	var avatars []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		// Only include image files
+		name := entry.Name()
+		if strings.HasSuffix(strings.ToLower(name), ".png") ||
+			strings.HasSuffix(strings.ToLower(name), ".jpg") ||
+			strings.HasSuffix(strings.ToLower(name), ".jpeg") ||
+			strings.HasSuffix(strings.ToLower(name), ".gif") ||
+			strings.HasSuffix(strings.ToLower(name), ".webp") {
+			// Remove extension and add to list
+			baseName := strings.TrimSuffix(name, filepath.Ext(name))
+			avatars = append(avatars, baseName)
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"avatars": avatars,
+		"count":   len(avatars),
+	})
 }

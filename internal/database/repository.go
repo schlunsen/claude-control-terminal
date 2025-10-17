@@ -1025,3 +1025,237 @@ func (r *Repository) DeleteAllNotifications() error {
 
 	return nil
 }
+
+// SaveAgentSession saves a new agent session
+func (r *Repository) SaveAgentSession(session *AgentSession) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := `
+		INSERT INTO agent_sessions (
+			id, session_id, session_name, avatar_name, working_directory,
+			agent_name, system_prompt, status, permission_mode, tools
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err := r.db.db.Exec(
+		query,
+		session.ID,
+		session.SessionID,
+		session.SessionName,
+		session.AvatarName,
+		session.WorkingDirectory,
+		session.AgentName,
+		session.SystemPrompt,
+		session.Status,
+		session.PermissionMode,
+		session.Tools,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to save agent session: %w", err)
+	}
+
+	return nil
+}
+
+// GetAgentSession retrieves an agent session by ID
+func (r *Repository) GetAgentSession(sessionID string) (*AgentSession, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT id, session_id, session_name, avatar_name, working_directory,
+		       agent_name, system_prompt, status, permission_mode, tools,
+		       message_count, total_tokens, created_at, updated_at, ended_at
+		FROM agent_sessions
+		WHERE session_id = ?
+	`
+
+	session := &AgentSession{}
+	err := r.db.db.QueryRow(query, sessionID).Scan(
+		&session.ID,
+		&session.SessionID,
+		&session.SessionName,
+		&session.AvatarName,
+		&session.WorkingDirectory,
+		&session.AgentName,
+		&session.SystemPrompt,
+		&session.Status,
+		&session.PermissionMode,
+		&session.Tools,
+		&session.MessageCount,
+		&session.TotalTokens,
+		&session.CreatedAt,
+		&session.UpdatedAt,
+		&session.EndedAt,
+	)
+
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get agent session: %w", err)
+	}
+
+	return session, nil
+}
+
+// GetActiveAgentSessions retrieves all active agent sessions
+func (r *Repository) GetActiveAgentSessions() ([]*AgentSession, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT id, session_id, session_name, avatar_name, working_directory,
+		       agent_name, system_prompt, status, permission_mode, tools,
+		       message_count, total_tokens, created_at, updated_at, ended_at
+		FROM agent_sessions
+		WHERE status = 'active'
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active agent sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []*AgentSession
+	for rows.Next() {
+		session := &AgentSession{}
+		err := rows.Scan(
+			&session.ID,
+			&session.SessionID,
+			&session.SessionName,
+			&session.AvatarName,
+			&session.WorkingDirectory,
+			&session.AgentName,
+			&session.SystemPrompt,
+			&session.Status,
+			&session.PermissionMode,
+			&session.Tools,
+			&session.MessageCount,
+			&session.TotalTokens,
+			&session.CreatedAt,
+			&session.UpdatedAt,
+			&session.EndedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan agent session: %w", err)
+		}
+		sessions = append(sessions, session)
+	}
+
+	return sessions, nil
+}
+
+// SaveAgentSessionMessage saves a message in an agent session
+func (r *Repository) SaveAgentSessionMessage(msg *AgentSessionMessage) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := `
+		INSERT INTO agent_session_messages (
+			session_id, message_id, role, content, tool_name, tool_result, token_count, timestamp
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	result, err := r.db.db.Exec(
+		query,
+		msg.SessionID,
+		msg.MessageID,
+		msg.Role,
+		msg.Content,
+		msg.ToolName,
+		msg.ToolResult,
+		msg.TokenCount,
+		msg.Timestamp,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to save agent session message: %w", err)
+	}
+
+	id, _ := result.LastInsertId()
+	msg.ID = id
+
+	return nil
+}
+
+// GetAgentSessionMessages retrieves all messages for a session
+func (r *Repository) GetAgentSessionMessages(sessionID string, limit int) ([]*AgentSessionMessage, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT id, session_id, message_id, role, content, tool_name, tool_result, token_count, timestamp, created_at
+		FROM agent_session_messages
+		WHERE session_id = ?
+		ORDER BY timestamp ASC
+	`
+
+	args := []interface{}{sessionID}
+
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+
+	rows, err := r.db.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query agent session messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []*AgentSessionMessage
+	for rows.Next() {
+		msg := &AgentSessionMessage{}
+		err := rows.Scan(
+			&msg.ID,
+			&msg.SessionID,
+			&msg.MessageID,
+			&msg.Role,
+			&msg.Content,
+			&msg.ToolName,
+			&msg.ToolResult,
+			&msg.TokenCount,
+			&msg.Timestamp,
+			&msg.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan agent session message: %w", err)
+		}
+		messages = append(messages, msg)
+	}
+
+	return messages, nil
+}
+
+// UpdateAgentSession updates an agent session
+func (r *Repository) UpdateAgentSession(session *AgentSession) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := `
+		UPDATE agent_sessions
+		SET session_name = ?, status = ?, message_count = ?, total_tokens = ?, updated_at = CURRENT_TIMESTAMP, ended_at = ?
+		WHERE session_id = ?
+	`
+
+	_, err := r.db.db.Exec(
+		query,
+		session.SessionName,
+		session.Status,
+		session.MessageCount,
+		session.TotalTokens,
+		session.EndedAt,
+		session.SessionID,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to update agent session: %w", err)
+	}
+
+	return nil
+}

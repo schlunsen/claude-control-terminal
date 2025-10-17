@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Go API settings (for persistence)
+    go_api_host: str = "127.0.0.1"
+    go_api_port: int = 3333
+    go_api_tls: bool = True
+
     class Config:
         env_file = ".env"
         env_prefix = "AGENT_SERVER_"

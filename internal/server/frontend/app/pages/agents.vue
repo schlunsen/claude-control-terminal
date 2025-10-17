@@ -584,6 +584,8 @@
 
 <script setup lang="ts">
 import { useAgentWebSocket } from '~/composables/useAgentWebSocket'
+import { useAvatar } from '~/composables/useAvatar'
+import { useAuthenticatedFetch } from '~/composables/useAuthenticatedFetch'
 import SessionMetrics from '~/components/SessionMetrics.vue'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 
@@ -603,6 +605,12 @@ interface ToolExecution {
 
 // WebSocket connection
 const agentWs = useAgentWebSocket()
+
+// Avatar management
+const { getRandomAvatar, loadAvatars } = useAvatar()
+
+// Authenticated fetch for API requests
+const { fetchWithAuth } = useAuthenticatedFetch()
 
 // Refs
 const messageInput = ref(null)
@@ -767,6 +775,9 @@ const createSessionWithOptions = async () => {
   try {
     const sessionId = crypto.randomUUID()
 
+    // Get random avatar
+    const avatarName = getRandomAvatar()
+
     const options: any = {
       tools: sessionForm.value.tools,
       working_directory: sessionForm.value.workingDirectory,
@@ -780,6 +791,29 @@ const createSessionWithOptions = async () => {
       options.system_prompt = sessionForm.value.systemPrompt || 'You are a helpful AI assistant.'
     }
 
+    // Save session to database first
+    const sessionName = `Session ${sessionId.slice(0, 8)}`
+    const dbResponse = await fetchWithAuth('/api/agent-sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        session_name: sessionName,
+        avatar_name: avatarName,
+        working_directory: sessionForm.value.workingDirectory,
+        agent_name: sessionForm.value.selectedAgent || '',
+        system_prompt: options.system_prompt || '',
+        permission_mode: sessionForm.value.permissionMode,
+        tools: sessionForm.value.tools
+      })
+    })
+
+    if (!dbResponse.ok) {
+      console.error('Failed to save session to database:', dbResponse.status)
+      // Continue anyway - session can still run without DB persistence
+    }
+
+    // Create session with WebSocket
     agentWs.send({
       type: 'create_session',
       session_id: sessionId,
@@ -839,8 +873,13 @@ const loadSelectedAgent = async () => {
   }
 }
 
-const selectSession = (sessionId) => {
+const selectSession = async (sessionId) => {
   activeSessionId.value = sessionId
+
+  // Load messages for this session if not already loaded
+  if (!messages.value[sessionId]) {
+    await loadSessionMessages(sessionId)
+  }
 
   // Focus the input when switching to a session
   focusMessageInput()
@@ -892,6 +931,45 @@ const loadAvailableSessions = async () => {
     availableSessions.value = []
   } finally {
     loadingSessions.value = false
+  }
+}
+
+// Load active agent sessions from the database
+const loadActiveSessions = async () => {
+  try {
+    const response = await fetchWithAuth('/api/agent-sessions', {
+      method: 'GET'
+    })
+    const data = await response.json()
+    if (data && data.sessions && Array.isArray(data.sessions)) {
+      sessions.value = data.sessions
+      console.log('Loaded active agent sessions:', data.sessions)
+    }
+  } catch (error) {
+    console.error('Failed to load active agent sessions:', error)
+  }
+}
+
+const loadSessionMessages = async (sessionId) => {
+  try {
+    const response = await fetchWithAuth(`/api/agent-sessions/${sessionId}`, {
+      method: 'GET'
+    })
+    const data = await response.json()
+    if (data && data.messages && Array.isArray(data.messages)) {
+      messages.value[sessionId] = data.messages.map(msg => ({
+        id: msg.message_id || crypto.randomUUID(),
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(msg.timestamp || msg.created_at),
+        toolName: msg.tool_name || undefined,
+        toolResult: msg.tool_result || undefined,
+        isHistorical: true
+      }))
+      console.log(`Loaded ${data.messages.length} messages for session ${sessionId}`)
+    }
+  } catch (error) {
+    console.error(`Failed to load messages for session ${sessionId}:`, error)
   }
 }
 
@@ -1680,7 +1758,13 @@ agentWs.on('onAgentsKilled', (data) => {
 })
 
 // Load existing sessions on mount
-onMounted(() => {
+onMounted(async () => {
+  // Load available avatars
+  await loadAvatars()
+
+  // Load active sessions from the database to restore state after refresh
+  await loadActiveSessions()
+
   if (agentWs.connected) {
     agentWs.send({ type: 'list_sessions' })
   }

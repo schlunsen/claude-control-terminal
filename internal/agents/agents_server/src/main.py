@@ -1,6 +1,7 @@
 """Main FastAPI application with WebSocket endpoint for agent conversations."""
 
 import asyncio
+import hashlib
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -34,6 +35,7 @@ from .models import (
     SessionStatus,
 )
 from .session import session_manager
+from .persistence import persistence_client
 
 # Configure logging
 logging.basicConfig(
@@ -48,15 +50,33 @@ async def lifespan(app: FastAPI):
     """Manage application lifecycle."""
     # Startup
     logger.info("Starting agent server...")
+
     # Initialize agent loader
     logger.info("Initializing agent loader...")
-    initialize_agent_loader()
-    logger.info("Agent loader initialized")
+    try:
+        initialize_agent_loader()
+        logger.info("Agent loader initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize agent loader: {type(e).__name__}: {e}")
+        raise
+
+    # Initialize persistence client
+    logger.info("Initializing persistence client...")
+    try:
+        await persistence_client.init()
+        logger.info("Persistence client initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize persistence client: {type(e).__name__}: {e}")
+        logger.error("⚠️  Agent data persistence is disabled - messages will not be saved to database")
+        # Don't raise - allow server to continue without persistence
+
     await session_manager.start()
     yield
+
     # Shutdown
     logger.info("Shutting down agent server...")
     await session_manager.stop()
+    await persistence_client.close()
     await agent_manager.cleanup_all()
 
 
@@ -156,6 +176,7 @@ class WebSocketConnection:
         self.websocket = websocket
         self.authenticated = False
         self.client_address = websocket.client.host
+        self.pending_tasks = []  # Track background tasks
 
     async def send_json(self, data: dict):
         """Send JSON data to client."""
@@ -189,6 +210,20 @@ class WebSocketConnection:
             )
             logger.info(f"Client {self.client_address}: Session created: {session.id}")
 
+            # Save session to database
+            logger.debug(f"Client {self.client_address}: Saving session to database...")
+            tools_list = [t.value for t in msg.options.tools] if msg.options.tools else []
+            await persistence_client.save_session(
+                session_id=session.id,
+                session_name=f"Session {str(session.id)[:8]}",
+                avatar_name="",
+                working_directory=msg.options.working_directory or "",
+                agent_name=msg.options.agent_name or "",
+                system_prompt=msg.options.system_prompt or "",
+                permission_mode=msg.options.permission_mode or "default",
+                tools=tools_list
+            )
+
             # Create agent
             logger.debug(f"Client {self.client_address}: Creating agent for session...")
             await agent_manager.create_agent(session.id, msg.options)
@@ -215,6 +250,7 @@ class WebSocketConnection:
     async def handle_send_prompt(self, data: dict):
         """Handle send prompt request."""
         try:
+            logger.warning(f"Client {self.client_address}: 🟠 BACKGROUND TASK STARTED: handle_send_prompt")
             logger.debug(f"Client {self.client_address}: ======== SEND PROMPT REQUEST ========")
             logger.debug(f"Client {self.client_address}: Request data keys: {list(data.keys())}")
 
@@ -230,6 +266,16 @@ class WebSocketConnection:
                 return
 
             logger.debug(f"Client {self.client_address}: Session found - status: {session.status}, message_count: {session.message_count}")
+
+            # Save user message first so it has earliest timestamp
+            logger.info(f"Client {self.client_address}: 💾 Saving user prompt to database")
+            await persistence_client.save_message(
+                session_id=msg.session_id,
+                message_id="user-prompt",
+                role="user",
+                content=msg.prompt
+            )
+            logger.info(f"Client {self.client_address}: ✓ Saved user prompt")
 
             # Update session status
             logger.debug(f"Client {self.client_address}: Updating session status to PROCESSING")
@@ -264,33 +310,77 @@ class WebSocketConnection:
 
             try:
                 logger.debug(f"Client {self.client_address}: Starting to iterate over agent responses...")
+                logger.info(f"Client {self.client_address}: 🔵 ENTERING RESPONSE LOOP")
+
+                # Track seen message content hashes to prevent duplicates
+                seen_message_hashes = set()
+
                 async for response in agent_manager.send_prompt(
                     msg.session_id,
                     msg.prompt,
                     send_message_callback=send_permission_message
                 ):
                     response_count += 1
+                    logger.info(f"Client {self.client_address}: 🟢 GOT RESPONSE #{response_count}")
                     logger.debug(f"Client {self.client_address}: ======== RESPONSE #{response_count} ========")
-                    logger.debug(f"Client {self.client_address}: Response type: {response.get('type')}")
+                    resp_type = response.get('type')
+                    logger.info(f"Client {self.client_address}: Response type: {resp_type} (keys: {list(response.keys())})")
 
                     # Add session_id to response
                     response["session_id"] = str(msg.session_id)
 
-                    # Map response type
-                    if response.get("type") == "agent_message":
+                    # Map response type and save messages
+                    if resp_type == "agent_message":
                         response["type"] = MessageType.AGENT_MESSAGE.value
-                        content = response.get("content", "")[:80]
-                        logger.debug(f"Client {self.client_address}: Agent message ({len(response.get('content', ''))} chars): {content}...")
-                    elif response.get("type") == "agent_thinking":
+                        content = response.get("content", "")
+                        content_preview = content[:80]
+                        logger.debug(f"Client {self.client_address}: Agent message ({len(content)} chars): {content_preview}...")
+
+                        # Check for duplicate messages (same role and content)
+                        message_hash = hashlib.md5(f"assistant:{content}".encode()).hexdigest()
+                        if message_hash in seen_message_hashes:
+                            logger.warning(f"Client {self.client_address}: ⚠️  DUPLICATE agent_message detected - skipping save")
+                            logger.debug(f"Client {self.client_address}: Hash: {message_hash}, Content length: {len(content)}")
+                        else:
+                            seen_message_hashes.add(message_hash)
+                            # Save message to database
+                            logger.info(f"Client {self.client_address}: 💾 Attempting to save assistant message msg-{response_count}")
+                            await persistence_client.save_message(
+                                session_id=msg.session_id,
+                                message_id=f"msg-{response_count}",
+                                role="assistant",
+                                content=content,
+                                token_count=response.get("token_count", 0)
+                            )
+                            logger.info(f"Client {self.client_address}: ✓ Saved assistant message msg-{response_count}")
+                    elif resp_type == "agent_thinking":
                         response["type"] = MessageType.AGENT_THINKING.value
                         logger.debug(f"Client {self.client_address}: Thinking: {response.get('thinking')}")
-                    elif response.get("type") == "agent_tool_use":
+                    elif resp_type == "agent_tool_use":
                         response["type"] = MessageType.AGENT_TOOL_USE.value
                         logger.info(f"Client {self.client_address}: Tool use: {response.get('tool')} with ID: {response.get('tool_use_id')}")
-                    elif response.get("type") == "permission_request":
+
+                        # Check for duplicate tool use messages
+                        tool_use_id = response.get('tool_use_id', f'tool-{response_count}')
+                        tool_content = f"Using tool: {response.get('tool')}"
+                        tool_hash = hashlib.md5(f"assistant:{tool_content}:{tool_use_id}".encode()).hexdigest()
+
+                        if tool_hash not in seen_message_hashes:
+                            seen_message_hashes.add(tool_hash)
+                            # Save tool use message to database
+                            await persistence_client.save_message(
+                                session_id=msg.session_id,
+                                message_id=tool_use_id,
+                                role="assistant",
+                                content=tool_content,
+                                tool_name=response.get('tool', '')
+                            )
+                        else:
+                            logger.warning(f"Client {self.client_address}: ⚠️  DUPLICATE agent_tool_use detected - skipping save")
+                    elif resp_type == "permission_request":
                         response["type"] = MessageType.PERMISSION_REQUEST.value
                         logger.info(f"Client {self.client_address}: Permission request: {response.get('request_id')}")
-                    elif response.get("type") == "agent_error":
+                    elif resp_type == "agent_error":
                         response["type"] = MessageType.AGENT_ERROR.value
                         logger.error(f"Client {self.client_address}: Agent error: {response.get('message')}")
 
@@ -431,10 +521,14 @@ class WebSocketConnection:
             logger.debug(f"Client {self.client_address}: Routing to handle_create_session")
             await self.handle_create_session(data)
         elif msg_type == MessageType.SEND_PROMPT.value:
+            logger.warning(f"Client {self.client_address}: 📍 ABOUT TO CREATE BACKGROUND TASK for send_prompt")
             logger.debug(f"Client {self.client_address}: Routing to handle_send_prompt (background task)")
             # Run prompt handling in background to not block permission responses
+            logger.warning(f"Client {self.client_address}: 🔨 CREATING TASK NOW...")
             task = asyncio.create_task(self.handle_send_prompt(data))
-            logger.debug(f"Client {self.client_address}: Background task created for send_prompt")
+            self.pending_tasks.append(task)  # Track the task
+            task.add_done_callback(lambda t: self.pending_tasks.remove(t) if t in self.pending_tasks else None)
+            logger.warning(f"Client {self.client_address}: ✅ TASK CREATED AND TRACKED (total pending: {len(self.pending_tasks)})")
         elif msg_type == MessageType.END_SESSION.value:
             logger.debug(f"Client {self.client_address}: Routing to handle_end_session")
             await self.handle_end_session(data)
@@ -508,6 +602,14 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         logger.info(f"Client {connection.client_address}: ======== WEBSOCKET DISCONNECTED ========")
         logger.debug(f"Client {connection.client_address}: Total messages received: {message_count}")
+        # Wait for pending tasks to complete before closing
+        if connection.pending_tasks:
+            logger.info(f"Client {connection.client_address}: Waiting for {len(connection.pending_tasks)} pending task(s) to complete...")
+            try:
+                await asyncio.gather(*connection.pending_tasks, return_exceptions=True)
+                logger.info(f"Client {connection.client_address}: All pending tasks completed")
+            except Exception as e:
+                logger.error(f"Client {connection.client_address}: Error waiting for pending tasks: {e}")
     except Exception as e:
         logger.error(f"Client {connection.client_address}: ======== WEBSOCKET ERROR ========")
         logger.error(f"Client {connection.client_address}: Error type: {type(e).__name__}")

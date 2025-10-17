@@ -155,6 +155,40 @@ CREATE INDEX IF NOT EXISTS idx_notifications_type
 CREATE INDEX IF NOT EXISTS idx_notifications_tool
     ON notifications(tool_name, notified_at DESC) WHERE tool_name IS NOT NULL;
 
+-- Table for live agent sessions
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL UNIQUE,
+    session_name TEXT NOT NULL,
+    avatar_name TEXT,
+    working_directory TEXT,
+    agent_name TEXT,
+    system_prompt TEXT,
+    status TEXT DEFAULT 'active', -- 'active', 'paused', 'ended'
+    permission_mode TEXT,
+    tools TEXT, -- JSON array
+    message_count INTEGER DEFAULT 0,
+    total_tokens INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP
+);
+
+-- Table for agent session messages
+CREATE TABLE IF NOT EXISTS agent_session_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    role TEXT NOT NULL, -- 'user', 'assistant', 'system'
+    content TEXT NOT NULL,
+    tool_name TEXT,
+    tool_result TEXT,
+    token_count INTEGER DEFAULT 0,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+);
+
 -- Indexes for model filtering
 CREATE INDEX IF NOT EXISTS idx_shell_commands_model
     ON shell_commands(model_provider, model_name);
@@ -170,3 +204,16 @@ CREATE INDEX IF NOT EXISTS idx_notifications_model
 
 CREATE INDEX IF NOT EXISTS idx_conversations_model
     ON conversations(model_provider, model_name);
+
+-- Indexes for agent sessions
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_status
+    ON agent_sessions(status, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_created_at
+    ON agent_sessions(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_session_messages_session
+    ON agent_session_messages(session_id, timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_session_messages_timestamp
+    ON agent_session_messages(timestamp DESC);
