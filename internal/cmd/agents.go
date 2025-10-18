@@ -33,7 +33,7 @@ Examples:
 	Run: func(cmd *cobra.Command, args []string) {
 		// If no subcommand, show status or help
 		config := agentspkg.DefaultConfig()
-		launcher := agentspkg.NewLauncher(config, agentsQuiet)
+		launcher := agentspkg.NewLauncher(config, agentsQuiet, false)
 
 		status, err := launcher.Status()
 		if err != nil {
@@ -53,7 +53,7 @@ var agentsStartCmd = &cobra.Command{
 	Long:  `Start the Claude agent WebSocket server. Automatically installs dependencies if needed.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		config := agentspkg.DefaultConfig()
-		launcher := agentspkg.NewLauncher(config, agentsQuiet)
+		launcher := agentspkg.NewLauncher(config, agentsQuiet, false)
 
 		if err := launcher.Start(); err != nil {
 			pterm.Error.Println("Failed to start agent server:", err)
@@ -69,7 +69,7 @@ var agentsStopCmd = &cobra.Command{
 	Long:  `Stop the Claude agent WebSocket server gracefully.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		config := agentspkg.DefaultConfig()
-		launcher := agentspkg.NewLauncher(config, agentsQuiet)
+		launcher := agentspkg.NewLauncher(config, agentsQuiet, false)
 
 		if err := launcher.Stop(); err != nil {
 			pterm.Error.Println("Failed to stop agent server:", err)
@@ -85,7 +85,7 @@ var agentsRestartCmd = &cobra.Command{
 	Long:  `Restart the Claude agent WebSocket server (stop then start).`,
 	Run: func(cmd *cobra.Command, args []string) {
 		config := agentspkg.DefaultConfig()
-		launcher := agentspkg.NewLauncher(config, agentsQuiet)
+		launcher := agentspkg.NewLauncher(config, agentsQuiet, false)
 
 		if err := launcher.Restart(); err != nil {
 			pterm.Error.Println("Failed to restart agent server:", err)
@@ -101,7 +101,7 @@ var agentsStatusCmd = &cobra.Command{
 	Long:  `Show the current status of the Claude agent WebSocket server.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		config := agentspkg.DefaultConfig()
-		launcher := agentspkg.NewLauncher(config, agentsQuiet)
+		launcher := agentspkg.NewLauncher(config, agentsQuiet, false)
 
 		status, err := launcher.Status()
 		if err != nil {
@@ -120,7 +120,7 @@ var agentsLogsCmd = &cobra.Command{
 	Long:  `Show the agent server logs. Use --follow to tail logs in real-time.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		config := agentspkg.DefaultConfig()
-		launcher := agentspkg.NewLauncher(config, true) // Always quiet for logs
+		launcher := agentspkg.NewLauncher(config, true, false) // Always quiet for logs
 
 		if err := launcher.Logs(agentsLines, agentsFollow); err != nil {
 			pterm.Error.Println("Failed to show logs:", err)
@@ -150,7 +150,7 @@ func init() {
 // LaunchAgentServer is called by the --agents flag for backward compatibility
 func LaunchAgentServer() {
 	config := agentspkg.DefaultConfig()
-	launcher := agentspkg.NewLauncher(config, false)
+	launcher := agentspkg.NewLauncher(config, false, false)
 
 	// Check if already running
 	running, _, _ := launcher.IsRunning()

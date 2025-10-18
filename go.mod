@@ -55,3 +55,5 @@ require (
 	golang.org/x/term v0.36.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 )
+
+replace github.com/schlunsen/claude-agent-sdk-go => /Users/schlunsen/projects/claude-agent-sdk-go

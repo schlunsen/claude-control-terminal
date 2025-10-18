@@ -28,12 +28,18 @@ func DefaultConfig() *Config {
 
 	serverDir := filepath.Join(homeDir, ".claude", "agents_server")
 
+	// Try ANTHROPIC_API_KEY first (standard), then fall back to CLAUDE_API_KEY
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("CLAUDE_API_KEY")
+	}
+
 	return &Config{
 		Host:                  getEnvOrDefault("AGENT_SERVER_HOST", "127.0.0.1"),
 		Port:                  getEnvIntOrDefault("AGENT_SERVER_PORT", 8001),
 		LogLevel:              getEnvOrDefault("AGENT_SERVER_LOG_LEVEL", "INFO"),
 		Model:                 getEnvOrDefault("AGENT_SERVER_MODEL", "claude-3-5-sonnet-latest"),
-		APIKey:                getEnvOrDefault("CLAUDE_API_KEY", ""),
+		APIKey:                apiKey,
 		MaxConcurrentSessions: getEnvIntOrDefault("AGENT_SERVER_MAX_CONCURRENT_SESSIONS", 10),
 		ServerDir:             serverDir,
 		PIDFile:               filepath.Join(serverDir, ".pid"),
