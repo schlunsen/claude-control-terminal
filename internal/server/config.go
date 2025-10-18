@@ -17,6 +17,7 @@ type Config struct {
 	Auth    AuthSettings    `json:"auth"`
 	Server  ServerSettings  `json:"server"`
 	CORS    CORSSettings    `json:"cors"`
+	Agent   AgentSettings   `json:"agent"`
 }
 
 // TLSSettings holds TLS configuration
@@ -42,6 +43,12 @@ type ServerSettings struct {
 // CORSSettings holds CORS configuration
 type CORSSettings struct {
 	AllowedOrigins []string `json:"allowed_origins"`
+}
+
+// AgentSettings holds agent configuration
+type AgentSettings struct {
+	Model                 string `json:"model"`
+	MaxConcurrentSessions int    `json:"max_concurrent_sessions"`
 }
 
 // ConfigManager handles configuration loading and saving
@@ -174,6 +181,10 @@ func (cm *ConfigManager) getDefaultConfig() *Config {
 				"http://127.0.0.1:3333",
 				"https://127.0.0.1:3333",
 			},
+		},
+		Agent: AgentSettings{
+			Model:                 "claude-3-5-sonnet-latest",
+			MaxConcurrentSessions: 10,
 		},
 	}
 }

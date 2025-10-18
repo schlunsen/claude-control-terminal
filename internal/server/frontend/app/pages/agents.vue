@@ -71,6 +71,7 @@
               <div class="session-meta">
                 <span class="session-status" :class="session.status">{{ session.status }}</span>
                 <span class="session-messages">{{ session.message_count }} messages</span>
+                <span v-if="session.cost_usd" class="session-cost">${{ session.cost_usd.toFixed(4) }}</span>
               </div>
             </div>
             <button @click.stop="endSession(session.id)" class="btn-end-session" title="End session">
@@ -1321,6 +1322,65 @@ const killAllAgents = async () => {
   }
 }
 
+// Helper function to extract text content from nested content object
+const extractTextContent = (content: any): string => {
+  if (!content) return ''
+
+  // If content is already a string, return it
+  if (typeof content === 'string') return content
+
+  // If content is an object with nested structure
+  if (typeof content === 'object') {
+    // Handle assistant messages with text array
+    if (content.type === 'assistant') {
+      // Check if text array exists and is not null/empty
+      if (Array.isArray(content.text) && content.text.length > 0) {
+        return content.text.join('\n')
+      }
+      // Empty or null text array - no content to display
+      return ''
+    }
+
+    // Handle user messages
+    if (content.type === 'user' && content.content) {
+      return String(content.content)
+    }
+
+    // Handle result messages (completion signal - no visible content)
+    if (content.type === 'result') {
+      return ''
+    }
+
+    // Handle system messages
+    if (content.type === 'system') {
+      return `SystemMessage: ${content.subtype || 'unknown'}`
+    }
+
+    // Fallback: stringify the object
+    return JSON.stringify(content)
+  }
+
+  return String(content)
+}
+
+// Helper to check if content is complete signal
+const isCompleteSignal = (content: any): boolean => {
+  return typeof content === 'object' && content.type === 'result'
+}
+
+// Helper to extract cost/usage data from result messages
+const extractCostData = (content: any) => {
+  if (typeof content === 'object' && content.type === 'result') {
+    return {
+      costUSD: content.cost_usd || 0,
+      numTurns: content.num_turns || 0,
+      durationMs: content.duration_ms || 0,
+      usage: content.usage || null
+    }
+  }
+  return null
+}
+
 // WebSocket event handlers
 agentWs.on('onSessionCreated', (data) => {
   sessions.value.push(data.session)
@@ -1332,18 +1392,41 @@ agentWs.on('onSessionCreated', (data) => {
 })
 
 agentWs.on('onAgentMessage', (data) => {
+  console.log('📨 Received agent message:', data)
+
   if (!messages.value[data.session_id]) {
     messages.value[data.session_id] = []
   }
 
-  // Update session status and message count
+  // Check if this is a completion signal (result message)
+  const isComplete = isCompleteSignal(data.content)
+
+  // Extract cost data from result messages
+  const costData = extractCostData(data.content)
+
+  // Extract text content from nested object
+  const textContent = extractTextContent(data.content)
+
+  console.log('💬 Extracted:', { isComplete, costData, textContent: textContent.substring(0, 50) })
+
+  // Update session status and metadata
   const session = sessions.value.find(s => s.id === data.session_id)
   if (session) {
-    // Set status to processing while streaming, idle when complete
-    session.status = data.complete ? 'idle' : 'processing'
+    // Update costs from result message
+    if (costData) {
+      session.cost_usd = (session.cost_usd || 0) + costData.costUSD
+      session.num_turns = costData.numTurns
+      session.duration_ms = costData.durationMs
+      session.usage = costData.usage
+      console.log('💰 Updated session cost:', session.cost_usd)
+    }
 
-    if (data.complete) {
+    // Set status: idle when complete, processing when receiving content
+    if (isComplete) {
+      session.status = 'idle'
       session.message_count = (session.message_count || 0) + 1
+    } else if (textContent) {
+      session.status = 'processing'
     }
   }
 
@@ -1351,97 +1434,15 @@ agentWs.on('onAgentMessage', (data) => {
   clearSessionToolExecution(data.session_id)
 
   // Clear todos when message completes (agent moving to next task)
-  if (data.complete) {
+  if (isComplete) {
     const existingTimer = todoHideTimers.value.get(data.session_id)
     if (existingTimer) {
       clearTimeout(existingTimer)
       todoHideTimers.value.delete(data.session_id)
     }
     sessionTodos.value.delete(data.session_id)
-  }
 
-  // Skip only empty content (unless it's a completion signal) and system messages
-  if (!data.complete && (!data.content ||
-      data.content.includes('SystemMessage'))) {
-    return
-  }
-
-  // Check if we're awaiting tool results (after permission approval)
-  const isToolResult = awaitingToolResults.value.has(data.session_id)
-
-  // For streaming, use message_id or create one for this stream
-  const messageId = data.message_id || 'stream-' + data.session_id
-
-  const existingMessage = messages.value[data.session_id].find(
-    m => (m.id === messageId || (m.streaming && !isToolResult)) && m.role === 'assistant'
-  )
-
-  // Force new message creation if this is a tool result
-  if (isToolResult && data.content) {
-    // Clear the flag since we're now creating the new message
-    awaitingToolResults.value.delete(data.session_id)
-
-    // Create a new message for tool results
-    messages.value[data.session_id].push({
-      id: messageId + '-result',  // Different ID to avoid conflicts
-      role: 'assistant',
-      content: data.content,
-      timestamp: new Date(),
-      streaming: !data.complete,
-      isToolResult: true
-    })
-
-    // Reset processing when we receive content
-    isProcessing.value = false
-    isThinking.value = false
-  } else if (existingMessage && !data.complete && !isToolResult && existingMessage.streaming) {
-    // Append to existing streaming message only if it's still marked as streaming
-    existingMessage.content += data.content
-    // Reset processing when we receive content
-    if (data.content) {
-      isProcessing.value = false
-      isThinking.value = false
-    }
-  } else if (!existingMessage && data.content && !isToolResult) {
-    // New message - only add if there's actual content and not a tool result
-    messages.value[data.session_id].push({
-      id: messageId,
-      role: 'assistant',
-      content: data.content,
-      timestamp: new Date(),
-      streaming: !data.complete
-    })
-    // Reset processing when we receive content
-    isProcessing.value = false
-    isThinking.value = false
-  }
-
-  if (data.complete) {
-    // Handle completion message
-    if (data.content && !existingMessage && !isToolResult) {
-      // This is a completion message with content but no existing message
-      // Create a new message with the final content
-      messages.value[data.session_id].push({
-        id: messageId,
-        role: 'assistant',
-        content: data.content,
-        timestamp: new Date(),
-        streaming: false
-      })
-    } else if (existingMessage && !isToolResult) {
-      // Mark existing message streaming as complete
-      existingMessage.streaming = false
-    } else {
-      // If this was a tool result completion, find and mark it complete
-      const toolResultMessage = messages.value[data.session_id].find(
-        m => m.id === messageId + '-result' && m.role === 'assistant'
-      )
-      if (toolResultMessage) {
-        toolResultMessage.streaming = false
-      }
-    }
-
-    // Ensure processing is reset on completion
+    // Reset processing state
     isProcessing.value = false
     isThinking.value = false
 
@@ -1449,7 +1450,42 @@ agentWs.on('onAgentMessage', (data) => {
     if (data.session_id === activeSessionId.value) {
       focusMessageInput()
     }
+
+    // Don't create a UI message for result/completion
+    console.log('✅ Message complete (result received)')
+    return
   }
+
+  // Skip empty content and system messages (they don't need UI display)
+  if (!textContent || textContent.includes('SystemMessage')) {
+    console.log('⏭️  Skipping empty/system message')
+    return
+  }
+
+  // Check if we're awaiting tool results (after permission approval)
+  const isToolResult = awaitingToolResults.value.has(data.session_id)
+  if (isToolResult) {
+    awaitingToolResults.value.delete(data.session_id)
+  }
+
+  // Create or update assistant message
+  // Since backend sends complete messages (not character-by-character streaming),
+  // we just create a new message for each response
+  const newMessage = {
+    id: `msg-${data.session_id}-${Date.now()}`,
+    role: 'assistant',
+    content: textContent,
+    timestamp: new Date(),
+    streaming: false,
+    isToolResult: isToolResult
+  }
+
+  messages.value[data.session_id].push(newMessage)
+  console.log('✨ Created new message:', newMessage.id)
+
+  // Reset processing state when we receive content
+  isProcessing.value = false
+  isThinking.value = false
 
   // Auto-scroll to bottom
   nextTick(() => {
@@ -1888,6 +1924,22 @@ watch(() => agentWs.connected, (connected) => {
   gap: 12px;
   font-size: 0.8rem;
   opacity: 0.8;
+  flex-wrap: wrap;
+}
+
+.session-messages {
+  color: var(--text-secondary);
+}
+
+.session-cost {
+  color: var(--accent-green);
+  font-weight: 600;
+  font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.session-item.active .session-messages,
+.session-item.active .session-cost {
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .session-status {

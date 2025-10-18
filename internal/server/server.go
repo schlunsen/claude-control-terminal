@@ -5,7 +5,6 @@ package server
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,13 +12,13 @@ import (
 
 	"github.com/schlunsen/claude-control-terminal/internal/analytics"
 	"github.com/schlunsen/claude-control-terminal/internal/database"
+	"github.com/schlunsen/claude-control-terminal/internal/server/agents"
 	"github.com/schlunsen/claude-control-terminal/internal/version"
 	ws "github.com/schlunsen/claude-control-terminal/internal/websocket"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/websocket/v2"
-	gorillaws "github.com/gorilla/websocket"
 )
 
 // Server wraps the Fiber app and analytics components.
@@ -40,6 +39,8 @@ type Server struct {
 	config               *Config
 	tlsConfig            *TLSConfig
 	authMiddleware       *AuthMiddleware
+	agentHandler         *agents.AgentHandler
+	agentConfig          *agents.Config
 	claudeDir            string
 	port                 int
 	quiet                bool // Suppress output when running in TUI
@@ -98,6 +99,27 @@ func (s *Server) Setup() error {
 			return fmt.Errorf("failed to initialize API key: %w", err)
 		}
 		s.authMiddleware = NewAuthMiddleware(apiKey, true)
+	}
+
+	// Initialize agent configuration
+	agentAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	if agentAPIKey == "" {
+		agentAPIKey = os.Getenv("CLAUDE_API_KEY")
+	}
+
+	agentConfig := &agents.Config{
+		Model:                 config.Agent.Model,
+		APIKey:                agentAPIKey,
+		MaxConcurrentSessions: config.Agent.MaxConcurrentSessions,
+	}
+	s.agentConfig = agentConfig
+
+	// Initialize agent handler
+	s.agentHandler = agents.NewAgentHandler(agentConfig)
+
+	if !s.quiet {
+		fmt.Printf("🤖 Agent handler initialized (model: %s, max sessions: %d)\n",
+			agentConfig.Model, agentConfig.MaxConcurrentSessions)
 	}
 
 	// Configure CORS middleware
@@ -215,11 +237,9 @@ func (s *Server) setupRoutes() {
 	api.Get("/agents", s.handleListAgents)
 	api.Get("/agents/:name", s.handleGetAgentDetail)
 
-	// Agent server proxy endpoints (if agent server is running)
-	api.All("/agent/*", s.handleAgentProxy)
-
-	// Agent WebSocket proxy
-	s.app.Get("/agent/ws", websocket.New(s.handleAgentWebSocketProxy()))
+	// Agent WebSocket endpoint (direct, not proxied)
+	// Use Fiber's WebSocket middleware with our Fiber-compatible handler
+	s.app.Get("/agent/ws", websocket.New(s.agentHandler.HandleFiberWebSocket))
 }
 
 // Handler: Health check
@@ -555,6 +575,13 @@ func (s *Server) Start() error {
 func (s *Server) Shutdown() error {
 	if !s.quiet {
 		fmt.Println("🛑 Shutting down server...")
+	}
+
+	// Cleanup agent sessions
+	if s.agentHandler != nil {
+		if err := s.agentHandler.Cleanup(); err != nil && !s.quiet {
+			fmt.Printf("⚠️  Error cleaning up agent sessions: %v\n", err)
+		}
 	}
 
 	// Stop file watcher
@@ -1677,122 +1704,4 @@ func parseFrontmatterWithPrompt(content string) map[string]interface{} {
 	}
 
 	return data
-}
-
-// Handler: Proxy requests to agent server
-func (s *Server) handleAgentProxy(c *fiber.Ctx) error {
-	// Extract the path after /agent/
-	path := c.Params("*")
-
-	// Build target URL for agent server
-	agentURL := fmt.Sprintf("http://localhost:8001/%s", path)
-
-	// Check if it's a WebSocket upgrade request
-	if c.Get("Upgrade") == "websocket" {
-		// For WebSocket, we need special handling
-		// The Fiber WebSocket middleware should handle this
-		return fiber.ErrUpgradeRequired
-	}
-
-	// For regular HTTP requests, proxy to agent server
-	agent := fiber.AcquireAgent()
-	defer fiber.ReleaseAgent(agent)
-
-	req := agent.Request()
-	req.Header.SetMethod(c.Method())
-	req.SetRequestURI(agentURL)
-
-	// Copy headers
-	c.Request().Header.VisitAll(func(key, value []byte) {
-		req.Header.SetBytesKV(key, value)
-	})
-
-	// Copy body if present
-	if len(c.Body()) > 0 {
-		req.SetBody(c.Body())
-	}
-
-	// Execute request
-	if err := agent.Parse(); err != nil {
-		return c.Status(502).JSON(fiber.Map{
-			"error": "Failed to connect to agent server",
-		})
-	}
-
-	statusCode, body, errs := agent.Bytes()
-	if len(errs) > 0 {
-		return c.Status(502).JSON(fiber.Map{
-			"error": "Agent server error",
-		})
-	}
-
-	// Response headers are already included in the body response from Fiber's agent
-
-	// Return response
-	return c.Status(statusCode).Send(body)
-}
-
-// handleAgentWebSocketProxy returns a WebSocket handler that proxies to the agent server
-func (s *Server) handleAgentWebSocketProxy() func(*websocket.Conn) {
-	return func(clientConn *websocket.Conn) {
-		defer clientConn.Close()
-
-		// Connect to agent server WebSocket
-		agentURL := "ws://localhost:8001/ws"
-
-		// Get the token from query params
-		token := clientConn.Query("token")
-		if token != "" {
-			agentURL += "?token=" + token
-		}
-
-		// Connect to agent server
-		agentConn, _, err := gorillaws.DefaultDialer.Dial(agentURL, http.Header{})
-		if err != nil {
-			clientConn.WriteJSON(fiber.Map{
-				"type":    "error",
-				"message": "Failed to connect to agent server",
-			})
-			return
-		}
-		defer agentConn.Close()
-
-		// Create channels for bidirectional proxying
-		clientDone := make(chan struct{})
-		agentDone := make(chan struct{})
-
-		// Proxy from client to agent
-		go func() {
-			defer close(clientDone)
-			for {
-				messageType, data, err := clientConn.ReadMessage()
-				if err != nil {
-					return
-				}
-				if err := agentConn.WriteMessage(messageType, data); err != nil {
-					return
-				}
-			}
-		}()
-
-		// Proxy from agent to client
-		go func() {
-			defer close(agentDone)
-			for {
-				messageType, data, err := agentConn.ReadMessage()
-				if err != nil {
-					return
-				}
-				if err := clientConn.WriteMessage(messageType, data); err != nil {
-					return
-				}
-			}
-		}()
-
-		// Wait for either connection to close
-		select {
-		case <-clientDone:
-		case <-agentDone:
-		}
-	}
 }
