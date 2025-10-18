@@ -8,15 +8,15 @@ import (
 
 // Config holds configuration for the agent server
 type Config struct {
-	Host             string
-	Port             int
-	LogLevel         string
-	Reload           bool
-	AuthEnabled      bool
+	Host                  string
+	Port                  int
+	LogLevel              string
+	Model                 string
+	APIKey                string
 	MaxConcurrentSessions int
-	ServerDir        string
-	PIDFile          string
-	LogFile          string
+	ServerDir             string
+	PIDFile               string
+	LogFile               string
 }
 
 // DefaultConfig returns the default configuration
@@ -28,12 +28,18 @@ func DefaultConfig() *Config {
 
 	serverDir := filepath.Join(homeDir, ".claude", "agents_server")
 
+	// Try ANTHROPIC_API_KEY first (standard), then fall back to CLAUDE_API_KEY
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("CLAUDE_API_KEY")
+	}
+
 	return &Config{
 		Host:                  getEnvOrDefault("AGENT_SERVER_HOST", "127.0.0.1"),
 		Port:                  getEnvIntOrDefault("AGENT_SERVER_PORT", 8001),
 		LogLevel:              getEnvOrDefault("AGENT_SERVER_LOG_LEVEL", "INFO"),
-		Reload:                getEnvBoolOrDefault("AGENT_SERVER_RELOAD", false),
-		AuthEnabled:           getEnvBoolOrDefault("AGENT_SERVER_AUTH_ENABLED", true),
+		Model:                 getEnvOrDefault("AGENT_SERVER_MODEL", "claude-3-5-sonnet-latest"),
+		APIKey:                apiKey,
 		MaxConcurrentSessions: getEnvIntOrDefault("AGENT_SERVER_MAX_CONCURRENT_SESSIONS", 10),
 		ServerDir:             serverDir,
 		PIDFile:               filepath.Join(serverDir, ".pid"),
@@ -78,16 +84,3 @@ func getEnvBoolOrDefault(key string, defaultValue bool) bool {
 	return defaultValue
 }
 
-// ToEnvVars converts config to environment variables for the Python process
-func (c *Config) ToEnvVars() []string {
-	env := os.Environ()
-	env = append(env,
-		"AGENT_SERVER_HOST="+c.Host,
-		"AGENT_SERVER_PORT="+strconv.Itoa(c.Port),
-		"AGENT_SERVER_LOG_LEVEL="+c.LogLevel,
-		"AGENT_SERVER_RELOAD="+strconv.FormatBool(c.Reload),
-		"AGENT_SERVER_AUTH_ENABLED="+strconv.FormatBool(c.AuthEnabled),
-		"AGENT_SERVER_MAX_CONCURRENT_SESSIONS="+strconv.Itoa(c.MaxConcurrentSessions),
-	)
-	return env
-}

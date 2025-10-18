@@ -46,11 +46,10 @@ export const useAgentWebSocket = () => {
       // Determine protocol based on current page protocol
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
 
-      // In development, connect directly to agent server port 8001
-      // In production, connect through proxy
-      const isDev = process.dev || window.location.port === '3001' || window.location.port === '3002'
-      const host = isDev ? 'localhost:8001' : window.location.host
-      const path = isDev ? '/ws' : '/agent/ws'
+      // Connect to unified server's agent WebSocket endpoint at /agent/ws
+      // The analytics server directly handles agent functionality (no proxy)
+      const host = window.location.host
+      const path = '/agent/ws'
       const wsUrl = `${protocol}//${host}${path}?token=${apiKey}`
 
       ws.value = new WebSocket(wsUrl)

@@ -41,7 +41,6 @@ var (
 	// Service flags
 	analytics    bool
 	chats        bool
-	agents       bool
 	chatsMobile  bool
 	plugins      bool
 	tunnel       bool
@@ -117,7 +116,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		// Show banner for interactive mode
-		isInteractive := !analytics && !chats && !agents && !chatsMobile && !plugins &&
+		isInteractive := !analytics && !chats && !chatsMobile && !plugins &&
 			!healthCheck && !commandStats && !hookStats && !mcpStats &&
 			!listAgents && createAgent == "" && removeAgent == "" && updateAgent == "" &&
 			agent == "" && command == "" && mcp == "" && setting == "" && hook == "" &&
@@ -173,7 +172,6 @@ func init() {
 	// Service flags
 	rootCmd.Flags().BoolVar(&analytics, "analytics", false, "launch analytics dashboard")
 	rootCmd.Flags().BoolVar(&chats, "chats", false, "launch mobile-first chats interface")
-	rootCmd.Flags().BoolVar(&agents, "agents", false, "launch agents dashboard")
 	rootCmd.Flags().BoolVar(&chatsMobile, "chats-mobile", false, "launch mobile chats interface")
 	rootCmd.Flags().BoolVar(&plugins, "plugins", false, "launch plugin dashboard")
 	rootCmd.Flags().BoolVar(&tunnel, "tunnel", false, "enable Cloudflare Tunnel for remote access")
@@ -261,12 +259,6 @@ func handleCommand(cmd *cobra.Command, args []string) {
 	if chats || chatsMobile {
 		fmt.Println("💬 Launching Chats Interface...")
 		fmt.Println("(Implementation coming soon)")
-		return
-	}
-
-	// Agents dashboard
-	if agents {
-		LaunchAgentServer()
 		return
 	}
 
