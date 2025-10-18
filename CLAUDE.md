@@ -9,12 +9,12 @@ This file provides guidance to Claude Code when working with code in this reposi
 ### Key Features
 - 🎮 **Control Center**: Comprehensive wrapper for Claude Code environments
 - 🚀 **CLI Tool**: Component installation (agents, commands, MCPs, settings, hooks)
-- 🤖 **Agent Server**: Python FastAPI WebSocket server for real-time Claude agent conversations
+- 🤖 **Agent Server**: Go-based WebSocket server for real-time Claude agent conversations using claude-agent-sdk-go
 - 🐳 **Docker Support**: Containerize Claude environments with one command
 - 📊 **Analytics Dashboard**: Real-time conversation monitoring with WebSocket support
 - 🔧 **Component Management**: 600+ agents, 200+ commands, MCPs from GitHub
 - ⚡ **Performance**: 10-50x faster startup, 3-5x lower memory vs Node.js
-- 📦 **Single Binary**: No dependencies, just one executable (Python embedded for agent server)
+- 📦 **Single Binary**: No dependencies, just one executable
 - 🌐 **Web Server**: Fiber-based REST API with real-time updates
 
 ## Technology Stack
@@ -25,6 +25,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 - **Terminal UI**: [Pterm](https://github.com/pterm/pterm) - Beautiful terminal output
 - **Web Framework**: [Fiber v2](https://github.com/gofiber/fiber) - Express-like HTTP framework
 - **WebSocket**: [Gorilla WebSocket](https://github.com/gorilla/websocket) + Fiber WebSocket
+- **Agent SDK**: [claude-agent-sdk-go](https://github.com/schlunsen/claude-agent-sdk-go) - Claude agent conversation SDK
 - **File Watching**: [fsnotify](https://github.com/fsnotify/fsnotify) - Cross-platform file notifications
 - **System Info**: [gopsutil](https://github.com/shirou/gopsutil) - Process detection
 
@@ -35,15 +36,26 @@ claude-control-terminal/
 ├── cmd/cct/                    # CLI entry point
 │   └── main.go                 # Application bootstrap
 ├── internal/                   # Private application code
-│   ├── agents/                 # Agent server (Python FastAPI)
-│   │   ├── embed.go           # Embedded Python source
-│   │   ├── installer.go       # Python dependency installer
-│   │   ├── launcher.go        # Process lifecycle manager
-│   │   ├── config.go          # Configuration
-│   │   └── agents_server/     # Python source (embedded)
-│   │       ├── main.py        # Entry point
-│   │       ├── pyproject.toml # Python dependencies
-│   │       └── src/           # FastAPI application
+│   ├── server/                 # Web server & agent functionality
+│   │   ├── server.go          # Fiber HTTP/HTTPS server
+│   │   ├── config.go          # Configuration management
+│   │   ├── tls.go             # TLS certificate generation
+│   │   ├── auth.go            # API key authentication
+│   │   ├── agents/            # Agent server implementation
+│   │   │   ├── agent_handler.go    # WebSocket agent handler
+│   │   │   ├── session_manager.go  # Agent session management
+│   │   │   ├── messages.go         # Message types
+│   │   │   └── config.go           # Agent configuration
+│   │   ├── static.go          # Embedded static files
+│   │   └── frontend/          # Nuxt 4 SPA frontend
+│   │       ├── app/           # Nuxt app directory (IMPORTANT!)
+│   │       │   ├── app.vue    # Root app component
+│   │       │   ├── pages/     # Vue pages (index.vue, agents.vue)
+│   │       │   └── composables/ # Vue composables (useAgentWebSocket.ts)
+│   │       ├── components/    # Vue components (SessionMetrics.vue)
+│   │       ├── types/         # TypeScript types
+│   │       ├── nuxt.config.ts # Nuxt configuration
+│   │       └── package.json   # Frontend dependencies
 │   ├── analytics/              # Analytics backend modules
 │   │   ├── state_calculator.go       # Conversation state logic
 │   │   ├── process_detector.go       # Process monitoring
@@ -51,7 +63,6 @@ claude-control-terminal/
 │   │   └── file_watcher.go          # Real-time file watching
 │   ├── cmd/                    # CLI commands & UI
 │   │   ├── root.go            # Cobra root command
-│   │   ├── agents.go          # Agent server commands
 │   │   └── banner.go          # Pterm UI helpers
 │   ├── components/             # Component installers
 │   │   ├── agent.go           # Agent installation
@@ -65,22 +76,6 @@ claude-control-terminal/
 │   │   ├── github.go          # GitHub API downloads
 │   │   ├── template.go        # Template processing
 │   │   └── utils.go           # File utilities
-│   ├── server/                 # Web server & Nuxt frontend
-│   │   ├── server.go          # Fiber HTTP/HTTPS server
-│   │   ├── config.go          # Configuration management
-│   │   ├── tls.go             # TLS certificate generation
-│   │   ├── auth.go            # API key authentication
-│   │   ├── static.go          # Embedded static files
-│   │   ├── static/            # Legacy static files
-│   │   └── frontend/          # Nuxt 4 SPA frontend
-│   │       ├── app/           # Nuxt app directory (IMPORTANT!)
-│   │       │   ├── app.vue    # Root app component
-│   │       │   ├── pages/     # Vue pages (index.vue)
-│   │       │   └── composables/ # Vue composables (useWebSocket.ts)
-│   │       ├── components/    # Vue components
-│   │       ├── types/         # TypeScript types
-│   │       ├── nuxt.config.ts # Nuxt configuration
-│   │       └── package.json   # Frontend dependencies
 │   └── websocket/              # Real-time updates
 │       └── websocket.go       # WebSocket hub
 ├── pkg/                        # Public libraries (future)
@@ -152,103 +147,50 @@ curl -k https://localhost:3333/api/processes
 curl -k https://localhost:3333/api/stats
 ```
 
-### Agent Server
+### Unified Server (Analytics + Agents)
 
-The agent server is a Python FastAPI WebSocket server that provides real-time agent conversations using the Claude Agent SDK.
+The unified server combines analytics dashboard and Claude agent functionality in a single Go-based Fiber server on port 3333.
 
 #### Features
-- WebSocket-based real-time communication
-- Full Claude Agent SDK integration
-- API key authentication (uses same key as analytics server)
-- Session management for multiple concurrent agent conversations
-- Tool support (Read, Write, Edit, Bash, etc.)
-- Automatic dependency installation with Python virtual environments
+- **Analytics Dashboard**: Real-time conversation monitoring with WebSocket support
+- **Agent Conversations**: WebSocket-based real-time Claude agent conversations using claude-agent-sdk-go
+- **API Key Authentication**: Unified authentication for all endpoints
+- **TLS/HTTPS**: Automatic self-signed certificate generation
+- **Session Management**: Multiple concurrent agent conversations
+- **Tool Support**: Full agent tool support (Read, Write, Edit, Bash, etc.)
 
 #### Quick Start
 
 ```bash
-# Start the agent server (auto-installs dependencies on first run)
-./cct agents start
-# or
-./cct --agents
+# Start unified server (includes analytics + agents)
+./cct --analytics
 
-# Check server status
-./cct agents status
-
-# View logs
-./cct agents logs
-
-# Follow logs in real-time
-./cct agents logs --follow
-
-# Stop the server
-./cct agents stop
-
-# Restart the server
-./cct agents restart
-
-# Force reinstall dependencies
-./cct agents install
+# Or in TUI, toggle "Server Status" (press 'A')
+./cct
 ```
 
-#### Architecture
+#### Unified Server Endpoints
 
-The agent server is automatically managed by `cct`:
+**Port**: 3333 (HTTPS by default)
 
-1. **Embedded Source**: Python source code is embedded in the Go binary
-2. **Auto-Installation**: On first run, `cct` extracts the source to `~/.claude/agents_server/`
-3. **Dependency Management**: Creates a Python virtual environment and installs dependencies using `uv` (if available) or `pip`
-4. **Process Management**: Go launcher manages the Python process lifecycle
-5. **Version Tracking**: Automatically updates when `cct` is updated
+**Endpoints**:
+- Analytics Dashboard: `https://localhost:3333/`
+- Analytics WebSocket: `wss://localhost:3333/ws`
+- Agent WebSocket: `wss://localhost:3333/agent/ws`
+- API: `https://localhost:3333/api/*`
 
-**Installation Directory:**
-```text
-~/.claude/agents_server/
-├── .venv/                  # Python virtual environment
-├── .pid                    # Process ID file
-├── .version                # Installed version
-├── server.log              # Server logs
-├── main.py                 # Entry point
-├── pyproject.toml          # Python dependencies
-└── src/                    # Source code
-    ├── main.py            # FastAPI application
-    ├── agent_manager.py   # Claude Agent SDK integration
-    ├── session.py         # Session management
-    ├── auth.py            # Authentication
-    ├── models.py          # Pydantic models
-    └── config.py          # Configuration
+#### Agent Functionality
+
+Agent conversations are now integrated into the unified server.
+
+**WebSocket Connection**:
+```javascript
+const ws = new WebSocket('wss://localhost:3333/agent/ws?token=<api-key>')
 ```
 
-#### Configuration
+The API key is stored in `~/.claude/analytics/.secret`.
 
-The agent server uses environment variables for configuration:
-
-```bash
-# Server configuration (defaults shown)
-export AGENT_SERVER_HOST=127.0.0.1
-export AGENT_SERVER_PORT=8001
-export AGENT_SERVER_LOG_LEVEL=INFO
-export AGENT_SERVER_RELOAD=false
-export AGENT_SERVER_AUTH_ENABLED=true
-export AGENT_SERVER_MAX_CONCURRENT_SESSIONS=10
-```
-
-#### Requirements
-
-- **Python**: 3.12+ (Python 3.13+ recommended)
-- **uv** (optional): For faster dependency installation
-  ```bash
-  # Install uv (optional, but recommended)
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-  ```
-
-#### WebSocket API
-
-Connect to `ws://localhost:8001/ws?token=<api_key>`
-
-The API key is the same one used by the analytics server, stored in `~/.claude/analytics/.secret`.
-
-**Message Types:**
+**Message Types**:
 - `create_session`: Create a new agent session
 - `send_prompt`: Send a prompt to the agent
 - `end_session`: End an agent session
@@ -256,52 +198,65 @@ The API key is the same one used by the analytics server, stored in `~/.claude/a
 - `kill_all_agents`: Kill all running agents
 - `permission_response`: Respond to permission requests
 
-See `internal/agents/agents_server/README.md` for full API documentation.
+**Frontend**: Access via Analytics Dashboard → "Live Agents" tab
+
+#### Configuration
+
+The unified server is configured via `~/.claude/analytics/config.json`:
+
+```json
+{
+  "server": {
+    "port": 3333,
+    "host": "127.0.0.1"
+  },
+  "tls": {
+    "enabled": true
+  },
+  "auth": {
+    "enabled": true
+  },
+  "agent": {
+    "model": "claude-3-5-sonnet-latest",
+    "max_concurrent_sessions": 10
+  }
+}
+```
+
+**Environment Variables**:
+- `ANTHROPIC_API_KEY`: Required for agent functionality
+- `CLAUDE_API_KEY`: Alternative to ANTHROPIC_API_KEY
 
 #### Troubleshooting
 
-**Python version too old:**
+**Port 3333 already in use:**
 ```bash
-# Check Python version
-python3 --version
-
-# The agent server requires Python 3.12+
-# Install Python 3.13 from https://www.python.org/downloads/
-```
-
-**Port 8001 already in use:**
-```bash
-# Find process using port 8001
-lsof -i :8001
+# Find process using port 3333
+lsof -i :3333
 
 # Kill the process
 kill -9 <PID>
-
-# Or configure a different port
-export AGENT_SERVER_PORT=8002
-./cct agents start
 ```
 
-**Dependencies installation fails:**
+**Agent functionality not working:**
 ```bash
-# Force reinstall
-./cct agents install
+# Check if ANTHROPIC_API_KEY is set
+echo $ANTHROPIC_API_KEY
 
-# If using uv, make sure it's up to date
-uv self update
-
-# Fall back to pip if needed (uv not required)
+# Set the API key
+export ANTHROPIC_API_KEY=your-api-key-here
 ```
 
-**Server won't start:**
+**WebSocket connection fails:**
 ```bash
-# Check logs for errors
-./cct agents logs
+# Check server is running
+# In TUI, verify "Server: ON (Analytics + Agents)"
 
-# Verify Python installation
-python3 -c "import sys; print(sys.version)"
+# Check firewall settings
+# Verify CORS configuration in config.json
 
-# Check if ANTHROPIC_API_KEY is set (required for agent functionality)
+# For self-signed certificates, use -k flag with curl
+curl -k https://localhost:3333/api/health
 echo $ANTHROPIC_API_KEY
 ```
 

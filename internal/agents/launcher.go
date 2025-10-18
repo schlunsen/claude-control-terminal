@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
+	"net"
+	"net/http"
 	"os"
-	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -14,22 +17,23 @@ import (
 	"time"
 )
 
-// Launcher manages the agent server process
+// Launcher manages the WebSocket server lifecycle
 type Launcher struct {
-	Config      *Config
-	ServerDir   string
-	Quiet       bool
-	logFile     *os.File // Keep reference for cleanup
-	cmd         *exec.Cmd // Keep reference to the process
-	cancelFunc  context.CancelFunc // Context for cancellation
+	Config     *Config
+	Quiet      bool
+	Background bool // When true, runs in background without blocking on signals
+	server     *http.Server
+	ctx        context.Context
+	cancel     context.CancelFunc
+	handler    *AgentHandler
 }
 
 // NewLauncher creates a new launcher instance
-func NewLauncher(config *Config, quiet bool) *Launcher {
+func NewLauncher(config *Config, quiet bool, background bool) *Launcher {
 	return &Launcher{
-		Config:    config,
-		ServerDir: config.ServerDir,
-		Quiet:     quiet,
+		Config:     config,
+		Quiet:      quiet,
+		Background: background,
 	}
 }
 
@@ -40,31 +44,7 @@ func (l *Launcher) log(format string, args ...interface{}) {
 	}
 }
 
-// heartbeatUpdater updates the heartbeat file periodically
-func (l *Launcher) heartbeatUpdater(heartbeatFile string) {
-	ticker := time.NewTicker(500 * time.Millisecond) // Update every 500ms
-	defer ticker.Stop()
-
-	for range ticker.C {
-		// Only update if the Go process is still running
-		if isProcessRunning(os.Getpid()) {
-			os.WriteFile(heartbeatFile, []byte("alive"), 0644)
-		} else {
-			// Parent process died, stop updating
-			return
-		}
-	}
-}
-
-// venvPythonPath returns the path to the Python executable in the venv
-func (l *Launcher) venvPythonPath() string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join(l.ServerDir, ".venv", "Scripts", "python.exe")
-	}
-	return filepath.Join(l.ServerDir, ".venv", "bin", "python")
-}
-
-// IsRunning checks if the agent server is currently running
+// IsRunning checks if the server is currently running
 func (l *Launcher) IsRunning() (bool, int, error) {
 	// Read PID file
 	pid, err := l.readPIDFile()
@@ -75,14 +55,14 @@ func (l *Launcher) IsRunning() (bool, int, error) {
 	// Check if process is running
 	if !isProcessRunning(pid) {
 		// Stale PID file, remove it
-		os.Remove(l.Config.PIDFile)
+		_ = os.Remove(l.Config.PIDFile)
 		return false, 0, nil
 	}
 
 	return true, pid, nil
 }
 
-// Start starts the agent server
+// Start starts the WebSocket server
 func (l *Launcher) Start() error {
 	// Check if already running
 	running, pid, _ := l.IsRunning()
@@ -91,120 +71,105 @@ func (l *Launcher) Start() error {
 		return nil
 	}
 
-	// Ensure server is installed
-	installer := NewInstaller(l.ServerDir, l.Quiet)
-	if err := installer.Install(); err != nil {
-		return fmt.Errorf("failed to install agent server: %w", err)
+	// Ensure server directory exists
+	if err := os.MkdirAll(l.Config.ServerDir, 0755); err != nil {
+		return fmt.Errorf("failed to create server directory: %w", err)
 	}
 
-	// Check for updates
-	if err := installer.Update(); err != nil {
-		return fmt.Errorf("failed to update agent server: %w", err)
+	// Validate API key
+	if l.Config.APIKey == "" {
+		return fmt.Errorf("API key is required. Set ANTHROPIC_API_KEY or CLAUDE_API_KEY environment variable")
+	}
+	l.log("→ API key configured (length: %d characters)", len(l.Config.APIKey))
+
+	// Create context for server lifecycle
+	l.ctx, l.cancel = context.WithCancel(context.Background())
+
+	// Create agent handler
+	l.handler = NewAgentHandler(l.Config)
+
+	// Set up HTTP server with WebSocket endpoints
+	mux := http.NewServeMux()
+	mux.HandleFunc("/ws", l.handler.HandleWebSocket)
+	mux.HandleFunc("/health", l.handler.HealthCheck)
+
+	addr := net.JoinHostPort(l.Config.Host, strconv.Itoa(l.Config.Port))
+	l.server = &http.Server{
+		Addr:    addr,
+		Handler: mux,
 	}
 
-	// Create a context that can be cancelled
-	ctx, cancel := context.WithCancel(context.Background())
-	l.cancelFunc = cancel
+	l.log("→ Starting agent server on ws://%s", addr)
 
-	// Start the server
-	l.log("→ Starting agent server on http://%s:%d", l.Config.Host, l.Config.Port)
-
-	pythonPath := l.venvPythonPath()
-	mainPath := filepath.Join(l.ServerDir, "main.py")
-
-	cmd := exec.CommandContext(ctx, pythonPath, mainPath)
-	cmd.Dir = l.ServerDir
-
-	// Set up process group for proper cleanup
-	if runtime.GOOS != "windows" {
-		cmd.SysProcAttr = &syscall.SysProcAttr{
-			Setpgid: true, // Create new process group
-			Pgid:    0,   // Make this process the group leader
+	// Start server in background
+	errChan := make(chan error, 1)
+	go func() {
+		if err := l.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errChan <- err
 		}
+	}()
+
+	// Wait briefly to check for immediate startup errors
+	select {
+	case err := <-errChan:
+		return fmt.Errorf("failed to start server: %w", err)
+	case <-time.After(500 * time.Millisecond):
+		// Server started successfully
 	}
 
-	// Set up environment variables
-	heartbeatFile := filepath.Join(l.ServerDir, ".heartbeat")
-	cmd.Env = append(l.Config.ToEnvVars(), "HEARTBEAT_FILE="+heartbeatFile)
-
-	// Set up log file
-	logFile, err := os.OpenFile(l.Config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Verify the server is actually listening
+	conn, err := net.DialTimeout("tcp", addr, time.Second)
 	if err != nil {
-		return fmt.Errorf("failed to open log file: %w", err)
+		_ = l.server.Shutdown(context.Background())
+		return fmt.Errorf("server failed to listen on %s: %w", addr, err)
 	}
-	defer logFile.Close() // Always close the file handle
-
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-
-	// Store reference to the command
-	l.cmd = cmd
-
-	// Start the process in the background
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("failed to start agent server: %w", err)
-	}
+	_ = conn.Close()
 
 	// Write PID file
-	if err := l.writePIDFile(cmd.Process.Pid); err != nil {
-		cmd.Process.Kill()
+	if err := l.writePIDFile(os.Getpid()); err != nil {
+		_ = l.server.Shutdown(context.Background())
 		return fmt.Errorf("failed to write PID file: %w", err)
 	}
 
-	// Create initial heartbeat file
-	if err := os.WriteFile(heartbeatFile, []byte("alive"), 0644); err != nil {
-		l.log("Warning: failed to create heartbeat file: %v", err)
+	// Set up logging to file
+	logFile, err := os.OpenFile(l.Config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		// In foreground mode, defer close since we'll wait for signal
+		// In background mode, keep file open for ongoing server logging
+		if !l.Background {
+			defer logFile.Close()
+		}
+		// Redirect logging to file
+		log.SetOutput(logFile)
+		log.Printf("Agent server started (PID: %d)", os.Getpid())
 	}
 
-	// Start heartbeat updater in background
-	go l.heartbeatUpdater(heartbeatFile)
-
-	// Wait a moment and check if it's still running
-	time.Sleep(1 * time.Second)
-	if !isProcessRunning(cmd.Process.Pid) {
-		return fmt.Errorf("agent server failed to start. Check logs: %s", l.Config.LogFile)
-	}
-
-	l.log("✓ Agent server started (PID: %d)", cmd.Process.Pid)
+	l.log("✓ Agent server started (PID: %d)", os.Getpid())
+	l.log("  Endpoint: ws://%s/ws", addr)
+	l.log("  Health: ws://%s/health", addr)
+	l.log("  Model: %s", l.Config.Model)
 	l.log("  Logs: %s", l.Config.LogFile)
-	l.log("  Endpoint: http://%s:%d", l.Config.Host, l.Config.Port)
+
+	// Set up signal handling for graceful shutdown (only in foreground mode)
+	if !l.Background {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+		// Wait for shutdown signal
+		<-sigChan
+
+		l.log("→ Received shutdown signal, stopping gracefully...")
+
+		// Cleanup
+		if err := l.Cleanup(); err != nil {
+			return fmt.Errorf("cleanup failed: %w", err)
+		}
+	}
 
 	return nil
 }
 
-// Cleanup gracefully shuts down the agent server
-func (l *Launcher) Cleanup() {
-	if l.cancelFunc != nil {
-		l.cancelFunc()
-	}
-
-	// Wait a moment for graceful shutdown
-	time.Sleep(500 * time.Millisecond)
-
-	// If we have a stored command reference and it's still running, kill the process group
-	if l.cmd != nil && l.cmd.Process != nil {
-		if isProcessRunning(l.cmd.Process.Pid) {
-			if runtime.GOOS != "windows" {
-				// Kill the entire process group (-PID)
-				syscall.Kill(-l.cmd.Process.Pid, syscall.SIGTERM)
-				time.Sleep(1 * time.Second)
-
-				// If still running, force kill
-				if isProcessRunning(l.cmd.Process.Pid) {
-					syscall.Kill(-l.cmd.Process.Pid, syscall.SIGKILL)
-				}
-			} else {
-				// Windows fallback
-				l.cmd.Process.Kill()
-			}
-		}
-	}
-
-	// Clean up PID file
-	os.Remove(l.Config.PIDFile)
-}
-
-// Stop stops the agent server
+// Stop stops the WebSocket server
 func (l *Launcher) Stop() error {
 	running, pid, _ := l.IsRunning()
 	if !running {
@@ -214,15 +179,20 @@ func (l *Launcher) Stop() error {
 
 	l.log("→ Stopping agent server (PID: %d)...", pid)
 
-	// Send SIGTERM to gracefully shut down
+	// If this process owns the server
+	if pid == os.Getpid() && l.server != nil {
+		return l.Cleanup()
+	}
+
+	// Otherwise, kill the process
 	if err := killProcess(pid); err != nil {
-		return fmt.Errorf("failed to stop agent server: %w", err)
+		return fmt.Errorf("failed to stop server: %w", err)
 	}
 
 	// Wait for process to stop (up to 10 seconds)
 	for i := 0; i < 10; i++ {
 		if !isProcessRunning(pid) {
-			os.Remove(l.Config.PIDFile)
+			_ = os.Remove(l.Config.PIDFile)
 			l.log("✓ Agent server stopped")
 			return nil
 		}
@@ -232,10 +202,10 @@ func (l *Launcher) Stop() error {
 	// Force kill if it didn't stop
 	l.log("⚠ Agent server did not stop gracefully, force killing...")
 	if err := forceKillProcess(pid); err != nil {
-		return fmt.Errorf("failed to force kill agent server: %w", err)
+		return fmt.Errorf("failed to force kill server: %w", err)
 	}
 
-	os.Remove(l.Config.PIDFile)
+	_ = os.Remove(l.Config.PIDFile)
 	l.log("✓ Agent server stopped (forced)")
 	return nil
 }
@@ -254,15 +224,42 @@ func (l *Launcher) Restart() error {
 	return l.Start()
 }
 
-// Status returns the status of the agent server
+// Cleanup gracefully shuts down the server
+func (l *Launcher) Cleanup() error {
+	if l.server == nil {
+		return nil
+	}
+
+	// Graceful shutdown with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := l.server.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("server shutdown failed: %w", err)
+	}
+
+	// Cancel server context
+	if l.cancel != nil {
+		l.cancel()
+	}
+
+	// Remove PID file
+	_ = os.Remove(l.Config.PIDFile)
+
+	l.log("✓ Agent server stopped gracefully")
+	return nil
+}
+
+// Status returns the status of the server
 func (l *Launcher) Status() (string, error) {
 	running, pid, _ := l.IsRunning()
 	if !running {
 		return "Agent server is not running", nil
 	}
 
-	return fmt.Sprintf("Agent server is running (PID: %d)\nEndpoint: http://%s:%d\nLogs: %s",
-		pid, l.Config.Host, l.Config.Port, l.Config.LogFile), nil
+	addr := net.JoinHostPort(l.Config.Host, strconv.Itoa(l.Config.Port))
+	return fmt.Sprintf("Agent server is running (PID: %d)\nEndpoint: ws://%s/ws\nHealth: ws://%s/health\nModel: %s\nLogs: %s",
+		pid, addr, addr, l.Config.Model, l.Config.LogFile), nil
 }
 
 // Logs tails the server logs
@@ -287,7 +284,9 @@ func (l *Launcher) showLastNLines(logFile string, n int) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	// Read all lines
 	var lines []string
@@ -316,7 +315,9 @@ func (l *Launcher) showLastNLines(logFile string, n int) error {
 // tailLogs follows the log file and prints new lines
 func (l *Launcher) tailLogs(logFile string) error {
 	// Show last 10 lines first
-	l.showLastNLines(logFile, 10)
+	if err := l.showLastNLines(logFile, 10); err != nil {
+		return err
+	}
 
 	fmt.Println("--- Following logs (Ctrl+C to stop) ---")
 
@@ -325,10 +326,12 @@ func (l *Launcher) tailLogs(logFile string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	// Seek to end
-	file.Seek(0, 2)
+	_, _ = file.Seek(0, 2)
 
 	scanner := bufio.NewScanner(file)
 	for {
@@ -348,7 +351,7 @@ func (l *Launcher) readPIDFile() (int, error) {
 		return 0, err
 	}
 
-	pid, err := strconv.Atoi(string(data))
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil {
 		return 0, fmt.Errorf("invalid PID in PID file: %w", err)
 	}
@@ -358,19 +361,24 @@ func (l *Launcher) readPIDFile() (int, error) {
 
 // writePIDFile writes the PID to the PID file
 func (l *Launcher) writePIDFile(pid int) error {
+	pidDir := filepath.Dir(l.Config.PIDFile)
+	if err := os.MkdirAll(pidDir, 0755); err != nil {
+		return err
+	}
 	return os.WriteFile(l.Config.PIDFile, []byte(strconv.Itoa(pid)), 0644)
 }
 
 // isProcessRunning checks if a process with the given PID is running
 func isProcessRunning(pid int) bool {
 	if runtime.GOOS == "windows" {
-		// On Windows, use tasklist to check if process exists
-		cmd := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid))
-		output, err := cmd.CombinedOutput()
+		// On Windows, try to open the process
+		process, err := os.FindProcess(pid)
 		if err != nil {
 			return false
 		}
-		return len(output) > 0 && !strings.Contains(string(output), "INFO: No tasks are running")
+		// On Windows, FindProcess always succeeds, so send signal 0
+		err = process.Signal(os.Kill)
+		return err == nil
 	}
 
 	// On Unix, send signal 0 to check if process exists
@@ -379,36 +387,26 @@ func isProcessRunning(pid int) bool {
 		return false
 	}
 
-	err = process.Signal(syscall.Signal(0))
+	err = process.Signal(os.Signal(nil))
 	return err == nil
 }
 
 // killProcess sends SIGTERM to a process
 func killProcess(pid int) error {
-	if runtime.GOOS == "windows" {
-		cmd := exec.Command("taskkill", "/PID", strconv.Itoa(pid))
-		return cmd.Run()
-	}
-
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return err
 	}
 
-	return process.Signal(syscall.SIGTERM)
+	return process.Signal(os.Interrupt)
 }
 
 // forceKillProcess sends SIGKILL to a process
 func forceKillProcess(pid int) error {
-	if runtime.GOOS == "windows" {
-		cmd := exec.Command("taskkill", "/F", "/PID", strconv.Itoa(pid))
-		return cmd.Run()
-	}
-
 	process, err := os.FindProcess(pid)
 	if err != nil {
 		return err
 	}
 
-	return process.Signal(syscall.SIGKILL)
+	return process.Kill()
 }
