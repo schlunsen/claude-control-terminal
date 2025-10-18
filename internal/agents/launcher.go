@@ -8,30 +8,32 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
-
-	"golang.org/x/net/websocket"
 )
 
 // Launcher manages the WebSocket server lifecycle
 type Launcher struct {
-	Config  *Config
-	Quiet   bool
-	server  *http.Server
-	ctx     context.Context
-	cancel  context.CancelFunc
-	handler *AgentHandler
+	Config     *Config
+	Quiet      bool
+	Background bool // When true, runs in background without blocking on signals
+	server     *http.Server
+	ctx        context.Context
+	cancel     context.CancelFunc
+	handler    *AgentHandler
 }
 
 // NewLauncher creates a new launcher instance
-func NewLauncher(config *Config, quiet bool) *Launcher {
+func NewLauncher(config *Config, quiet bool, background bool) *Launcher {
 	return &Launcher{
-		Config: config,
-		Quiet:  quiet,
+		Config:     config,
+		Quiet:      quiet,
+		Background: background,
 	}
 }
 
@@ -76,8 +78,9 @@ func (l *Launcher) Start() error {
 
 	// Validate API key
 	if l.Config.APIKey == "" {
-		return fmt.Errorf("CLAUDE_API_KEY environment variable is required")
+		return fmt.Errorf("API key is required. Set ANTHROPIC_API_KEY or CLAUDE_API_KEY environment variable")
 	}
+	l.log("→ API key configured (length: %d characters)", len(l.Config.APIKey))
 
 	// Create context for server lifecycle
 	l.ctx, l.cancel = context.WithCancel(context.Background())
@@ -87,8 +90,8 @@ func (l *Launcher) Start() error {
 
 	// Set up HTTP server with WebSocket endpoints
 	mux := http.NewServeMux()
-	mux.Handle("/ws", websocket.Handler(l.handler.HandleWebSocket))
-	mux.Handle("/health", websocket.Handler(l.handler.HealthCheck))
+	mux.HandleFunc("/ws", l.handler.HandleWebSocket)
+	mux.HandleFunc("/health", l.handler.HealthCheck)
 
 	addr := net.JoinHostPort(l.Config.Host, strconv.Itoa(l.Config.Port))
 	l.server = &http.Server{
@@ -131,7 +134,11 @@ func (l *Launcher) Start() error {
 	// Set up logging to file
 	logFile, err := os.OpenFile(l.Config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err == nil {
-		defer logFile.Close()
+		// In foreground mode, defer close since we'll wait for signal
+		// In background mode, keep file open for ongoing server logging
+		if !l.Background {
+			defer logFile.Close()
+		}
 		// Redirect logging to file
 		log.SetOutput(logFile)
 		log.Printf("Agent server started (PID: %d)", os.Getpid())
@@ -142,6 +149,22 @@ func (l *Launcher) Start() error {
 	l.log("  Health: ws://%s/health", addr)
 	l.log("  Model: %s", l.Config.Model)
 	l.log("  Logs: %s", l.Config.LogFile)
+
+	// Set up signal handling for graceful shutdown (only in foreground mode)
+	if !l.Background {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+		// Wait for shutdown signal
+		<-sigChan
+
+		l.log("→ Received shutdown signal, stopping gracefully...")
+
+		// Cleanup
+		if err := l.Cleanup(); err != nil {
+			return fmt.Errorf("cleanup failed: %w", err)
+		}
+	}
 
 	return nil
 }

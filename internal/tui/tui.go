@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	agentspkg "github.com/schlunsen/claude-control-terminal/internal/agents"
 	"github.com/schlunsen/claude-control-terminal/internal/server"
@@ -47,7 +48,7 @@ func Launch(targetDir string) error {
 	var agentServerPID int
 	var agentServerEnabled bool
 	agentConfig := agentspkg.DefaultConfig()
-	agentLauncher := agentspkg.NewLauncher(agentConfig, true) // quiet mode
+	agentLauncher := agentspkg.NewLauncher(agentConfig, true, true) // quiet mode, background mode
 
 	// Check if already running
 	running, pid, _ := agentLauncher.IsRunning()
@@ -55,8 +56,11 @@ func Launch(targetDir string) error {
 		agentServerEnabled = true
 		agentServerPID = pid
 	} else {
-		// Try to start it
+		// Try to start it (non-blocking in background mode)
 		if err := agentLauncher.Start(); err == nil {
+			// Wait briefly for server to start
+			time.Sleep(500 * time.Millisecond)
+
 			// Get the PID
 			running, pid, _ := agentLauncher.IsRunning()
 			if running {

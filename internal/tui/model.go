@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -1733,7 +1734,7 @@ type toggleAgentServerMsg struct {
 func toggleAgentServerCmd(enabled bool, currentPID int) tea.Cmd {
 	return func() tea.Msg {
 		agentConfig := agentspkg.DefaultConfig()
-		agentLauncher := agentspkg.NewLauncher(agentConfig, true) // quiet mode
+		agentLauncher := agentspkg.NewLauncher(agentConfig, true, true) // quiet mode, background mode
 
 		if enabled {
 			// Stop the agent server
@@ -1749,14 +1750,18 @@ func toggleAgentServerCmd(enabled bool, currentPID int) tea.Cmd {
 				pid:     0,
 			}
 		} else {
-			// Start the agent server
+			// Start the agent server (non-blocking in background mode)
 			if err := agentLauncher.Start(); err != nil {
-				// Failed to start, return disabled state
+				// Failed to start
 				return toggleAgentServerMsg{
 					enabled: false,
 					pid:     0,
 				}
 			}
+
+			// Wait briefly for server to start
+			time.Sleep(500 * time.Millisecond)
+
 			// Get the PID
 			running, pid, _ := agentLauncher.IsRunning()
 			return toggleAgentServerMsg{
