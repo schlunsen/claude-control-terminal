@@ -909,13 +909,15 @@ func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid
 
 // handleFiberPermissionResponse handles permission responses from the frontend
 func (h *AgentHandler) handleFiberPermissionResponse(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+	logging.Info("📥 RAW PERMISSION RESPONSE from frontend: %+v", rawMsg)
+
 	var msg PermissionResponseMessage
 	msgBytes, _ := json.Marshal(rawMsg)
 	if err := json.Unmarshal(msgBytes, &msg); err != nil {
 		return fmt.Errorf("invalid permission_response message: %w", err)
 	}
 
-	log.Printf("Received permission response: sessionID=%s, permissionID=%s, approved=%v",
+	logging.Info("📥 PARSED permission response: sessionID=%s, permissionID='%s', approved=%v",
 		msg.SessionID, msg.PermissionID, msg.Approved)
 
 	// Get the session
