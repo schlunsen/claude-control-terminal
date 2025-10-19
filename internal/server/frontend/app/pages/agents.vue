@@ -1967,7 +1967,7 @@ watch(() => agentWs.connected, (connected) => {
 // Watch for new messages and auto-scroll if user is near bottom
 watch(activeMessages, () => {
   autoScrollIfNearBottom()
-}, { flush: 'post' })
+}, { deep: true, flush: 'post' })
 </script>
 
 <style scoped>
