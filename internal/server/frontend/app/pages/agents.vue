@@ -2109,8 +2109,15 @@ agentWs.on('onMessagesLoaded', (data) => {
     thinkingContent: dbMsg.thinking_content || undefined
   }))
 
-  // Sort messages by sequence number to ensure correct order
-  uiMessages.sort((a, b) => a.sequence - b.sequence)
+  // Sort messages by sequence number first, then by timestamp for stable ordering
+  // This handles cases where multiple messages have the same sequence number
+  uiMessages.sort((a, b) => {
+    if (a.sequence !== b.sequence) {
+      return a.sequence - b.sequence
+    }
+    // If sequence numbers are equal, sort by timestamp
+    return a.timestamp.getTime() - b.timestamp.getTime()
+  })
 
   console.log('Sorted message sequences:', uiMessages.map(m => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
 
