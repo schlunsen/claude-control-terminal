@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - Historical Message Loading & Session Deletion - 2025-10-19
+
+### Added
+- Historical message loading for agent sessions to view complete conversation history
+- Session deletion functionality allowing users to remove agent sessions from the dashboard
+- Deep watch mode for agent chat auto-scroll ensuring smooth scrolling behavior
+
+### Fixed
+- Agent chat auto-scroll now uses deep watch for improved reactivity and reliability
+- Session management improved with proper cleanup when sessions are deleted
+
 ## [0.5.5] - Permission Streaming & Logging Enhancements - 2025-10-19
 
 ### Fixed
@@ -671,6 +682,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.5.6]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.2...v0.5.3
