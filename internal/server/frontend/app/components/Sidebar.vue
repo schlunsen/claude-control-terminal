@@ -43,6 +43,20 @@
           </div>
           <span class="nav-label" v-show="!isCollapsed">Live Agents</span>
         </NuxtLink>
+
+        <NuxtLink
+          to="/themes"
+          class="nav-item"
+          :class="{ 'nav-item-active': $route.path === '/themes' }"
+        >
+          <div class="nav-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M12 1v6m0 6v6m5-11l-4 4m-4 4l-4 4m11-5h-6m-6 0H1m11-5l4-4m4 4l4-4"/>
+            </svg>
+          </div>
+          <span class="nav-label" v-show="!isCollapsed">Themes</span>
+        </NuxtLink>
       </div>
     </div>
   </nav>

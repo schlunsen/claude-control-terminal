@@ -32,6 +32,7 @@
             <span class="nav-separator">|</span>
             <span class="nav-title">Analytics Dashboard</span>
           </div>
+          <ThemeSelector :show-label="false" />
           <ThemeToggle />
         </div>
       </div>
@@ -52,8 +53,8 @@
 <script setup>
 import '../assets/css/main.css'
 
-// Initialize dark mode
-const { isDark } = useDarkMode()
+// Initialize theme system
+const { isDark } = useTheme()
 
 // Initialize sidebar state
 const { isCollapsed, toggleSidebar } = useSidebar()

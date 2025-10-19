@@ -6,8 +6,9 @@
   box-sizing: border-box;
 }
 
-/* Dark Theme (default) */
-:root {
+/* Default Dark Theme */
+:root,
+[data-theme="default-dark"] {
   --bg-primary: #0a0a0f;
   --bg-secondary: #141419;
   --bg-tertiary: #1c1c24;
@@ -26,10 +27,14 @@
   --status-success: #4ade80;
   --status-warning: #fbbf24;
   --status-error: #f87171;
+
+  /* Typography */
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
 }
 
-/* Light Theme */
-[data-theme="light"] {
+/* Default Light Theme */
+[data-theme="default-light"] {
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f5;
   --bg-tertiary: #ffffff;
@@ -48,6 +53,218 @@
   --status-success: #16a34a;
   --status-warning: #d97706;
   --status-error: #dc2626;
+
+  /* Typography */
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+}
+
+/* Neon Dark Theme - Cyberpunk vibes */
+[data-theme="neon-dark"] {
+  --bg-primary: #0d0221;
+  --bg-secondary: #1a0938;
+  --bg-tertiary: #240f4f;
+  --text-primary: #e0e0ff;
+  --text-secondary: #b8b8ff;
+  --text-muted: #7a7aaa;
+  --accent-purple: #d946ef;
+  --accent-cyan: #00ffff;
+  --accent-green: #39ff14;
+  --accent-yellow: #ffff00;
+  --accent-orange: #ff6600;
+  --border-color: #4a148c;
+  --code-bg: #1a0938;
+  --card-bg: #240f4f;
+  --card-hover: #33177a;
+  --status-success: #39ff14;
+  --status-warning: #ffff00;
+  --status-error: #ff0055;
+
+  /* Typography - Futuristic cyberpunk font */
+  --font-primary: 'Orbitron', 'Inter', sans-serif;
+  --font-mono: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+}
+
+/* Neon Light Theme - Bright neon accents */
+[data-theme="neon-light"] {
+  --bg-primary: #f8f8ff;
+  --bg-secondary: #e8e8ff;
+  --bg-tertiary: #ffffff;
+  --text-primary: #1a0938;
+  --text-secondary: #4a148c;
+  --text-muted: #7a7aaa;
+  --accent-purple: #b026ff;
+  --accent-cyan: #00cccc;
+  --accent-green: #00cc00;
+  --accent-yellow: #cccc00;
+  --accent-orange: #ff5500;
+  --border-color: #d0d0ff;
+  --code-bg: #e8e8ff;
+  --card-bg: #ffffff;
+  --card-hover: #f0f0ff;
+  --status-success: #00cc00;
+  --status-warning: #cccc00;
+  --status-error: #ff0044;
+
+  /* Typography - Futuristic cyberpunk font */
+  --font-primary: 'Orbitron', 'Inter', sans-serif;
+  --font-mono: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+}
+
+/* Nord Dark Theme - Arctic-inspired palette */
+[data-theme="nord-dark"] {
+  --bg-primary: #2e3440;
+  --bg-secondary: #3b4252;
+  --bg-tertiary: #434c5e;
+  --text-primary: #eceff4;
+  --text-secondary: #d8dee9;
+  --text-muted: #4c566a;
+  --accent-purple: #b48ead;
+  --accent-cyan: #88c0d0;
+  --accent-green: #a3be8c;
+  --accent-yellow: #ebcb8b;
+  --accent-orange: #d08770;
+  --border-color: #4c566a;
+  --code-bg: #3b4252;
+  --card-bg: #434c5e;
+  --card-hover: #4c566a;
+  --status-success: #a3be8c;
+  --status-warning: #ebcb8b;
+  --status-error: #bf616a;
+
+  /* Typography - Developer-focused font */
+  --font-primary: 'Fira Code', 'Fira Sans', monospace;
+  --font-mono: 'Fira Code', 'SF Mono', monospace;
+}
+
+/* Nord Light Theme - Bright Nordic palette */
+[data-theme="nord-light"] {
+  --bg-primary: #eceff4;
+  --bg-secondary: #e5e9f0;
+  --bg-tertiary: #ffffff;
+  --text-primary: #2e3440;
+  --text-secondary: #3b4252;
+  --text-muted: #4c566a;
+  --accent-purple: #b48ead;
+  --accent-cyan: #5e81ac;
+  --accent-green: #8fbcbb;
+  --accent-yellow: #ebcb8b;
+  --accent-orange: #d08770;
+  --border-color: #d8dee9;
+  --code-bg: #e5e9f0;
+  --card-bg: #ffffff;
+  --card-hover: #f9fafb;
+  --status-success: #a3be8c;
+  --status-warning: #ebcb8b;
+  --status-error: #bf616a;
+
+  /* Typography - Developer-focused font */
+  --font-primary: 'Fira Code', 'Fira Sans', monospace;
+  --font-mono: 'Fira Code', 'SF Mono', monospace;
+}
+
+/* Dracula Dark Theme - Vibrant purple and pink */
+[data-theme="dracula-dark"] {
+  --bg-primary: #282a36;
+  --bg-secondary: #21222c;
+  --bg-tertiary: #343746;
+  --text-primary: #f8f8f2;
+  --text-secondary: #bfbfbf;
+  --text-muted: #6272a4;
+  --accent-purple: #bd93f9;
+  --accent-cyan: #8be9fd;
+  --accent-green: #50fa7b;
+  --accent-yellow: #f1fa8c;
+  --accent-orange: #ffb86c;
+  --border-color: #44475a;
+  --code-bg: #21222c;
+  --card-bg: #343746;
+  --card-hover: #44475a;
+  --status-success: #50fa7b;
+  --status-warning: #f1fa8c;
+  --status-error: #ff5555;
+
+  /* Typography - Professional coding font */
+  --font-primary: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+/* Dracula Light Theme - Soft pastels */
+[data-theme="dracula-light"] {
+  --bg-primary: #f8f8f2;
+  --bg-secondary: #eff0eb;
+  --bg-tertiary: #ffffff;
+  --text-primary: #282a36;
+  --text-secondary: #44475a;
+  --text-muted: #6272a4;
+  --accent-purple: #9580ff;
+  --accent-cyan: #66d9ef;
+  --accent-green: #3dd68d;
+  --accent-yellow: #e6db74;
+  --accent-orange: #ff9500;
+  --border-color: #d6d7d0;
+  --code-bg: #eff0eb;
+  --card-bg: #ffffff;
+  --card-hover: #f9f9f6;
+  --status-success: #3dd68d;
+  --status-warning: #e6db74;
+  --status-error: #ff4444;
+
+  /* Typography - Professional coding font */
+  --font-primary: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+}
+
+/* South Park Dark Theme - Screw you guys, I'm going home! */
+[data-theme="southpark-dark"] {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-tertiary: #0f3460;
+  --text-primary: #e8e8e8;
+  --text-secondary: #b8b8b8;
+  --text-muted: #888888;
+  --accent-purple: #ff6b9d;
+  --accent-cyan: #00d9ff;
+  --accent-green: #39ff14;
+  --accent-yellow: #ffcc00;
+  --accent-orange: #ff6600;
+  --border-color: #0f3460;
+  --code-bg: #16213e;
+  --card-bg: #0f3460;
+  --card-hover: #1a4d7a;
+  --status-success: #39ff14;
+  --status-warning: #ffcc00;
+  --status-error: #ff0044;
+
+  /* Typography - Comic-style bold font */
+  --font-primary: 'Comic Sans MS', 'Comic Neue', 'Chalkboard SE', cursive;
+  --font-mono: 'Comic Sans MS', 'Courier New', monospace;
+}
+
+/* South Park Light Theme - Oh my God, they coded Kenny! */
+[data-theme="southpark-light"] {
+  --bg-primary: #e8f4f8;
+  --bg-secondary: #d0e8f2;
+  --bg-tertiary: #ffffff;
+  --text-primary: #1a1a2e;
+  --text-secondary: #16213e;
+  --text-muted: #0f3460;
+  --accent-purple: #e91e63;
+  --accent-cyan: #00bcd4;
+  --accent-green: #4caf50;
+  --accent-yellow: #ffc107;
+  --accent-orange: #ff5722;
+  --border-color: #b3d9e8;
+  --code-bg: #d0e8f2;
+  --card-bg: #ffffff;
+  --card-hover: #e0f0f8;
+  --status-success: #4caf50;
+  --status-warning: #ffc107;
+  --status-error: #f44336;
+
+  /* Typography - Comic-style bold font */
+  --font-primary: 'Comic Sans MS', 'Comic Neue', 'Chalkboard SE', cursive;
+  --font-mono: 'Comic Sans MS', 'Courier New', monospace;
 }
 
 html {
@@ -57,8 +274,8 @@ html {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-  font-size: 16px;
+  font-family: var(--font-primary);
+  font-size: calc(16px * var(--font-size-scale, 1));
   line-height: 1.6;
   color: var(--text-primary);
   background: var(--bg-primary);
@@ -66,7 +283,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   width: 100%;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color 0.3s ease, color 0.3s ease, font-family 0.3s ease;
 }
 
 /* Typography */
@@ -150,7 +367,7 @@ a:hover {
 
 /* Code blocks */
 pre, code {
-  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 
 code {
