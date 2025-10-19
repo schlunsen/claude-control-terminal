@@ -865,15 +865,17 @@ func (h *AgentHandler) handleFiberKillAllAgents(c *fiberws.Conn) error {
 // forwardPermissionRequests monitors the session's permission request channel
 // and forwards requests to the WebSocket client
 func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid.UUID, session *AgentSession) {
+	logging.Info("🚀 Permission forwarder started for session %s", sessionID)
+
 	for {
 		select {
 		case permReq, ok := <-session.permissionReqChan:
 			if !ok {
-				log.Printf("Permission request channel closed for session %s", sessionID)
+				logging.Info("Permission request channel closed for session %s", sessionID)
 				return
 			}
 
-			log.Printf("🔐 PERMISSION REQUEST: tool=%s, requestID=%s, input=%+v", permReq.ToolName, permReq.RequestID, permReq.Input)
+			logging.Info("🔐 PERMISSION REQUEST RECEIVED FROM CHANNEL: tool=%s, requestID=%s, input=%+v", permReq.ToolName, permReq.RequestID, permReq.Input)
 
 			// Send permission request to frontend
 			response := PermissionRequestMessage{
@@ -885,10 +887,10 @@ func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid
 				Details:        permReq.Input,
 			}
 
-			log.Printf("📤 WS SENDING PERMISSION REQUEST: %+v", response)
+			logging.Info("📤 WS SENDING PERMISSION REQUEST TO FRONTEND: permissionID=%s, tool=%s", permReq.RequestID, permReq.ToolName)
 
 			if err := c.WriteJSON(response); err != nil {
-				log.Printf("ERROR: Failed to send permission request: %v", err)
+				logging.Error("❌ Failed to send permission request to WebSocket: %v", err)
 				// Send error response back to callback
 				select {
 				case permReq.ResponseChan <- PermissionResponse{
@@ -900,8 +902,10 @@ func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid
 				return
 			}
 
+			logging.Info("✅ Permission request sent to WebSocket successfully: %s", permReq.RequestID)
+
 		case <-session.ctx.Done():
-			log.Printf("Session %s context cancelled, stopping permission request forwarding", sessionID)
+			logging.Info("Session %s context cancelled, stopping permission request forwarding", sessionID)
 			return
 		}
 	}
