@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Legacy Python agent manager, auth, and session modules (~2500 lines of Python code)
 
 ### Fixed
+- Updated to latest claude-agent-sdk-go (v0.1.7) for improved stability and compatibility
+- Removed deprecated WithVerbose method from agent configuration
 - Server tests updated to match NewServerWithOptions signature with verbose parameter
 - Improved error handling and logging throughout agent lifecycle
 - Better signal handling and cleanup for agent server process lifecycle
