@@ -198,6 +198,9 @@ func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, r
 	case MessageTypeKillAllAgents:
 		return h.handleFiberKillAllAgents(c)
 
+	case MessageTypeDeleteAllSessions:
+		return h.handleFiberDeleteAllSessions(c)
+
 	case MessageTypePing:
 		return h.handleFiberPing(c)
 
@@ -900,6 +903,21 @@ func (h *AgentHandler) handleFiberKillAllAgents(c *fiberws.Conn) error {
 		"type":    "kill_all_agents_response",
 		"count":   count,
 		"message": fmt.Sprintf("Killed %d agent sessions", count),
+	}
+	return c.WriteJSON(response)
+}
+
+// handleFiberDeleteAllSessions deletes all sessions from database (Fiber version)
+func (h *AgentHandler) handleFiberDeleteAllSessions(c *fiberws.Conn) error {
+	count, err := h.SessionManager.DeleteAllSessions()
+	if err != nil {
+		h.sendFiberError(c, fmt.Sprintf("failed to delete all sessions: %v", err))
+		return fmt.Errorf("failed to delete all sessions: %w", err)
+	}
+
+	response := AllSessionsDeletedMessage{
+		BaseMessage: BaseMessage{Type: MessageTypeAllSessionsDeleted},
+		Count:       count,
 	}
 	return c.WriteJSON(response)
 }

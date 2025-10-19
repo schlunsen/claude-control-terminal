@@ -39,8 +39,10 @@ const (
 	MessageTypePermissionAcknowledged MessageType = "permission_acknowledged"
 
 	// Kill switch
-	MessageTypeKillAllAgents MessageType = "kill_all_agents"
-	MessageTypeAgentsKilled  MessageType = "agents_killed"
+	MessageTypeKillAllAgents     MessageType = "kill_all_agents"
+	MessageTypeAgentsKilled      MessageType = "agents_killed"
+	MessageTypeDeleteAllSessions MessageType = "delete_all_sessions"
+	MessageTypeAllSessionsDeleted MessageType = "all_sessions_deleted"
 
 	// Session updates
 	MessageTypeSessionUpdated MessageType = "session_updated"
@@ -194,6 +196,17 @@ type KillAllAgentsMessage struct {
 
 // AgentsKilledMessage represents agents killed response
 type AgentsKilledMessage struct {
+	BaseMessage
+	Count int `json:"count"`
+}
+
+// DeleteAllSessionsMessage represents deleting all sessions
+type DeleteAllSessionsMessage struct {
+	BaseMessage
+}
+
+// AllSessionsDeletedMessage represents all sessions deleted response
+type AllSessionsDeletedMessage struct {
 	BaseMessage
 	Count int `json:"count"`
 }

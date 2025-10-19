@@ -9,6 +9,20 @@
         </div>
         <div class="header-actions">
           <button
+            @click="deleteAllSessions"
+            class="btn-delete-all"
+            :disabled="!agentWs.connected || sessions.length === 0"
+            title="Delete all sessions from database"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+            Delete All Sessions
+          </button>
+          <button
             @click="killAllAgents"
             class="btn-kill-all"
             :disabled="!agentWs.connected || sessions.length === 0"
@@ -1540,6 +1554,24 @@ const sendPermissionResponse = (request, approved, reason = '') => {
   }
 }
 
+// Delete all sessions functionality
+const deleteAllSessions = async () => {
+  if (!agentWs.connected || sessions.value.length === 0) return
+
+  if (!confirm('Are you sure you want to delete ALL sessions? This will permanently delete all session data from the database. This action cannot be undone.')) {
+    return
+  }
+
+  try {
+    agentWs.send({
+      type: 'delete_all_sessions'
+    })
+  } catch (error) {
+    console.error('Failed to delete all sessions:', error)
+    alert('Failed to delete all sessions. Please try again.')
+  }
+}
+
 // Kill switch functionality
 const killAllAgents = async () => {
   if (!agentWs.connected || sessions.value.length === 0) return
@@ -2030,6 +2062,33 @@ agentWs.on('onSessionDeleted', (data) => {
   // Just log confirmation
 })
 
+agentWs.on('onAllSessionsDeleted', (data) => {
+  console.log('🗑️ All sessions deleted, count:', data.count)
+
+  // Clear all sessions and messages
+  sessions.value = []
+  messages.value = {}
+  messagesLoaded.value.clear()
+  activeSessionId.value = null
+  awaitingToolResults.value.clear()
+
+  // Clear all pending timers
+  todoHideTimers.value.forEach((timer) => clearTimeout(timer))
+  todoHideTimers.value.clear()
+
+  // Clear all live agents session data
+  sessionTodos.value.clear()
+  sessionToolExecution.value.clear()
+  sessionPermissions.value.clear()
+
+  // Clear all session metrics
+  sessionToolStats.value.clear()
+  sessionPermissionStats.value.clear()
+
+  // Show success message
+  alert(`Successfully deleted ${data.count} sessions from the database`)
+})
+
 agentWs.on('onMessagesLoaded', (data) => {
   console.log('📥 Messages loaded:', data)
 
@@ -2145,6 +2204,7 @@ watch(activeMessages, () => {
   gap: 12px;
 }
 
+.btn-delete-all,
 .btn-kill-all {
   display: flex;
   align-items: center;
@@ -2160,10 +2220,19 @@ watch(activeMessages, () => {
   transition: all 0.2s;
 }
 
+.btn-delete-all {
+  background: #6c757d;
+}
+
+.btn-delete-all:hover:not(:disabled) {
+  background: #5a6268;
+}
+
 .btn-kill-all:hover:not(:disabled) {
   background: #c82333;
 }
 
+.btn-delete-all:disabled,
 .btn-kill-all:disabled {
   opacity: 0.5;
   cursor: not-allowed;
