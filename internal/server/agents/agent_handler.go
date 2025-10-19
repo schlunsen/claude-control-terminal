@@ -877,6 +877,9 @@ func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid
 
 			logging.Info("🔐 PERMISSION REQUEST RECEIVED FROM CHANNEL: tool=%s, requestID=%s, input=%+v", permReq.ToolName, permReq.RequestID, permReq.Input)
 
+			// Generate human-readable description
+			description := formatPermissionDescription(permReq.ToolName, permReq.Input)
+
 			// Send permission request to frontend
 			response := PermissionRequestMessage{
 				BaseMessage:    BaseMessage{Type: MessageTypePermissionRequest},
@@ -885,9 +888,10 @@ func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid
 				Tool:           permReq.ToolName,
 				Action:         "use_tool",
 				Details:        permReq.Input,
+				Description:    description,
 			}
 
-			logging.Info("📤 WS SENDING PERMISSION REQUEST TO FRONTEND: permissionID=%s, tool=%s", permReq.RequestID, permReq.ToolName)
+			logging.Info("📤 WS SENDING PERMISSION REQUEST TO FRONTEND: permissionID=%s, tool=%s, description=%s", permReq.RequestID, permReq.ToolName, description)
 
 			if err := c.WriteJSON(response); err != nil {
 				logging.Error("❌ Failed to send permission request to WebSocket: %v", err)
@@ -1018,4 +1022,60 @@ func (h *AgentHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 
 	stats := h.GetStats()
 	_ = ws.WriteJSON(stats)
+}
+
+// formatPermissionDescription generates a human-readable description for a permission request
+func formatPermissionDescription(toolName string, input map[string]interface{}) string {
+	switch toolName {
+	case "Bash":
+		if cmd, ok := input["command"].(string); ok {
+			return fmt.Sprintf("Execute command: %s", cmd)
+		}
+		return "Execute a bash command"
+
+	case "Read":
+		if path, ok := input["file_path"].(string); ok {
+			return fmt.Sprintf("Read file: %s", path)
+		}
+		return "Read a file"
+
+	case "Write":
+		if path, ok := input["file_path"].(string); ok {
+			return fmt.Sprintf("Write to file: %s", path)
+		}
+		return "Write to a file"
+
+	case "Edit":
+		if path, ok := input["file_path"].(string); ok {
+			return fmt.Sprintf("Edit file: %s", path)
+		}
+		return "Edit a file"
+
+	case "Glob":
+		if pattern, ok := input["pattern"].(string); ok {
+			return fmt.Sprintf("Search files matching: %s", pattern)
+		}
+		return "Search for files"
+
+	case "Grep":
+		if pattern, ok := input["pattern"].(string); ok {
+			return fmt.Sprintf("Search content matching: %s", pattern)
+		}
+		return "Search file contents"
+
+	case "WebSearch":
+		if query, ok := input["query"].(string); ok {
+			return fmt.Sprintf("Web search: %s", query)
+		}
+		return "Perform a web search"
+
+	case "WebFetch":
+		if url, ok := input["url"].(string); ok {
+			return fmt.Sprintf("Fetch URL: %s", url)
+		}
+		return "Fetch a web page"
+
+	default:
+		return fmt.Sprintf("Use %s tool", toolName)
+	}
 }

@@ -194,6 +194,7 @@ type PermissionRequestMessage struct {
 	Tool           string      `json:"tool"`
 	Action         string      `json:"action"`
 	Details        interface{} `json:"details,omitempty"`
+	Description    string      `json:"description"` // Human-readable description of the permission request
 }
 
 // PermissionResponseMessage represents a permission response
