@@ -40,7 +40,7 @@ type SessionMetadata struct {
 	DurationMS      int64      `json:"duration_ms"`
 	ErrorMessage    string     `json:"error_message,omitempty"`
 	ModelName       string     `json:"model_name,omitempty"`
-	ClaudeSessionID string     `json:"transcript_path,omitempty"`  // Claude CLI session ID for resuming
+	ClaudeSessionID string     `json:"claude_session_id,omitempty"`  // Claude CLI session ID for resuming
 }
 
 // MessageRecord represents a persisted message
@@ -79,7 +79,7 @@ func (s *SQLiteSessionStorage) SaveSession(session *SessionMetadata) error {
 		INSERT INTO agent_sessions (
 			id, status, created_at, updated_at, ended_at,
 			message_count, cost_usd, num_turns, duration_ms,
-			error_message, model_name, transcript_path
+			error_message, model_name, claude_session_id
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
@@ -113,7 +113,7 @@ func (s *SQLiteSessionStorage) UpdateSession(session *SessionMetadata) error {
 		SET status = ?, updated_at = ?, ended_at = ?,
 		    message_count = ?, cost_usd = ?, num_turns = ?,
 		    duration_ms = ?, error_message = ?, model_name = ?,
-		    transcript_path = ?
+		    claude_session_id = ?
 		WHERE id = ?
 	`
 
@@ -153,7 +153,7 @@ func (s *SQLiteSessionStorage) GetSession(sessionID uuid.UUID) (*SessionMetadata
 	query := `
 		SELECT id, status, created_at, updated_at, ended_at,
 		       message_count, cost_usd, num_turns, duration_ms,
-		       error_message, model_name, transcript_path
+		       error_message, model_name, claude_session_id
 		FROM agent_sessions
 		WHERE id = ?
 	`
@@ -219,7 +219,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
 			       message_count, cost_usd, num_turns, duration_ms,
-			       error_message, model_name, transcript_path
+			       error_message, model_name, claude_session_id
 			FROM agent_sessions
 			ORDER BY updated_at DESC
 		`
@@ -228,7 +228,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
 			       message_count, cost_usd, num_turns, duration_ms,
-			       error_message, model_name, transcript_path
+			       error_message, model_name, claude_session_id
 			FROM agent_sessions
 			WHERE status != 'ended'
 			ORDER BY updated_at DESC
@@ -237,7 +237,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
 			       message_count, cost_usd, num_turns, duration_ms,
-			       error_message, model_name, transcript_path
+			       error_message, model_name, claude_session_id
 			FROM agent_sessions
 			WHERE status = ?
 			ORDER BY updated_at DESC

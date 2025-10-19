@@ -105,7 +105,7 @@ func createSessionsTable(tx *sql.Tx) error {
 			duration_ms INTEGER NOT NULL DEFAULT 0,
 			error_message TEXT,
 			model_name TEXT,
-			transcript_path TEXT,
+			claude_session_id TEXT,
 			CONSTRAINT status_check CHECK (status IN ('idle', 'active', 'processing', 'error', 'ended'))
 		);
 	`
