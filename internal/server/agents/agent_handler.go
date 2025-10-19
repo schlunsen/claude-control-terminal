@@ -927,14 +927,32 @@ func (h *AgentHandler) handleFiberPermissionResponse(c *fiberws.Conn, rawMsg map
 	}
 
 	// Find the pending permission request
+	// NOTE: Frontend doesn't send permission_id, so we look for any pending permission in this session
 	session.permMu.Lock()
-	responseChan, exists := session.pendingPermissions[msg.PermissionID]
+	var responseChan chan PermissionResponse
+	var exists bool
+
+	// Try to find by permission ID first (if frontend sends it)
+	if msg.PermissionID != "" {
+		responseChan, exists = session.pendingPermissions[msg.PermissionID]
+	}
+
+	// If not found or no ID provided, get the first (and should be only) pending permission
+	if !exists {
+		for _, ch := range session.pendingPermissions {
+			responseChan = ch
+			exists = true
+			break
+		}
+	}
 	session.permMu.Unlock()
 
 	if !exists {
-		log.Printf("WARNING: No pending permission request found for ID: %s", msg.PermissionID)
+		logging.Warning("No pending permission request found for session %s (permission_id='%s')", msg.SessionID, msg.PermissionID)
 		return fmt.Errorf("no pending permission request found for ID: %s", msg.PermissionID)
 	}
+
+	logging.Info("✅ Found pending permission, sending response to callback")
 
 	// Send response to the callback
 	response := PermissionResponse{
