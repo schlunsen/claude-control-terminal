@@ -165,7 +165,7 @@
           </div>
 
           <!-- Messages -->
-          <div class="messages-container" ref="messagesContainer">
+          <div class="messages-container" ref="messagesContainer" @scroll="handleScroll">
             <div v-for="message in activeMessages" :key="message.id" class="message" :class="{
               [message.role]: true,
               isToolResult: message.isToolResult,
@@ -647,6 +647,7 @@ const agentWs = useAgentWebSocket()
 
 // Refs
 const messageInput = ref(null)
+const messagesContainer = ref<HTMLElement | null>(null)
 
 // State
 const sessions = ref([])
@@ -672,6 +673,9 @@ const todoHideTimers = ref(new Map<string, NodeJS.Timeout>()) // { sessionId: ti
 
 // Tool overlays state
 const activeTools = ref(new Map<string, ActiveTool[]>()) // { sessionId: [...activeTools] }
+
+// Auto-scroll state
+const isUserNearBottom = ref(true) // Track if user is near bottom of messages
 
 // Session filtering state
 const activeFilter = ref('active') // 'all', 'active', 'ended'
@@ -925,6 +929,32 @@ const handleWorkingDirectoryChange = async () => {
   }
 }
 
+// Auto-scroll helpers
+const handleScroll = () => {
+  if (!messagesContainer.value) return
+
+  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
+  const threshold = 100 // pixels from bottom
+  isUserNearBottom.value = scrollHeight - scrollTop - clientHeight < threshold
+}
+
+const scrollToBottom = (smooth = false) => {
+  if (!messagesContainer.value) return
+
+  nextTick(() => {
+    messagesContainer.value?.scrollTo({
+      top: messagesContainer.value.scrollHeight,
+      behavior: smooth ? 'smooth' : 'auto'
+    })
+  })
+}
+
+const autoScrollIfNearBottom = (smooth = true) => {
+  if (isUserNearBottom.value) {
+    scrollToBottom(smooth)
+  }
+}
+
 const loadSelectedAgent = async () => {
   if (!sessionForm.value.selectedAgent) {
     selectedAgentPreview.value = null
@@ -945,6 +975,10 @@ const loadSelectedAgent = async () => {
 
 const selectSession = (sessionId) => {
   activeSessionId.value = sessionId
+
+  // Reset scroll state and scroll to bottom when switching sessions
+  isUserNearBottom.value = true
+  scrollToBottom(false)
 
   // Focus the input when switching to a session
   focusMessageInput()
@@ -1425,12 +1459,7 @@ const sendPermissionResponse = (request, approved, reason = '') => {
 
     // Auto-scroll to bottom only if viewing this session
     if (request.session_id === activeSessionId.value) {
-      nextTick(() => {
-        const container = document.querySelector('.messages-container')
-        if (container) {
-          container.scrollTop = container.scrollHeight
-        }
-      })
+      autoScrollIfNearBottom()
     }
 
   } catch (error) {
@@ -1563,6 +1592,12 @@ agentWs.on('onAgentMessage', (data) => {
   // Update session status and metadata
   const session = sessions.value.find(s => s.id === data.session_id)
   if (session) {
+    // Update git branch from metadata
+    if (data.metadata && data.metadata.git_branch) {
+      session.git_branch = data.metadata.git_branch
+      console.log('🌿 Updated git branch:', session.git_branch)
+    }
+
     // Update costs from result message
     if (costData) {
       session.cost_usd = (session.cost_usd || 0) + costData.costUSD
@@ -1697,13 +1732,8 @@ agentWs.on('onAgentMessage', (data) => {
   isProcessing.value = false
   isThinking.value = false
 
-  // Auto-scroll to bottom
-  nextTick(() => {
-    const container = document.querySelector('.messages-container')
-    if (container) {
-      container.scrollTop = container.scrollHeight
-    }
-  })
+  // Auto-scroll to bottom if user is near bottom
+  autoScrollIfNearBottom()
 })
 
 agentWs.on('onAgentThinking', (data) => {
@@ -1858,13 +1888,8 @@ agentWs.on('onPermissionAcknowledged', (data) => {
       }
     }
 
-    // Auto-scroll to bottom
-    nextTick(() => {
-      const container = document.querySelector('.messages-container')
-      if (container) {
-        container.scrollTop = container.scrollHeight
-      }
-    })
+    // Auto-scroll to bottom if user is near bottom
+    autoScrollIfNearBottom()
   }
 })
 
@@ -1938,6 +1963,11 @@ watch(() => agentWs.connected, (connected) => {
     agentWs.send({ type: 'list_sessions' })
   }
 })
+
+// Watch for new messages and auto-scroll if user is near bottom
+watch(activeMessages, () => {
+  autoScrollIfNearBottom()
+}, { flush: 'post' })
 </script>
 
 <style scoped>

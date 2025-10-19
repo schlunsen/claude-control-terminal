@@ -10,7 +10,7 @@ import (
 
 const (
 	// Current schema version - increment when adding new migrations
-	currentSchemaVersion = 2
+	currentSchemaVersion = 3
 )
 
 // InitializeAgentTables creates the necessary tables for agent session persistence
@@ -305,6 +305,10 @@ func runMigrations(db *sql.DB, fromVersion, toVersion int) error {
 			if err := migrate_v1_to_v2(db); err != nil {
 				return fmt.Errorf("migration v1->v2 failed: %w", err)
 			}
+		case 3:
+			if err := migrate_v2_to_v3(db); err != nil {
+				return fmt.Errorf("migration v2->v3 failed: %w", err)
+			}
 		default:
 			return fmt.Errorf("unknown migration version: %d", nextVersion)
 		}
@@ -417,5 +421,36 @@ func migrate_v1_to_v2(db *sql.DB) error {
 	}
 
 	log.Printf("Migration v1->v2: Successfully renamed column using copy approach")
+	return nil
+}
+
+// migrate_v2_to_v3 adds git_branch column to agent_sessions table
+func migrate_v2_to_v3(db *sql.DB) error {
+	log.Printf("Migration v2->v3: Adding git_branch column to agent_sessions table")
+
+	// Check if git_branch column already exists
+	var count int
+	err := db.QueryRow(`
+		SELECT COUNT(*)
+		FROM pragma_table_info('agent_sessions')
+		WHERE name = 'git_branch'
+	`).Scan(&count)
+
+	if err != nil {
+		return fmt.Errorf("failed to check for git_branch column: %w", err)
+	}
+
+	if count > 0 {
+		log.Printf("Migration v2->v3: git_branch column already exists, migration already applied")
+		return nil
+	}
+
+	// Add git_branch column
+	_, err = db.Exec("ALTER TABLE agent_sessions ADD COLUMN git_branch TEXT")
+	if err != nil {
+		return fmt.Errorf("failed to add git_branch column: %w", err)
+	}
+
+	log.Printf("Migration v2->v3: Successfully added git_branch column")
 	return nil
 }

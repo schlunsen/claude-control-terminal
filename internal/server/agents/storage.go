@@ -41,6 +41,7 @@ type SessionMetadata struct {
 	ErrorMessage    string     `json:"error_message,omitempty"`
 	ModelName       string     `json:"model_name,omitempty"`
 	ClaudeSessionID string     `json:"claude_session_id,omitempty"`  // Claude CLI session ID for resuming
+	GitBranch       string     `json:"git_branch,omitempty"`         // Git branch of working directory
 }
 
 // MessageRecord represents a persisted message
@@ -79,8 +80,8 @@ func (s *SQLiteSessionStorage) SaveSession(session *SessionMetadata) error {
 		INSERT INTO agent_sessions (
 			id, status, created_at, updated_at, ended_at,
 			message_count, cost_usd, num_turns, duration_ms,
-			error_message, model_name, claude_session_id
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			error_message, model_name, claude_session_id, git_branch
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := s.db.Exec(
@@ -97,6 +98,7 @@ func (s *SQLiteSessionStorage) SaveSession(session *SessionMetadata) error {
 		session.ErrorMessage,
 		session.ModelName,
 		session.ClaudeSessionID,
+		session.GitBranch,
 	)
 
 	if err != nil {
@@ -113,7 +115,7 @@ func (s *SQLiteSessionStorage) UpdateSession(session *SessionMetadata) error {
 		SET status = ?, updated_at = ?, ended_at = ?,
 		    message_count = ?, cost_usd = ?, num_turns = ?,
 		    duration_ms = ?, error_message = ?, model_name = ?,
-		    claude_session_id = ?
+		    claude_session_id = ?, git_branch = ?
 		WHERE id = ?
 	`
 
@@ -129,6 +131,7 @@ func (s *SQLiteSessionStorage) UpdateSession(session *SessionMetadata) error {
 		session.ErrorMessage,
 		session.ModelName,
 		session.ClaudeSessionID,
+		session.GitBranch,
 		session.ID.String(),
 	)
 
@@ -153,7 +156,7 @@ func (s *SQLiteSessionStorage) GetSession(sessionID uuid.UUID) (*SessionMetadata
 	query := `
 		SELECT id, status, created_at, updated_at, ended_at,
 		       message_count, cost_usd, num_turns, duration_ms,
-		       error_message, model_name, claude_session_id
+		       error_message, model_name, claude_session_id, git_branch
 		FROM agent_sessions
 		WHERE id = ?
 	`
@@ -161,7 +164,7 @@ func (s *SQLiteSessionStorage) GetSession(sessionID uuid.UUID) (*SessionMetadata
 	session := &SessionMetadata{}
 	var idStr string
 	var endedAt sql.NullTime
-	var errorMsg, modelName, claudeSessionID sql.NullString
+	var errorMsg, modelName, claudeSessionID, gitBranch sql.NullString
 
 	err := s.db.QueryRow(query, sessionID.String()).Scan(
 		&idStr,
@@ -176,6 +179,7 @@ func (s *SQLiteSessionStorage) GetSession(sessionID uuid.UUID) (*SessionMetadata
 		&errorMsg,
 		&modelName,
 		&claudeSessionID,
+		&gitBranch,
 	)
 
 	if err == sql.ErrNoRows {
@@ -205,6 +209,9 @@ func (s *SQLiteSessionStorage) GetSession(sessionID uuid.UUID) (*SessionMetadata
 	if claudeSessionID.Valid {
 		session.ClaudeSessionID = claudeSessionID.String
 	}
+	if gitBranch.Valid {
+		session.GitBranch = gitBranch.String
+	}
 
 	return session, nil
 }
@@ -219,7 +226,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
 			       message_count, cost_usd, num_turns, duration_ms,
-			       error_message, model_name, claude_session_id
+			       error_message, model_name, claude_session_id, git_branch
 			FROM agent_sessions
 			ORDER BY updated_at DESC
 		`
@@ -228,7 +235,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
 			       message_count, cost_usd, num_turns, duration_ms,
-			       error_message, model_name, claude_session_id
+			       error_message, model_name, claude_session_id, git_branch
 			FROM agent_sessions
 			WHERE status != 'ended'
 			ORDER BY updated_at DESC
@@ -237,7 +244,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
 			       message_count, cost_usd, num_turns, duration_ms,
-			       error_message, model_name, claude_session_id
+			       error_message, model_name, claude_session_id, git_branch
 			FROM agent_sessions
 			WHERE status = ?
 			ORDER BY updated_at DESC
@@ -256,7 +263,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 		session := &SessionMetadata{}
 		var idStr string
 		var endedAt sql.NullTime
-		var errorMsg, modelName, claudeSessionID sql.NullString
+		var errorMsg, modelName, claudeSessionID, gitBranch sql.NullString
 
 		err := rows.Scan(
 			&idStr,
@@ -271,6 +278,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 			&errorMsg,
 			&modelName,
 			&claudeSessionID,
+			&gitBranch,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
@@ -295,6 +303,9 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 		}
 		if claudeSessionID.Valid {
 			session.ClaudeSessionID = claudeSessionID.String
+		}
+		if gitBranch.Valid {
+			session.GitBranch = gitBranch.String
 		}
 
 		sessions = append(sessions, session)

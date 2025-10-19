@@ -70,10 +70,6 @@
           <div class="metric-label">Details</div>
           <div class="status-details">
             <div class="detail-row">
-              <span class="detail-label">Working Dir:</span>
-              <span class="detail-value">{{ truncatePath(session.options?.working_directory) }}</span>
-            </div>
-            <div class="detail-row">
               <span class="detail-label">Mode:</span>
               <span class="detail-value permission-mode">{{ session.options?.permission_mode }}</span>
             </div>
@@ -82,6 +78,38 @@
               <span class="detail-value">{{ (session.options?.tools || []).length }}</span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Working Directory & Git Branch Section -->
+    <div class="environment-section">
+      <div class="environment-header">
+        <span class="environment-icon">📂</span>
+        <span class="environment-title">Environment</span>
+      </div>
+      <div class="environment-details">
+        <div class="environment-row" v-if="session.options?.working_directory">
+          <span class="env-label">Working Directory</span>
+          <div class="env-value-wrapper">
+            <code class="env-value" :title="session.options.working_directory">{{ session.options.working_directory }}</code>
+          </div>
+        </div>
+        <div class="environment-row" v-if="session.git_branch">
+          <span class="env-label">Git Branch</span>
+          <div class="git-branch-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="6" y1="3" x2="6" y2="15"></line>
+              <circle cx="18" cy="6" r="3"></circle>
+              <circle cx="6" cy="18" r="3"></circle>
+              <path d="M18 9a9 9 0 0 1-9 9"></path>
+            </svg>
+            <span>{{ session.git_branch }}</span>
+          </div>
+        </div>
+        <div class="environment-row" v-if="!session.git_branch && session.options?.working_directory">
+          <span class="env-label">Git Branch</span>
+          <span class="env-not-available">Not a git repository</span>
         </div>
       </div>
     </div>
@@ -128,6 +156,7 @@ interface SessionMetricsData {
   status: string
   message_count: number
   error_message?: string
+  git_branch?: string
   options?: {
     working_directory?: string
     permission_mode?: string
@@ -135,6 +164,7 @@ interface SessionMetricsData {
   }
   created_at?: string
   updated_at?: string
+  git_branch?: string
 }
 
 const props = defineProps<{
@@ -547,6 +577,11 @@ watch(sessionStartTime, (newVal) => {
   font-size: 0.8rem;
 }
 
+.git-branch {
+  color: var(--accent-purple);
+  font-weight: 700;
+}
+
 /* Tools Breakdown */
 .tools-breakdown {
   padding: 16px;
@@ -660,6 +695,117 @@ watch(sessionStartTime, (newVal) => {
   50% {
     opacity: 0.5;
   }
+}
+
+/* Environment Section */
+.environment-section {
+  padding: 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  margin-bottom: 16px;
+}
+
+.environment-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.environment-icon {
+  font-size: 1.2rem;
+}
+
+.environment-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.environment-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.environment-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.env-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.env-value-wrapper {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.env-value {
+  display: block;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.env-value::-webkit-scrollbar {
+  height: 6px;
+}
+
+.env-value::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+}
+
+.env-value::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.env-value::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-purple);
+}
+
+.git-branch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-purple-hover));
+  border-radius: 8px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: white;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.git-branch-badge svg {
+  flex-shrink: 0;
+}
+
+.env-not-available {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 /* Responsive */

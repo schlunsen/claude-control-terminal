@@ -40,6 +40,9 @@ const (
 	MessageTypeKillAllAgents MessageType = "kill_all_agents"
 	MessageTypeAgentsKilled  MessageType = "agents_killed"
 
+	// Session updates
+	MessageTypeSessionUpdated MessageType = "session_updated"
+
 	// System
 	MessageTypeError MessageType = "error"
 	MessageTypePing  MessageType = "ping"
@@ -82,6 +85,7 @@ type Session struct {
 	DurationMS       int64          `json:"duration_ms"`
 	ModelName        string         `json:"model_name,omitempty"`
 	ClaudeSessionID  string         `json:"claude_session_id,omitempty"`  // Claude CLI session ID for resuming conversations
+	GitBranch        string         `json:"git_branch,omitempty"`         // Git branch of working directory (if applicable)
 }
 
 // BaseMessage represents a base WebSocket message
@@ -194,6 +198,7 @@ type PermissionRequestMessage struct {
 	Tool           string      `json:"tool"`
 	Action         string      `json:"action"`
 	Details        interface{} `json:"details,omitempty"`
+	Description    string      `json:"description"` // Human-readable description of the permission request
 }
 
 // PermissionResponseMessage represents a permission response
@@ -202,4 +207,11 @@ type PermissionResponseMessage struct {
 	SessionID    uuid.UUID `json:"session_id"`
 	PermissionID string    `json:"permission_id"`
 	Approved     bool      `json:"approved"`
+}
+
+// SessionUpdatedMessage represents a session update notification
+type SessionUpdatedMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+	GitBranch *string   `json:"git_branch,omitempty"`
 }
