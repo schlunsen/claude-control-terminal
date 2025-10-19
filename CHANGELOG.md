@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - Global Keyboard Shortcuts - 2025-01-19
+
+### Added
+- Global keyboard shortcuts system for enhanced accessibility and efficiency
+- Shortcuts dialog (press '?' key) displaying all available keyboard commands
+- Comprehensive keyboard navigation support across all dashboard screens
+- Help modal with organized shortcut reference grouped by functionality
+
+### Changed
+- Improved user experience with discoverable keyboard shortcuts
+- Enhanced navigation workflow with consistent keyboard controls
+
 ## [0.5.0] - Unified Go Server & Enhanced Logging - 2025-01-19
 
 ### Added
@@ -617,6 +629,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.5.1]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.4.2...v0.4.3
