@@ -178,12 +178,11 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	}
 
 	// Build SDK options
-	log.Printf("SendPrompt: Building SDK options (model: %s, permMode: %v, verbose: %v)", sm.config.Model, permMode, sm.config.Verbose)
+	log.Printf("SendPrompt: Building SDK options (model: %s, permMode: %v)", sm.config.Model, permMode)
 	opts := types.NewClaudeAgentOptions().
 		WithModel(sm.config.Model).
 		WithPermissionMode(permMode).
-		WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey).
-		WithVerbose(sm.config.Verbose)
+		WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey)
 
 	// Set working directory if provided
 	if session.Options.WorkingDirectory != nil && *session.Options.WorkingDirectory != "" {
@@ -194,8 +193,8 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	// Execute query (uses non-streaming mode, no control protocol initialization)
 	log.Printf("SendPrompt: Executing claude.Query...")
 	log.Printf("SendPrompt: API Key length: %d", len(sm.config.APIKey))
-	logging.Debug("Executing claude.Query for session %s with options: model=%s, verbose=%v, permMode=%v",
-		sessionID, sm.config.Model, sm.config.Verbose, permMode)
+	logging.Debug("Executing claude.Query for session %s with options: model=%s, permMode=%v",
+		sessionID, sm.config.Model, permMode)
 
 	messages, err := claude.Query(session.ctx, prompt, opts)
 	if err != nil {
