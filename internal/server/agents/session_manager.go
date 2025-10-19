@@ -236,7 +236,7 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 	logging.Debug("Session %s: Starting to receive query responses", session.ID)
 
 	messageCount := 0
-	timeout := time.After(60 * time.Second) // 60 second timeout for first message
+	timeout := time.After(300 * time.Second) // 5 minute timeout for first message
 
 	for {
 		select {
@@ -257,8 +257,8 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 				return
 			}
 
-			// Reset timeout after first message
-			timeout = time.After(60 * time.Second)
+			// Reset timeout after each message
+			timeout = time.After(300 * time.Second)
 
 		case <-timeout:
 			logging.Warning("Session %s: TIMEOUT waiting for messages (received %d so far)", session.ID, messageCount)
