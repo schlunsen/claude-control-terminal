@@ -2100,17 +2100,21 @@ agentWs.on('onMessagesLoaded', (data) => {
     role: dbMsg.role,
     content: dbMsg.content,
     timestamp: new Date(dbMsg.timestamp),
+    sequence: dbMsg.sequence,
     isHistorical: true,
     toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
     thinkingContent: dbMsg.thinking_content || undefined
   }))
+
+  // Sort messages by sequence number to ensure correct order
+  uiMessages.sort((a, b) => a.sequence - b.sequence)
 
   // Set or prepend messages for the session
   if (!messages.value[data.session_id]) {
     messages.value[data.session_id] = []
   }
 
-  // Prepend historical messages (they come in order, oldest first)
+  // Prepend historical messages (now sorted by sequence, oldest first)
   messages.value[data.session_id] = [...uiMessages, ...messages.value[data.session_id]]
 
   console.log(`📥 Loaded ${uiMessages.length} historical messages for session ${data.session_id}`)
