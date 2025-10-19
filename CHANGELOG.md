@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - South Park Theme & Theme Carousel Enhancement - 2025-10-20
+
+### Added
+- South Park Dark and Light themes with Comic Sans typography and South Park-inspired color palette
+- Theme selector component in header for quick theme switching
+- Comprehensive theme carousel navigation page with all 5 theme families (Default, Neon, Nord, Dracula, South Park)
+- Theme documentation with THEMES.md describing all theme options and customization
+- Enhanced theme composable with support for theme persistence and system-wide theme management
+
+### Changed
+- Increased theme carousel scroll amount from 320px to 650px for faster navigation and improved user experience
+- Improved theme toggle component with better integration for all theme families
+- Enhanced sidebar with theme selector for easy access to theme customization
+
 ## [0.5.6] - Historical Message Loading & Session Deletion - 2025-10-19
 
 ### Added
@@ -682,6 +696,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.5.7]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.5...v0.5.6
 [0.5.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.3...v0.5.4
