@@ -9,6 +9,7 @@ interface AgentWebSocketCallbacks {
   onPermissionAcknowledged: ((data: any) => void) | null
   onSessionsList: ((data: any) => void) | null
   onMessagesLoaded: ((data: any) => void) | null
+  onSessionDeleted: ((data: any) => void) | null
   onAgentsKilled: ((data: any) => void) | null
   onError: ((data: any) => void) | null
 }
@@ -29,6 +30,7 @@ export const useAgentWebSocket = () => {
     onPermissionAcknowledged: null,
     onSessionsList: null,
     onMessagesLoaded: null,
+    onSessionDeleted: null,
     onAgentsKilled: null,
     onError: null,
   })
@@ -116,6 +118,10 @@ export const useAgentWebSocket = () => {
 
             case 'messages_loaded':
               callbacks.onMessagesLoaded?.(message)
+              break
+
+            case 'session_deleted':
+              callbacks.onSessionDeleted?.(message)
               break
 
             case 'agents_killed':

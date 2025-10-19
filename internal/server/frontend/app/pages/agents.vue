@@ -92,17 +92,32 @@
                 <span v-if="session.cost_usd && session.cost_usd > 0" class="session-cost">${{ session.cost_usd.toFixed(4) }}</span>
               </div>
             </div>
-            <button
-              v-if="session.status !== 'ended'"
-              @click.stop="endSession(session.id)"
-              class="btn-end-session"
-              title="End session"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+            <div class="session-actions">
+              <button
+                v-if="session.status !== 'ended'"
+                @click.stop="endSession(session.id)"
+                class="btn-end-session"
+                title="End session"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="15" y1="9" x2="9" y2="15"></line>
+                  <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+              </button>
+              <button
+                @click.stop="deleteSession(session.id)"
+                class="btn-delete-session"
+                title="Delete session"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -1012,6 +1027,47 @@ const endSession = async (sessionId) => {
   delete messages.value[sessionId]
   messagesLoaded.value.delete(sessionId)  // Clean up loaded tracking
   awaitingToolResults.value.delete(sessionId)  // Clean up flag
+
+  // Clean up any pending timers
+  const existingTimer = todoHideTimers.value.get(sessionId)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    todoHideTimers.value.delete(sessionId)
+  }
+
+  // Clean up live agents session data
+  cleanupSessionData(sessionId)
+
+  // Clean up session permissions
+  sessionPermissions.value.delete(sessionId)
+
+  // Clean up session metrics
+  sessionToolStats.value.delete(sessionId)
+  sessionPermissionStats.value.delete(sessionId)
+
+  if (activeSessionId.value === sessionId) {
+    activeSessionId.value = null
+  }
+}
+
+const deleteSession = async (sessionId) => {
+  if (!agentWs.connected) return
+
+  // Confirm deletion
+  if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+    return
+  }
+
+  agentWs.send({
+    type: 'delete_session',
+    session_id: sessionId
+  })
+
+  // Remove from local state immediately (optimistic update)
+  sessions.value = sessions.value.filter(s => s.id !== sessionId)
+  delete messages.value[sessionId]
+  messagesLoaded.value.delete(sessionId)
+  awaitingToolResults.value.delete(sessionId)
 
   // Clean up any pending timers
   const existingTimer = todoHideTimers.value.get(sessionId)
@@ -1968,6 +2024,12 @@ agentWs.on('onSessionsList', (data) => {
   sessions.value = data.sessions
 })
 
+agentWs.on('onSessionDeleted', (data) => {
+  console.log('🗑️ Session deleted:', data.session_id)
+  // Session already removed from local state in deleteSession (optimistic update)
+  // Just log confirmation
+})
+
 agentWs.on('onMessagesLoaded', (data) => {
   console.log('📥 Messages loaded:', data)
 
@@ -2352,22 +2414,42 @@ watch(activeMessages, () => {
   color: #dc3545;
 }
 
-.btn-end-session {
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-end-session,
+.btn-delete-session {
   padding: 4px;
   background: transparent;
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0.6;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+  border-radius: 4px;
 }
 
-.btn-end-session:hover {
+.btn-end-session:hover,
+.btn-delete-session:hover {
   opacity: 1;
 }
 
-.session-item.active .btn-end-session {
+.btn-delete-session:hover {
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+}
+
+.session-item.active .btn-end-session,
+.session-item.active .btn-delete-session {
   color: white;
+}
+
+.session-item.active .btn-delete-session:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ff6b6b;
 }
 
 /* Chat Area with Metrics */

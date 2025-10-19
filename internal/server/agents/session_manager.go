@@ -424,6 +424,39 @@ func (sm *SessionManager) EndSession(sessionID uuid.UUID) error {
 	return nil
 }
 
+// DeleteSession deletes a session from the database
+func (sm *SessionManager) DeleteSession(sessionID uuid.UUID) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// If session is still active, end it first
+	if session, exists := sm.sessions[sessionID]; exists {
+		// Close streaming client if exists
+		session.mu.Lock()
+		if session.client != nil {
+			session.client.Close(session.ctx)
+			session.client = nil
+		}
+		session.mu.Unlock()
+
+		// Cancel context
+		if session.cancel != nil {
+			session.cancel()
+		}
+
+		// Remove from active sessions
+		delete(sm.sessions, sessionID)
+	}
+
+	// Delete from database
+	if err := sm.storage.DeleteSession(sessionID); err != nil {
+		return fmt.Errorf("failed to delete session from storage: %w", err)
+	}
+
+	logging.Info("Session deleted: %s", sessionID)
+	return nil
+}
+
 // EndAllSessions ends all active sessions
 func (sm *SessionManager) EndAllSessions() int {
 	sm.mu.Lock()

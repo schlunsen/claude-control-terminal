@@ -19,6 +19,8 @@ const (
 	MessageTypeSessionCreated MessageType = "session_created"
 	MessageTypeEndSession    MessageType = "end_session"
 	MessageTypeSessionEnded  MessageType = "session_ended"
+	MessageTypeDeleteSession MessageType = "delete_session"
+	MessageTypeSessionDeleted MessageType = "session_deleted"
 	MessageTypeListSessions  MessageType = "list_sessions"
 	MessageTypeSessionsList  MessageType = "sessions_list"
 	MessageTypeLoadMessages  MessageType = "load_messages"
@@ -137,6 +139,19 @@ type EndSessionMessage struct {
 
 // SessionEndedMessage represents a session end response
 type SessionEndedMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+	Status    string    `json:"status"`
+}
+
+// DeleteSessionMessage represents deleting a session
+type DeleteSessionMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+}
+
+// SessionDeletedMessage represents a session deletion response
+type SessionDeletedMessage struct {
 	BaseMessage
 	SessionID uuid.UUID `json:"session_id"`
 	Status    string    `json:"status"`
