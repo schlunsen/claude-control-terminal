@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - Permission Streaming & Logging Enhancements - 2025-10-19
+
+### Fixed
+- Agent permission callbacks now use streaming mode for improved real-time responsiveness
+- Enhanced logging for permission request handling with detailed debugging information
+- Improved error handling for missing permission_id in frontend responses
+- Better visibility of permission request flow through enhanced logging
+
+### Changed
+- Switched permission callbacks from non-streaming to streaming mode for better performance
+- Improved logging infrastructure for permission request lifecycle tracking
+
 ## [0.5.4] - Permission Callback Improvements - 2025-10-19
 
 ### Changed
@@ -659,6 +671,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.5.5]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.1...v0.5.2
