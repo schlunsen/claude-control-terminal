@@ -40,6 +40,9 @@ const (
 	MessageTypeKillAllAgents MessageType = "kill_all_agents"
 	MessageTypeAgentsKilled  MessageType = "agents_killed"
 
+	// Session updates
+	MessageTypeSessionUpdated MessageType = "session_updated"
+
 	// System
 	MessageTypeError MessageType = "error"
 	MessageTypePing  MessageType = "ping"
@@ -204,4 +207,11 @@ type PermissionResponseMessage struct {
 	SessionID    uuid.UUID `json:"session_id"`
 	PermissionID string    `json:"permission_id"`
 	Approved     bool      `json:"approved"`
+}
+
+// SessionUpdatedMessage represents a session update notification
+type SessionUpdatedMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+	GitBranch *string   `json:"git_branch,omitempty"`
 }

@@ -455,6 +455,14 @@ func (h *AgentHandler) sendAgentMessage(ws *websocket.Conn, sessionID uuid.UUID,
 		}
 	}
 
+	// Add git branch to metadata
+	session, err := h.SessionManager.GetSession(sessionID)
+	if err == nil && session.GitBranch != "" {
+		response.Metadata = map[string]interface{}{
+			"git_branch": session.GitBranch,
+		}
+	}
+
 	return ws.WriteJSON(response)
 }
 
@@ -736,6 +744,14 @@ func (h *AgentHandler) sendFiberAgentMessage(c *fiberws.Conn, sessionID uuid.UUI
 	default:
 		log.Printf("Unknown message type: %s", msgType)
 		return fmt.Errorf("unknown message type: %s", msgType)
+	}
+
+	// Add git branch to metadata
+	session, err := h.SessionManager.GetSession(sessionID)
+	if err == nil && session.GitBranch != "" {
+		response.Metadata = map[string]interface{}{
+			"git_branch": session.GitBranch,
+		}
 	}
 
 	log.Printf("📤 WS OUTGOING: type=%s, sessionID=%s, response=%+v", response.Type, response.SessionID, response)

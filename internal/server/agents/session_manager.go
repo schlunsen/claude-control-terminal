@@ -667,6 +667,12 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 		case msg, ok := <-messages:
 			if !ok {
 				logging.Info("Session %s: Messages channel closed after %d messages", session.ID, messageCount)
+
+				// Refresh git branch after conversation turn completes
+				if _, changed, err := sm.RefreshGitBranch(session.ID); err == nil && changed {
+					logging.Debug("Session %s: Git branch updated after conversation turn", session.ID)
+				}
+
 				// Update session in database before finishing
 				sm.mu.Lock()
 				session.UpdatedAt = time.Now()
@@ -711,6 +717,37 @@ func (sm *SessionManager) GetResponseChannel(sessionID uuid.UUID) (chan types.Me
 	}
 
 	return session.responseChan, nil
+}
+
+// RefreshGitBranch checks and updates the git branch for a session
+// Returns the new branch name and whether it changed
+func (sm *SessionManager) RefreshGitBranch(sessionID uuid.UUID) (newBranch string, changed bool, err error) {
+	session, err := sm.GetSession(sessionID)
+	if err != nil {
+		return "", false, err
+	}
+
+	// Only refresh if we have a working directory
+	if session.Options.WorkingDirectory == nil || *session.Options.WorkingDirectory == "" {
+		return session.GitBranch, false, nil
+	}
+
+	// Detect current git branch
+	currentBranch := GetGitBranch(*session.Options.WorkingDirectory)
+
+	// Check if it changed
+	changed = currentBranch != session.GitBranch
+
+	if changed {
+		logging.Info("Git branch changed for session %s: %s -> %s", sessionID, session.GitBranch, currentBranch)
+		sm.mu.Lock()
+		session.GitBranch = currentBranch
+		session.UpdatedAt = time.Now()
+		sm.updateSessionInDB(&session.Session)
+		sm.mu.Unlock()
+	}
+
+	return currentBranch, changed, nil
 }
 
 // StartPermissionForwarder marks that the permission forwarder is running

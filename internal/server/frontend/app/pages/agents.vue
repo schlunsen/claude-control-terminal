@@ -1592,6 +1592,12 @@ agentWs.on('onAgentMessage', (data) => {
   // Update session status and metadata
   const session = sessions.value.find(s => s.id === data.session_id)
   if (session) {
+    // Update git branch from metadata
+    if (data.metadata && data.metadata.git_branch) {
+      session.git_branch = data.metadata.git_branch
+      console.log('🌿 Updated git branch:', session.git_branch)
+    }
+
     // Update costs from result message
     if (costData) {
       session.cost_usd = (session.cost_usd || 0) + costData.costUSD
