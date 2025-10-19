@@ -22,14 +22,37 @@ type SessionManager struct {
 	storage  SessionStorage
 }
 
+// PermissionRequest represents a pending permission request
+type PermissionRequest struct {
+	RequestID   string
+	ToolName    string
+	Input       map[string]interface{}
+	Context     types.ToolPermissionContext
+	ResponseChan chan PermissionResponse
+}
+
+// PermissionResponse represents the user's response to a permission request
+type PermissionResponse struct {
+	Approved      bool
+	UpdatedInput  *map[string]interface{}
+	DenyMessage   string
+}
+
 // AgentSession represents an active agent session
 type AgentSession struct {
 	Session
-	ctx           context.Context
-	cancel        context.CancelFunc
-	responseChan  chan types.Message
-	permissionReq chan *PermissionRequestMessage
-	active        bool
+	ctx                    context.Context
+	cancel                 context.CancelFunc
+	responseChan           chan types.Message
+	permissionReqChan      chan *PermissionRequest  // Outgoing permission requests to frontend
+	permissionRespChan     chan *PermissionResponse // Incoming permission responses from frontend
+	pendingPermissions     map[string]chan PermissionResponse // Map of request_id -> response channel
+	permMu                 sync.Mutex
+	permForwarderRunning   bool // Track if permission forwarder goroutine is running
+	permForwarderMu        sync.Mutex
+	active                 bool
+	client                 *claude.Client // Streaming client for this session
+	mu                     sync.Mutex     // Protects client field
 }
 
 // NewSessionManager creates a new session manager
@@ -92,7 +115,9 @@ func (sm *SessionManager) loadSessionsFromDB() error {
 
 		// Create channels
 		session.responseChan = make(chan types.Message, 10)
-		session.permissionReq = make(chan *PermissionRequestMessage, 10)
+		session.permissionReqChan = make(chan *PermissionRequest, 10)
+		session.permissionRespChan = make(chan *PermissionResponse, 10)
+		session.pendingPermissions = make(map[string]chan PermissionResponse)
 
 		sm.sessions[sessionMeta.ID] = session
 
@@ -189,7 +214,9 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 
 		// Create response and permission channels
 		session.responseChan = make(chan types.Message, 10)
-		session.permissionReq = make(chan *PermissionRequestMessage, 10)
+		session.permissionReqChan = make(chan *PermissionRequest, 10)
+		session.permissionRespChan = make(chan *PermissionResponse, 10)
+		session.pendingPermissions = make(map[string]chan PermissionResponse)
 
 		sm.sessions[sessionID] = session
 
@@ -221,7 +248,9 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 
 	// Create response and permission channels
 	session.responseChan = make(chan types.Message, 10)
-	session.permissionReq = make(chan *PermissionRequestMessage, 10)
+	session.permissionReqChan = make(chan *PermissionRequest, 10)
+	session.permissionRespChan = make(chan *PermissionResponse, 10)
+	session.pendingPermissions = make(map[string]chan PermissionResponse)
 
 	sm.sessions[sessionID] = session
 
@@ -343,6 +372,14 @@ func (sm *SessionManager) EndSession(sessionID uuid.UUID) error {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
 
+	// Close streaming client if exists
+	session.mu.Lock()
+	if session.client != nil {
+		session.client.Close(session.ctx)
+		session.client = nil
+	}
+	session.mu.Unlock()
+
 	// Cancel context (will stop any ongoing queries)
 	if session.cancel != nil {
 		session.cancel()
@@ -426,10 +463,93 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 
 	// Build SDK options
 	logging.Debug("SendPrompt: Building SDK options (model: %s, permMode: %v, verbose: %v)", sm.config.Model, permMode, sm.config.Verbose)
+
+	// Create permission callback
+	canUseTool := func(ctx context.Context, toolName string, input map[string]interface{}, permCtx types.ToolPermissionContext) (interface{}, error) {
+		requestID := uuid.New().String()
+		logging.Info("🔐🔐🔐 CALLBACK INVOKED: tool=%s, requestID=%s, input=%+v", toolName, requestID, input)
+
+		// Create response channel for this specific request
+		responseChan := make(chan PermissionResponse, 1)
+
+		// Store in pending permissions map
+		session.permMu.Lock()
+		session.pendingPermissions[requestID] = responseChan
+		session.permMu.Unlock()
+
+		// Clean up when done
+		defer func() {
+			session.permMu.Lock()
+			delete(session.pendingPermissions, requestID)
+			session.permMu.Unlock()
+		}()
+
+		// Send permission request to frontend via channel
+		permReq := &PermissionRequest{
+			RequestID:    requestID,
+			ToolName:     toolName,
+			Input:        input,
+			Context:      permCtx,
+			ResponseChan: responseChan,
+		}
+
+		logging.Info("⏳ Sending permission request to channel...")
+
+		select {
+		case session.permissionReqChan <- permReq:
+			logging.Info("✅ Permission request sent to channel successfully: %s", requestID)
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(5 * time.Second):
+			logging.Warning("Timeout sending permission request to frontend")
+			return types.PermissionResultDeny{Message: "Permission request timeout"}, nil
+		}
+
+		// Wait for response from frontend
+		select {
+		case response := <-responseChan:
+			logging.Info("Permission response received: approved=%v, requestID=%s", response.Approved, requestID)
+			if response.Approved {
+				result := types.PermissionResultAllow{}
+				if response.UpdatedInput != nil {
+					result.UpdatedInput = response.UpdatedInput
+				}
+				return result, nil
+			} else {
+				return types.PermissionResultDeny{
+					Message: response.DenyMessage,
+				}, nil
+			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(300 * time.Second): // 5 minute timeout for user response
+			logging.Warning("Timeout waiting for permission response from user")
+			return types.PermissionResultDeny{Message: "Permission response timeout"}, nil
+		}
+	}
+
+	// Define available tools (Claude Code standard tools)
+	allowedTools := []string{
+		"Bash", "Read", "Write", "Edit", "Glob", "Grep",
+		"WebSearch", "WebFetch",
+	}
+
+	// If session options specify tools, use those instead
+	if len(session.Options.Tools) > 0 {
+		allowedTools = session.Options.Tools
+	}
+
+	logging.Info("Allowed tools for session %s: %v", sessionID, allowedTools)
+	logging.Info("Permission mode: %v", permMode)
+
 	opts := types.NewClaudeAgentOptions().
 		WithModel(sm.config.Model).
 		WithPermissionMode(permMode).
-		WithVerbose(sm.config.Verbose)
+		WithVerbose(sm.config.Verbose).
+		WithCanUseTool(canUseTool).
+		// Don't set AllowedTools - let permission mode control tool access
+		// WithAllowedTools(allowedTools...).
+		WithSystemPrompt("code")
 
 	// Only set API key if provided (don't override SDK's default detection)
 	if sm.config.APIKey != "" {
@@ -448,30 +568,59 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 		opts = opts.WithResume(session.ClaudeSessionID)
 	}
 
-	// Execute query (uses non-streaming mode, no control protocol initialization)
-	logging.Debug("SendPrompt: Executing claude.Query...")
+	// Execute query using streaming mode (required for permission callbacks via control protocol)
+	logging.Debug("SendPrompt: Creating streaming client...")
 	logging.Debug("SendPrompt: API Key length: %d", len(sm.config.APIKey))
-	logging.Debug("Executing claude.Query for session %s with options: model=%s, permMode=%v",
+	logging.Debug("Creating streaming client for session %s with options: model=%s, permMode=%v",
 		sessionID, sm.config.Model, permMode)
 
-	messages, err := claude.Query(session.ctx, prompt, opts)
+	client, err := claude.NewClient(session.ctx, opts)
 	if err != nil {
-		logging.Error("SendPrompt: Failed to execute query: %v", err)
+		logging.Error("SendPrompt: Failed to create client: %v", err)
 		sm.mu.Lock()
 		errMsg := err.Error()
 		session.ErrorMessage = &errMsg
 		session.Status = SessionStatusError
 		sm.mu.Unlock()
-		return fmt.Errorf("failed to execute query: %w", err)
+		return fmt.Errorf("failed to create client: %w", err)
 	}
-	if messages == nil {
-		logging.Error("SendPrompt: messages channel is nil for session %s", sessionID)
-		return fmt.Errorf("messages channel is nil")
+
+	// Connect to Claude
+	if err := client.Connect(session.ctx); err != nil {
+		logging.Error("SendPrompt: Failed to connect client: %v", err)
+		sm.mu.Lock()
+		errMsg := err.Error()
+		session.ErrorMessage = &errMsg
+		session.Status = SessionStatusError
+		sm.mu.Unlock()
+		return fmt.Errorf("failed to connect client: %w", err)
 	}
-	logging.Info("SendPrompt: Query executed successfully, messages channel ready")
-	logging.Info("Query executed successfully for session %s, starting response stream", sessionID)
+
+	// Send the query
+	if err := client.Query(session.ctx, prompt); err != nil {
+		logging.Error("SendPrompt: Failed to send query: %v", err)
+		sm.mu.Lock()
+		errMsg := err.Error()
+		session.ErrorMessage = &errMsg
+		session.Status = SessionStatusError
+		sm.mu.Unlock()
+		return fmt.Errorf("failed to send query: %w", err)
+	}
+
+	// Get response channel
+	messages := client.ReceiveResponse(session.ctx)
+	logging.Info("SendPrompt: Client connected and query sent, starting response stream")
+	logging.Info("Streaming client created for session %s, starting response stream", sessionID)
 
 	// Start receiving responses in background
+	// Store client reference for cleanup
+	session.mu.Lock()
+	if session.client != nil {
+		session.client.Close(session.ctx)
+	}
+	session.client = client
+	session.mu.Unlock()
+
 	go sm.receiveQueryResponses(session, messages)
 
 	logging.Debug("SendPrompt: Completed successfully for session %s", sessionID)
@@ -545,6 +694,20 @@ func (sm *SessionManager) GetResponseChannel(sessionID uuid.UUID) (chan types.Me
 	}
 
 	return session.responseChan, nil
+}
+
+// StartPermissionForwarder marks that the permission forwarder is running
+// Returns true if this call started it, false if it was already running
+func (s *AgentSession) StartPermissionForwarder() bool {
+	s.permForwarderMu.Lock()
+	defer s.permForwarderMu.Unlock()
+
+	if s.permForwarderRunning {
+		return false // Already running
+	}
+
+	s.permForwarderRunning = true
+	return true // Started by this call
 }
 
 // saveMessageToDB persists a message to the database

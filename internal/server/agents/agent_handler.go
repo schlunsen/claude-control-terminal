@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
@@ -91,7 +92,7 @@ func (h *AgentHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		log.Printf("Received message type: %s with data: %+v", msgType, rawMsg)
+		log.Printf("📥 WS INCOMING: type=%s, sessionID=%v, data=%+v", msgType, rawMsg["session_id"], rawMsg)
 
 		// Route message to appropriate handler
 		if err := h.routeMessage(ws, MessageType(msgType), rawMsg); err != nil {
@@ -148,7 +149,7 @@ func (h *AgentHandler) HandleFiberWebSocket(c *fiberws.Conn) {
 			continue
 		}
 
-		log.Printf("Received message type: %s with data: %+v", msgType, rawMsg)
+		log.Printf("📥 WS INCOMING: type=%s, sessionID=%v, data=%+v", msgType, rawMsg["session_id"], rawMsg)
 
 		// Route message to appropriate handler
 		if err := h.routeFiberMessage(c, MessageType(msgType), rawMsg); err != nil {
@@ -196,6 +197,9 @@ func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, r
 
 	case MessageTypePing:
 		return h.handleFiberPing(c)
+
+	case MessageTypePermissionResponse:
+		return h.handleFiberPermissionResponse(c, rawMsg)
 
 	default:
 		return fmt.Errorf("unknown message type: %s", msgType)
@@ -421,12 +425,26 @@ func (h *AgentHandler) sendAgentMessage(ws *websocket.Conn, sessionID uuid.UUID,
 			response.Content = content
 		}
 
-	case "system":
+	case "system", "control_request":
 		if systemMsg, ok := msg.(*types.SystemMessage); ok {
-			response.Content = map[string]interface{}{
-				"type":    "system",
-				"subtype": systemMsg.Subtype,
-				"data":    systemMsg.Data,
+			// Check if this is a permission request (control_request)
+			if msg.GetMessageType() == "control_request" && systemMsg.Request != nil {
+				// This is a permission request - forward to frontend as permission_request
+				response.Type = MessageTypePermissionRequest
+				response.Content = map[string]interface{}{
+					"type":          "permission_request",
+					"permission_id": systemMsg.Request["permission_id"],
+					"tool":          systemMsg.Request["tool"],
+					"action":        systemMsg.Request["action"],
+					"details":       systemMsg.Request,
+				}
+			} else {
+				// Regular system message
+				response.Content = map[string]interface{}{
+					"type":    "system",
+					"subtype": systemMsg.Subtype,
+					"data":    systemMsg.Data,
+				}
 			}
 		}
 
@@ -570,6 +588,20 @@ func (h *AgentHandler) handleFiberSendPrompt(c *fiberws.Conn, rawMsg map[string]
 
 	log.Printf("Sending prompt to session %s: %s", msg.SessionID, msg.Prompt)
 
+	// Get the session first
+	session, err := h.SessionManager.GetSession(msg.SessionID)
+	if err != nil {
+		return err
+	}
+
+	// Start monitoring for permission requests BEFORE sending the prompt
+	// This prevents a race condition where the SDK requests permission
+	// before the goroutine is ready to receive it
+	// Only start if not already running to prevent multiple goroutines
+	if session.StartPermissionForwarder() {
+		go h.forwardPermissionRequests(c, msg.SessionID, session)
+	}
+
 	// Send prompt to session
 	if err := h.SessionManager.SendPrompt(msg.SessionID, msg.Prompt); err != nil {
 		return err
@@ -677,12 +709,27 @@ func (h *AgentHandler) sendFiberAgentMessage(c *fiberws.Conn, sessionID uuid.UUI
 			response.Content = content
 		}
 
-	case "system":
+	case "system", "control_request":
 		if systemMsg, ok := msg.(*types.SystemMessage); ok {
-			response.Content = map[string]interface{}{
-				"type":    "system",
-				"subtype": systemMsg.Subtype,
-				"data":    systemMsg.Data,
+			// Check if this is a permission request (control_request)
+			if msg.GetMessageType() == "control_request" && systemMsg.Request != nil {
+				// This is a permission request - forward to frontend as permission_request
+				log.Printf("🔐 Permission request detected: tool=%v, action=%v", systemMsg.Request["tool"], systemMsg.Request["action"])
+				response.Type = MessageTypePermissionRequest
+				response.Content = map[string]interface{}{
+					"type":          "permission_request",
+					"permission_id": systemMsg.Request["permission_id"],
+					"tool":          systemMsg.Request["tool"],
+					"action":        systemMsg.Request["action"],
+					"details":       systemMsg.Request,
+				}
+			} else {
+				// Regular system message
+				response.Content = map[string]interface{}{
+					"type":    "system",
+					"subtype": systemMsg.Subtype,
+					"data":    systemMsg.Data,
+				}
 			}
 		}
 
@@ -691,13 +738,13 @@ func (h *AgentHandler) sendFiberAgentMessage(c *fiberws.Conn, sessionID uuid.UUI
 		return fmt.Errorf("unknown message type: %s", msgType)
 	}
 
-	log.Printf("Sending agent message response: %+v", response)
+	log.Printf("📤 WS OUTGOING: type=%s, sessionID=%s, response=%+v", response.Type, response.SessionID, response)
 	if err := c.WriteJSON(response); err != nil {
 		log.Printf("ERROR: Failed to send agent message: %v", err)
 		return err
 	}
 
-	log.Printf("✅ Agent message sent successfully via WebSocket")
+	log.Printf("✅ Message sent to WebSocket client")
 	return nil
 }
 
@@ -813,6 +860,97 @@ func (h *AgentHandler) handleFiberKillAllAgents(c *fiberws.Conn) error {
 		"message": fmt.Sprintf("Killed %d agent sessions", count),
 	}
 	return c.WriteJSON(response)
+}
+
+// forwardPermissionRequests monitors the session's permission request channel
+// and forwards requests to the WebSocket client
+func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid.UUID, session *AgentSession) {
+	for {
+		select {
+		case permReq, ok := <-session.permissionReqChan:
+			if !ok {
+				log.Printf("Permission request channel closed for session %s", sessionID)
+				return
+			}
+
+			log.Printf("🔐 PERMISSION REQUEST: tool=%s, requestID=%s, input=%+v", permReq.ToolName, permReq.RequestID, permReq.Input)
+
+			// Send permission request to frontend
+			response := PermissionRequestMessage{
+				BaseMessage:    BaseMessage{Type: MessageTypePermissionRequest},
+				SessionID:      sessionID,
+				PermissionID:   permReq.RequestID,
+				Tool:           permReq.ToolName,
+				Action:         "use_tool",
+				Details:        permReq.Input,
+			}
+
+			log.Printf("📤 WS SENDING PERMISSION REQUEST: %+v", response)
+
+			if err := c.WriteJSON(response); err != nil {
+				log.Printf("ERROR: Failed to send permission request: %v", err)
+				// Send error response back to callback
+				select {
+				case permReq.ResponseChan <- PermissionResponse{
+					Approved:    false,
+					DenyMessage: "Failed to send permission request to frontend",
+				}:
+				default:
+				}
+				return
+			}
+
+		case <-session.ctx.Done():
+			log.Printf("Session %s context cancelled, stopping permission request forwarding", sessionID)
+			return
+		}
+	}
+}
+
+// handleFiberPermissionResponse handles permission responses from the frontend
+func (h *AgentHandler) handleFiberPermissionResponse(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+	var msg PermissionResponseMessage
+	msgBytes, _ := json.Marshal(rawMsg)
+	if err := json.Unmarshal(msgBytes, &msg); err != nil {
+		return fmt.Errorf("invalid permission_response message: %w", err)
+	}
+
+	log.Printf("Received permission response: sessionID=%s, permissionID=%s, approved=%v",
+		msg.SessionID, msg.PermissionID, msg.Approved)
+
+	// Get the session
+	session, err := h.SessionManager.GetSession(msg.SessionID)
+	if err != nil {
+		return fmt.Errorf("session not found: %w", err)
+	}
+
+	// Find the pending permission request
+	session.permMu.Lock()
+	responseChan, exists := session.pendingPermissions[msg.PermissionID]
+	session.permMu.Unlock()
+
+	if !exists {
+		log.Printf("WARNING: No pending permission request found for ID: %s", msg.PermissionID)
+		return fmt.Errorf("no pending permission request found for ID: %s", msg.PermissionID)
+	}
+
+	// Send response to the callback
+	response := PermissionResponse{
+		Approved:    msg.Approved,
+		DenyMessage: "User denied permission",
+	}
+
+	select {
+	case responseChan <- response:
+		log.Printf("Permission response delivered to callback: %s", msg.PermissionID)
+	case <-time.After(5 * time.Second):
+		log.Printf("ERROR: Timeout delivering permission response to callback")
+		return fmt.Errorf("timeout delivering permission response")
+	}
+
+	// Send acknowledgement to frontend
+	ack := BaseMessage{Type: MessageTypePermissionAcknowledged}
+	return c.WriteJSON(ack)
 }
 
 // handleFiberPing responds to ping with pong (Fiber version)
