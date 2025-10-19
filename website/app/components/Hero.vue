@@ -15,7 +15,7 @@
         </p>
 
         <p class="hero-description">
-          Manage components, configure AI providers, control permissions, launch Claude, run analytics, and deploy with Docker.
+          Manage components, configure AI providers, control permissions, launch Claude, run live agents, monitor analytics, and deploy with Docker. Now with unified Go server, MCP integration, and real-time agent conversations.
         </p>
 
         <div class="hero-badges">

@@ -40,10 +40,20 @@
       <div class="screenshots">
         <h3 class="screenshots-title">> screenshots</h3>
         <div class="screenshots-grid">
-          <div v-for="(screenshot, index) in screenshots" :key="screenshot.src" class="screenshot-item" @click="openLightbox(index)">
+          <div
+            v-for="(screenshot, index) in screenshots"
+            :key="screenshot.src"
+            class="screenshot-item"
+            :class="{ 'screenshot-hidden': index >= 4 && !showAllScreenshots }"
+            @click="openLightbox(index)">
             <img :src="screenshot.src" :alt="screenshot.alt">
             <p class="screenshot-caption">{{ screenshot.caption }}</p>
           </div>
+        </div>
+        <div class="screenshots-toggle">
+          <button @click="toggleScreenshots" class="btn btn-secondary">
+            {{ showAllScreenshots ? 'Show Less' : 'Show More Screenshots' }}
+          </button>
         </div>
       </div>
     </div>
@@ -60,6 +70,7 @@
 <script setup>
 const lightboxOpen = ref(false)
 const lightboxInitialIndex = ref(0)
+const showAllScreenshots = ref(false)
 
 function openLightbox(index) {
   lightboxInitialIndex.value = index
@@ -70,6 +81,10 @@ function closeLightbox() {
   lightboxOpen.value = false
 }
 
+function toggleScreenshots() {
+  showAllScreenshots.value = !showAllScreenshots.value
+}
+
 const features = [
   {
     icon: '🎮',
@@ -78,8 +93,28 @@ const features = [
   },
   {
     icon: '🤖',
-    title: 'Claude CLI Installer',
-    description: 'Automatic installation and setup of Claude CLI (no Node.js required)'
+    title: 'Live Agents Dashboard',
+    description: 'Real-time Claude agent conversations with WebSocket streaming, session metrics, and tool tracking'
+  },
+  {
+    icon: '🔌',
+    title: 'MCP Server Integration',
+    description: 'Extend Claude with Model Context Protocol servers for custom tools and resources'
+  },
+  {
+    icon: '🎨',
+    title: 'Multiple Themes',
+    description: 'Choose from 5 theme families: Default, Neon, Nord, Dracula, and South Park'
+  },
+  {
+    icon: '⌨️',
+    title: 'Keyboard Shortcuts',
+    description: 'Global keyboard shortcuts for enhanced productivity and navigation (press \'?\' for help)'
+  },
+  {
+    icon: '💾',
+    title: 'Session Persistence',
+    description: 'SQLite-backed agent session storage with crash recovery and history loading'
   },
   {
     icon: '🚀',
@@ -148,6 +183,26 @@ const screenshots = [
     src: '/claude-control-terminal/images/cct-analytics.png',
     alt: 'Analytics Dashboard',
     caption: 'Real-time Analytics Dashboard'
+  },
+  {
+    src: '/claude-control-terminal/images/cct-live-agents.png',
+    alt: 'Live Agents Dashboard',
+    caption: 'Live Agent Conversations with WebSocket Streaming'
+  },
+  {
+    src: '/claude-control-terminal/images/cct-stats.png',
+    alt: 'Detailed Statistics',
+    caption: 'Comprehensive Analytics and Performance Metrics'
+  },
+  {
+    src: '/claude-control-terminal/images/cct-themes.png',
+    alt: 'Theme Settings',
+    caption: 'Multiple Theme Families with Dark and Light Modes'
+  },
+  {
+    src: '/claude-control-terminal/images/cct-shortcuts.png',
+    alt: 'Keyboard Shortcuts',
+    caption: 'Global Keyboard Shortcuts for Enhanced Productivity'
   }
 ]
 </script>
@@ -272,8 +327,20 @@ const screenshots = [
   border: 2px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: all 0.3s ease;
   cursor: pointer;
+  opacity: 1;
+  max-height: 1000px;
+}
+
+.screenshot-item.screenshot-hidden {
+  opacity: 0;
+  max-height: 0;
+  margin: 0;
+  padding: 0;
+  border-width: 0;
+  pointer-events: none;
+  overflow: hidden;
 }
 
 .screenshot-item:hover {
@@ -293,6 +360,15 @@ const screenshots = [
   text-align: center;
   font-size: 0.9rem;
   color: var(--text-muted);
+}
+
+.screenshots-toggle {
+  text-align: center;
+  margin-top: 2rem;
+}
+
+.screenshots-toggle .btn {
+  min-width: 200px;
 }
 
 @media (max-width: 768px) {
@@ -364,6 +440,15 @@ const screenshots = [
   .screenshot-caption {
     padding: 0.75rem;
     font-size: 0.85rem;
+  }
+
+  .screenshots-toggle {
+    margin-top: 1.5rem;
+  }
+
+  .screenshots-toggle .btn {
+    min-width: 180px;
+    font-size: 0.9rem;
   }
 }
 </style>
