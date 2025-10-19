@@ -64,7 +64,7 @@ func TestNewServerWithOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := NewServerWithOptions(tt.claudeDir, tt.port, tt.quiet)
+			server := NewServerWithOptions(tt.claudeDir, tt.port, tt.quiet, false)
 
 			if server == nil {
 				t.Fatal("NewServerWithOptions returned nil")
@@ -120,13 +120,13 @@ func TestServerDefaultPort(t *testing.T) {
 
 func TestServerQuietModeFlag(t *testing.T) {
 	// Test non-quiet mode
-	server1 := NewServerWithOptions("/test", 3333, false)
+	server1 := NewServerWithOptions("/test", 3333, false, false)
 	if server1.quiet {
 		t.Error("expected quiet to be false")
 	}
 
 	// Test quiet mode
-	server2 := NewServerWithOptions("/test", 3333, true)
+	server2 := NewServerWithOptions("/test", 3333, true, false)
 	if !server2.quiet {
 		t.Error("expected quiet to be true")
 	}
@@ -252,7 +252,7 @@ func TestServerMultipleInstances(t *testing.T) {
 
 func TestServerQuietModeSuppressesLogger(t *testing.T) {
 	// Create server in quiet mode
-	server := NewServerWithOptions("/test", 3333, true)
+	server := NewServerWithOptions("/test", 3333, true, false)
 
 	if !server.quiet {
 		t.Error("server should be in quiet mode")
