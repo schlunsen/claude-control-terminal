@@ -45,6 +45,7 @@ export interface Session {
   }
   message_count: number
   error_message?: string
+  git_branch?: string
 }
 
 export interface ActiveTool {

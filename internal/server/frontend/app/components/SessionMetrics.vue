@@ -164,6 +164,7 @@ interface SessionMetricsData {
   }
   created_at?: string
   updated_at?: string
+  git_branch?: string
 }
 
 const props = defineProps<{
@@ -574,6 +575,11 @@ watch(sessionStartTime, (newVal) => {
   background: var(--bg-secondary);
   border-radius: 3px;
   font-size: 0.8rem;
+}
+
+.git-branch {
+  color: var(--accent-purple);
+  font-weight: 700;
 }
 
 /* Tools Breakdown */
