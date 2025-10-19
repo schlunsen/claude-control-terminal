@@ -7,10 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.4] - Permission Callback Improvements - 2025-10-19
 
+### Changed
+- Updated claude-agent-sdk-go dependency from v0.2.1 to v0.2.2 for improved stability
+
 ### Fixed
 - Permission popup now displays tool descriptions correctly instead of showing 'undefined'
 - Agent permission callbacks switched to streaming mode for better real-time responsiveness
 - Enhanced permission request UI with proper tool information display
+- Removed local replace directive for claude-agent-sdk-go to use official package version
 
 ## [0.5.3] - SQLite Agent Session Persistence - 2025-10-19
 
