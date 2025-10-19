@@ -18,20 +18,32 @@
         <h2 class="section-title">Overview</h2>
         <div class="stats-grid">
           <div class="stat-card">
-            <div class="stat-value">{{ stats.totalConversations }}</div>
-            <div class="stat-label">Conversations</div>
+            <div class="stat-value">{{ stats.totalConversations || 0 }}</div>
+            <div class="stat-label">Total Sessions</div>
+            <div class="stat-detail" v-if="stats.cliConversations !== undefined || stats.agentSessions !== undefined">
+              {{ stats.cliConversations || 0 }} CLI + {{ stats.agentSessions || 0 }} Agent
+            </div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">{{ formatNumber(stats.totalTokens) }}</div>
+            <div class="stat-value">{{ formatNumber(stats.totalTokens || 0) }}</div>
             <div class="stat-label">Total Tokens</div>
+            <div class="stat-detail" v-if="stats.cliTokens !== undefined || stats.agentTokens !== undefined">
+              {{ formatNumber(stats.cliTokens || 0) }} CLI + {{ formatNumber(stats.agentTokens || 0) }} Agent
+            </div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">{{ stats.activeConversations }}</div>
+            <div class="stat-value">{{ stats.activeConversations || 0 }}</div>
             <div class="stat-label">Active Sessions</div>
+            <div class="stat-detail" v-if="stats.cliActive !== undefined || stats.agentActive !== undefined">
+              {{ stats.cliActive || 0 }} CLI + {{ stats.agentActive || 0 }} Agent
+            </div>
           </div>
           <div class="stat-card">
-            <div class="stat-value">{{ formatNumber(stats.avgTokens) }}</div>
+            <div class="stat-value">{{ formatNumber(stats.avgTokens || 0) }}</div>
             <div class="stat-label">Avg Tokens</div>
+            <div class="stat-detail" v-if="stats.agentTotalCost !== undefined && stats.agentTotalCost > 0">
+              Agent Cost: ${{ stats.agentTotalCost.toFixed(4) }}
+            </div>
           </div>
         </div>
 
@@ -225,6 +237,13 @@ header h1 {
 .stat-label {
   font-size: 0.875rem;
   color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.stat-detail {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
   font-weight: 400;
 }
 

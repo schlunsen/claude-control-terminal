@@ -15,7 +15,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/pterm/pterm v0.12.81
-	github.com/schlunsen/claude-agent-sdk-go v0.1.3
+	github.com/schlunsen/claude-agent-sdk-go v0.2.1
 	github.com/spf13/cobra v1.10.1
 )
 

@@ -63,6 +63,10 @@ export const useAgentWebSocket = () => {
           clearTimeout(reconnectTimer.value)
           reconnectTimer.value = null
         }
+
+        // Automatically request session list when connected
+        console.log('Sending list_sessions message')
+        ws.value?.send(JSON.stringify({ type: 'list_sessions' }))
       }
 
       ws.value.onmessage = (event) => {

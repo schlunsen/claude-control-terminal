@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/schlunsen/claude-control-terminal/internal/analytics"
 	"github.com/schlunsen/claude-control-terminal/internal/database"
 	"github.com/schlunsen/claude-control-terminal/internal/logging"
@@ -159,26 +160,32 @@ func (s *Server) Setup() error {
 		}
 	}
 
+	// Set retention defaults if not specified
+	retentionDays := config.Agent.SessionRetentionDays
+	if retentionDays == 0 {
+		retentionDays = 30 // Default: 30 days
+	}
+
+	cleanupEnabled := config.Agent.CleanupEnabled
+	// If not explicitly set in config, default to true
+
+	cleanupInterval := config.Agent.CleanupIntervalHours
+	if cleanupInterval == 0 {
+		cleanupInterval = 24 // Default: 24 hours
+	}
+
 	agentConfig := &agents.Config{
 		Model:                 config.Agent.Model,
 		APIKey:                agentAPIKey,
 		MaxConcurrentSessions: config.Agent.MaxConcurrentSessions,
 		Verbose:               s.verbose,
+		SessionRetentionDays:  retentionDays,
+		CleanupEnabled:        cleanupEnabled,
+		CleanupIntervalHours:  cleanupInterval,
 	}
 	s.agentConfig = agentConfig
 
-	// Initialize agent handler
-	s.agentHandler = agents.NewAgentHandler(agentConfig)
-
-	if !s.quiet {
-		fmt.Printf("🤖 Agent handler initialized (model: %s, max sessions: %d, verbose: %v)\n",
-			agentConfig.Model, agentConfig.MaxConcurrentSessions, agentConfig.Verbose)
-	}
-
-	if s.verbose {
-		logging.Info("Agent handler initialized: model=%s, maxSessions=%d, verbose=%v, apiKeySet=%v",
-			agentConfig.Model, agentConfig.MaxConcurrentSessions, agentConfig.Verbose, agentAPIKey != "")
-	}
+	// Note: Agent handler will be initialized after database is ready
 
 	// Configure CORS middleware
 	corsConfig := cors.Config{
@@ -206,6 +213,26 @@ func (s *Server) Setup() error {
 	}
 	s.db = db
 	s.repo = database.NewRepository(db)
+
+	// Initialize agent handler (requires database)
+	agentHandler, err := agents.NewAgentHandler(agentConfig, db.GetDB())
+	if err != nil {
+		return fmt.Errorf("failed to initialize agent handler: %w", err)
+	}
+	s.agentHandler = agentHandler
+
+	if !s.quiet {
+		fmt.Printf("🤖 Agent handler initialized (model: %s, max sessions: %d, verbose: %v)\n",
+			agentConfig.Model, agentConfig.MaxConcurrentSessions, agentConfig.Verbose)
+	}
+
+	if s.verbose {
+		logging.Info("Agent handler initialized: model=%s, maxSessions=%d, verbose=%v, apiKeySet=%v",
+			agentConfig.Model, agentConfig.MaxConcurrentSessions, agentConfig.Verbose, agentAPIKey != "")
+	}
+
+	// Start session cleanup job
+	s.agentHandler.SessionManager.StartCleanupJob()
 
 	// Initialize analytics components
 	s.conversationAnalyzer = analytics.NewConversationAnalyzer(s.claudeDir)
@@ -295,6 +322,10 @@ func (s *Server) setupRoutes() {
 	api.Get("/agents", s.handleListAgents)
 	api.Get("/agents/:name", s.handleGetAgentDetail)
 
+	// Agent session endpoints (for persistence)
+	api.Get("/agent/sessions", s.handleGetAgentSessions)
+	api.Get("/agent/sessions/:id/messages", s.handleGetAgentMessages)
+
 	// Agent WebSocket endpoint (direct, not proxied)
 	// Use Fiber's WebSocket middleware with our Fiber-compatible handler
 	s.app.Get("/agent/ws", websocket.New(s.agentHandler.HandleFiberWebSocket))
@@ -367,6 +398,7 @@ func (s *Server) handleGetProcesses(c *fiber.Ctx) error {
 
 // Handler: Get statistics
 func (s *Server) handleGetStats(c *fiber.Ctx) error {
+	// Get CLI conversation stats
 	conversations, err := s.conversationAnalyzer.LoadConversations(s.stateCalculator)
 	if err != nil {
 		return c.Status(500).JSON(fiber.Map{
@@ -374,18 +406,47 @@ func (s *Server) handleGetStats(c *fiber.Ctx) error {
 		})
 	}
 
-	totalTokens := 0
-	activeCount := 0
+	cliTotalTokens := 0
+	cliActiveCount := 0
 
 	for _, conv := range conversations {
-		totalTokens += conv.Tokens
+		cliTotalTokens += conv.Tokens
 		if conv.Status == "active" {
-			activeCount++
+			cliActiveCount++
 		}
 	}
 
+	// Get agent session stats
+	var agentSessions []agents.Session
+	var agentTotalTokens int64
+	var agentActiveCount int
+	var agentTotalCost float64
+
+	if s.agentHandler != nil {
+		allSessions, err := s.agentHandler.SessionManager.ListAllSessions("all")
+		if err == nil {
+			agentSessions = allSessions
+			for _, session := range allSessions {
+				// Estimate tokens from message count (rough approximation)
+				// TODO: Track actual tokens in messages
+				agentTotalTokens += int64(session.MessageCount * 100)
+				agentTotalCost += session.CostUSD
+
+				// Count active sessions (not ended)
+				if session.Status != agents.SessionStatusEnded {
+					agentActiveCount++
+				}
+			}
+		}
+	}
+
+	// Combine stats
+	totalTokens := cliTotalTokens + int(agentTotalTokens)
+	totalConversations := len(conversations) + len(agentSessions)
+	activeCount := cliActiveCount + agentActiveCount
+
 	// Apply soft reset delta if present
-	adjustedTokens, adjustedConversations := s.resetTracker.ApplyDelta(totalTokens, len(conversations))
+	adjustedTokens, adjustedConversations := s.resetTracker.ApplyDelta(totalTokens, totalConversations)
 
 	avgTokens := 0
 	if adjustedConversations > 0 {
@@ -393,11 +454,21 @@ func (s *Server) handleGetStats(c *fiber.Ctx) error {
 	}
 
 	response := fiber.Map{
+		// Combined stats
 		"totalConversations":  adjustedConversations,
 		"activeConversations": activeCount,
 		"totalTokens":         adjustedTokens,
 		"avgTokens":           avgTokens,
 		"timestamp":           time.Now(),
+
+		// Breakdown by type
+		"cliConversations":   len(conversations),
+		"cliActive":          cliActiveCount,
+		"cliTokens":          cliTotalTokens,
+		"agentSessions":      len(agentSessions),
+		"agentActive":        agentActiveCount,
+		"agentTokens":        agentTotalTokens,
+		"agentTotalCost":     agentTotalCost,
 	}
 
 	// Include reset info if present
@@ -1762,4 +1833,77 @@ func parseFrontmatterWithPrompt(content string) map[string]interface{} {
 	}
 
 	return data
+}
+
+// Handler: Get agent sessions (with optional status filter)
+func (s *Server) handleGetAgentSessions(c *fiber.Ctx) error {
+	if s.agentHandler == nil {
+		return c.Status(503).JSON(fiber.Map{
+			"error": "agent handler not initialized",
+		})
+	}
+
+	// Get status filter from query params (default: "all")
+	statusFilter := c.Query("status", "all")
+
+	// Get sessions from storage
+	sessions, err := s.agentHandler.SessionManager.ListAllSessions(statusFilter)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to list sessions: %v", err),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"sessions": sessions,
+		"count":    len(sessions),
+		"filter":   statusFilter,
+	})
+}
+
+// Handler: Get messages for an agent session (with pagination)
+func (s *Server) handleGetAgentMessages(c *fiber.Ctx) error {
+	if s.agentHandler == nil {
+		return c.Status(503).JSON(fiber.Map{
+			"error": "agent handler not initialized",
+		})
+	}
+
+	// Parse session ID from URL params
+	sessionIDStr := c.Params("id")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid session ID",
+		})
+	}
+
+	// Parse pagination params
+	limit := c.QueryInt("limit", 50)
+	offset := c.QueryInt("offset", 0)
+
+	// Validate pagination params
+	if limit < 1 || limit > 500 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Get messages from storage
+	messages, hasMore, err := s.agentHandler.SessionManager.GetMessages(sessionID, limit, offset)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to get messages: %v", err),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"session_id": sessionID,
+		"messages":   messages,
+		"count":      len(messages),
+		"limit":      limit,
+		"offset":     offset,
+		"has_more":   hasMore,
+	})
 }

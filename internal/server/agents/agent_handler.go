@@ -1,6 +1,7 @@
 package agents
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -29,13 +30,18 @@ type AgentHandler struct {
 	Active         int             // Exported for server access
 }
 
-// NewAgentHandler creates a new agent handler with the given config
-func NewAgentHandler(config *Config) *AgentHandler {
+// NewAgentHandler creates a new agent handler with the given config and database
+func NewAgentHandler(config *Config, db *sql.DB) (*AgentHandler, error) {
+	sessionManager, err := NewSessionManager(config, db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create session manager: %w", err)
+	}
+
 	return &AgentHandler{
 		Config:         config,
-		SessionManager: NewSessionManager(config),
+		SessionManager: sessionManager,
 		Active:         0,
-	}
+	}, nil
 }
 
 // HandleWebSocket handles WebSocket connections for Claude queries
@@ -98,6 +104,8 @@ func (h *AgentHandler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 // HandleFiberWebSocket returns a Fiber WebSocket handler function
 // This is compatible with Fiber's WebSocket middleware
 func (h *AgentHandler) HandleFiberWebSocket(c *fiberws.Conn) {
+	log.Printf("HandleFiberWebSocket: New WebSocket connection from %s", c.RemoteAddr())
+
 	// Check concurrent session limit
 	h.Mu.Lock()
 	if h.Active >= h.Config.MaxConcurrentSessions {
@@ -110,6 +118,7 @@ func (h *AgentHandler) HandleFiberWebSocket(c *fiberws.Conn) {
 		return
 	}
 	h.Active++
+	log.Printf("HandleFiberWebSocket: Active connections: %d/%d", h.Active, h.Config.MaxConcurrentSessions)
 	h.Mu.Unlock()
 
 	defer func() {
@@ -178,6 +187,9 @@ func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, r
 
 	case MessageTypeListSessions:
 		return h.handleFiberListSessions(c)
+
+	case MessageTypeLoadMessages:
+		return h.handleFiberLoadMessages(c, rawMsg)
 
 	case MessageTypeKillAllAgents:
 		return h.handleFiberKillAllAgents(c)
@@ -453,9 +465,13 @@ func (h *AgentHandler) handleEndSession(ws *websocket.Conn, rawMsg map[string]in
 	return ws.WriteJSON(response)
 }
 
-// handleListSessions lists all active sessions
+// handleListSessions lists all sessions from database
 func (h *AgentHandler) handleListSessions(ws *websocket.Conn) error {
-	sessions := h.SessionManager.ListSessions()
+	sessions, err := h.SessionManager.ListAllSessions("all")
+	if err != nil {
+		h.sendError(ws, fmt.Sprintf("failed to list sessions: %v", err))
+		return fmt.Errorf("failed to list sessions: %w", err)
+	}
 
 	response := SessionsListMessage{
 		BaseMessage: BaseMessage{Type: MessageTypeSessionsList},
@@ -703,13 +719,88 @@ func (h *AgentHandler) handleFiberEndSession(c *fiberws.Conn, rawMsg map[string]
 	return c.WriteJSON(response)
 }
 
-// handleFiberListSessions lists all active sessions (Fiber version)
+// handleFiberListSessions lists all sessions from database (Fiber version)
 func (h *AgentHandler) handleFiberListSessions(c *fiberws.Conn) error {
-	sessions := h.SessionManager.ListSessions()
+	log.Printf("handleFiberListSessions: Fetching all sessions from database")
+	sessions, err := h.SessionManager.ListAllSessions("all")
+	if err != nil {
+		log.Printf("ERROR: Failed to list sessions: %v", err)
+		h.sendFiberError(c, fmt.Sprintf("failed to list sessions: %v", err))
+		return fmt.Errorf("failed to list sessions: %w", err)
+	}
+
+	log.Printf("handleFiberListSessions: Found %d sessions in database", len(sessions))
+	for i, session := range sessions {
+		log.Printf("  Session %d: ID=%s, Status=%s, Created=%s", i+1, session.ID, session.Status, session.CreatedAt)
+	}
+
 	response := SessionsListMessage{
 		BaseMessage: BaseMessage{Type: MessageTypeSessionsList},
 		Sessions:    sessions,
 	}
+
+	log.Printf("handleFiberListSessions: Sending response with %d sessions", len(sessions))
+	return c.WriteJSON(response)
+}
+
+// handleFiberLoadMessages loads messages for a session with pagination (Fiber version)
+func (h *AgentHandler) handleFiberLoadMessages(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+	// Parse session ID
+	sessionIDStr, ok := rawMsg["session_id"].(string)
+	if !ok {
+		h.sendFiberError(c, "missing or invalid session_id")
+		return fmt.Errorf("missing or invalid session_id")
+	}
+
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		h.sendFiberError(c, "invalid session ID format")
+		return fmt.Errorf("invalid session ID format")
+	}
+
+	// Parse pagination params with defaults
+	limit := 50
+	offset := 0
+
+	if limitVal, ok := rawMsg["limit"].(float64); ok {
+		limit = int(limitVal)
+	}
+	if offsetVal, ok := rawMsg["offset"].(float64); ok {
+		offset = int(offsetVal)
+	}
+
+	// Validate pagination params
+	if limit < 1 || limit > 500 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Get messages from storage
+	messagesPtr, hasMore, err := h.SessionManager.GetMessages(sessionID, limit, offset)
+	if err != nil {
+		h.sendFiberError(c, fmt.Sprintf("failed to load messages: %v", err))
+		return fmt.Errorf("failed to load messages: %w", err)
+	}
+
+	// Convert []*MessageRecord to []MessageRecord
+	messages := make([]MessageRecord, len(messagesPtr))
+	for i, msgPtr := range messagesPtr {
+		messages[i] = *msgPtr
+	}
+
+	// Send response
+	response := MessagesLoadedMessage{
+		BaseMessage: BaseMessage{Type: MessageTypeMessagesLoaded},
+		SessionID:   sessionID,
+		Messages:    messages,
+		HasMore:     hasMore,
+		Count:       len(messages),
+		Limit:       limit,
+		Offset:      offset,
+	}
+
 	return c.WriteJSON(response)
 }
 
