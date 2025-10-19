@@ -183,7 +183,6 @@ const getToolIcon = (tool: string): string => {
     'TodoWrite': '✅',
     'WebSearch': '🌐',
     'WebFetch': '📡',
-    'Bash': '⚙️',
   }
   return iconMap[tool] || '🛠️'
 }

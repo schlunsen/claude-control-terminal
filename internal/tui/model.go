@@ -283,8 +283,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case toggleAnalyticsMsg:
 		// Handle immediate analytics server toggle
 		if msg.enabled && m.analyticsServer == nil {
-			// Start analytics server with quiet mode
-			m.analyticsServer = server.NewServerWithOptions(msg.targetDir, 3333, true)
+			// Start analytics server with quiet mode (verbose=false for TUI)
+			m.analyticsServer = server.NewServerWithOptions(msg.targetDir, 3333, true, false)
 			if err := m.analyticsServer.Setup(); err == nil {
 				go func() {
 					if err := m.analyticsServer.Start(); err != nil {

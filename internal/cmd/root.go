@@ -471,7 +471,8 @@ func createAnalyticsServer(targetDir string) *server.Server {
 		claudeDir = filepath.Join(targetDir, ".claude")
 	}
 
-	return server.NewServer(claudeDir, 3333)
+	// Create server with verbose flag from CLI
+	return server.NewServerWithOptions(claudeDir, 3333, false, verbose)
 }
 
 // handleHookInstallation handles installation of hooks (legacy via --hook flag)

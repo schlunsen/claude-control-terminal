@@ -27,9 +27,9 @@ func Launch(targetDir string) error {
 	}
 
 	// Start analytics server in background (enabled by default)
-	// Use quiet mode to suppress output when running in TUI
+	// Use quiet mode to suppress output when running in TUI (verbose=false)
 	var analyticsServer *server.Server
-	analyticsServer = server.NewServerWithOptions(claudeDir, 3333, true)
+	analyticsServer = server.NewServerWithOptions(claudeDir, 3333, true, false)
 	if err := analyticsServer.Setup(); err == nil {
 		// Start server in background goroutine
 		go func() {
