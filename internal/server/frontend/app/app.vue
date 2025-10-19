@@ -1,8 +1,8 @@
 <script setup>
 import '../assets/css/main.css'
 
-// Initialize dark mode
-const { isDark } = useDarkMode()
+// Initialize theme system
+const { isDark } = useTheme()
 </script>
 
 <template>

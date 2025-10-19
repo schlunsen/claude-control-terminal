@@ -20,7 +20,7 @@
 </template>
 
 <script setup lang="ts">
-const { isDark, toggleDarkMode } = useDarkMode()
+const { isDark, toggleDarkMode } = useTheme()
 </script>
 
 <style scoped>
