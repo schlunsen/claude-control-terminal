@@ -424,6 +424,39 @@ func (sm *SessionManager) EndSession(sessionID uuid.UUID) error {
 	return nil
 }
 
+// DeleteSession deletes a session from the database
+func (sm *SessionManager) DeleteSession(sessionID uuid.UUID) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// If session is still active, end it first
+	if session, exists := sm.sessions[sessionID]; exists {
+		// Close streaming client if exists
+		session.mu.Lock()
+		if session.client != nil {
+			session.client.Close(session.ctx)
+			session.client = nil
+		}
+		session.mu.Unlock()
+
+		// Cancel context
+		if session.cancel != nil {
+			session.cancel()
+		}
+
+		// Remove from active sessions
+		delete(sm.sessions, sessionID)
+	}
+
+	// Delete from database
+	if err := sm.storage.DeleteSession(sessionID); err != nil {
+		return fmt.Errorf("failed to delete session from storage: %w", err)
+	}
+
+	logging.Info("Session deleted: %s", sessionID)
+	return nil
+}
+
 // EndAllSessions ends all active sessions
 func (sm *SessionManager) EndAllSessions() int {
 	sm.mu.Lock()
@@ -439,6 +472,50 @@ func (sm *SessionManager) EndAllSessions() int {
 	}
 
 	return count
+}
+
+// DeleteAllSessions deletes all sessions from the database
+func (sm *SessionManager) DeleteAllSessions() (int, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// First, end all active sessions
+	for sessionID, session := range sm.sessions {
+		// Close streaming client if exists
+		session.mu.Lock()
+		if session.client != nil {
+			session.client.Close(session.ctx)
+			session.client = nil
+		}
+		session.mu.Unlock()
+
+		// Cancel context
+		if session.cancel != nil {
+			session.cancel()
+		}
+
+		// Remove from active sessions
+		delete(sm.sessions, sessionID)
+	}
+
+	// Get all sessions from database to count them
+	allSessions, err := sm.storage.ListSessions("all")
+	if err != nil {
+		return 0, fmt.Errorf("failed to list sessions: %w", err)
+	}
+
+	count := 0
+	// Delete each session from database
+	for _, session := range allSessions {
+		if err := sm.storage.DeleteSession(session.ID); err != nil {
+			logging.Error("Failed to delete session %s: %v", session.ID, err)
+			continue
+		}
+		count++
+	}
+
+	logging.Info("Deleted %d sessions from database", count)
+	return count, nil
 }
 
 // SendPrompt sends a prompt to an agent session using claude.Query

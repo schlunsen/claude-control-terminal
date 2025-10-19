@@ -9,6 +9,20 @@
         </div>
         <div class="header-actions">
           <button
+            @click="deleteAllSessions"
+            class="btn-delete-all"
+            :disabled="!agentWs.connected || sessions.length === 0"
+            title="Delete all sessions from database"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"></polyline>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              <line x1="10" y1="11" x2="10" y2="17"></line>
+              <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+            Delete All Sessions
+          </button>
+          <button
             @click="killAllAgents"
             class="btn-kill-all"
             :disabled="!agentWs.connected || sessions.length === 0"
@@ -92,17 +106,32 @@
                 <span v-if="session.cost_usd && session.cost_usd > 0" class="session-cost">${{ session.cost_usd.toFixed(4) }}</span>
               </div>
             </div>
-            <button
-              v-if="session.status !== 'ended'"
-              @click.stop="endSession(session.id)"
-              class="btn-end-session"
-              title="End session"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+            <div class="session-actions">
+              <button
+                v-if="session.status !== 'ended'"
+                @click.stop="endSession(session.id)"
+                class="btn-end-session"
+                title="End session"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="15" y1="9" x2="9" y2="15"></line>
+                  <line x1="9" y1="9" x2="15" y2="15"></line>
+                </svg>
+              </button>
+              <button
+                @click.stop="deleteSession(session.id)"
+                class="btn-delete-session"
+                title="Delete session"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  <line x1="10" y1="11" x2="10" y2="17"></line>
+                  <line x1="14" y1="11" x2="14" y2="17"></line>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -653,6 +682,7 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const sessions = ref([])
 const activeSessionId = ref(null)
 const messages = ref({}) // { sessionId: [...messages] }
+const messagesLoaded = ref(new Set()) // Track which sessions have loaded messages from DB
 const inputMessage = ref('')
 const isProcessing = ref(false)
 const isThinking = ref(false)
@@ -976,6 +1006,20 @@ const loadSelectedAgent = async () => {
 const selectSession = (sessionId) => {
   activeSessionId.value = sessionId
 
+  // Load historical messages if not already loaded
+  // Only load if we haven't loaded this session before (prevents loading for new sessions)
+  if (!messagesLoaded.value.has(sessionId)) {
+    console.log(`Loading messages for session ${sessionId}`)
+    agentWs.send({
+      type: 'load_messages',
+      session_id: sessionId,
+      limit: 100,
+      offset: 0
+    })
+    // Mark as loaded (even if empty) to prevent re-loading
+    messagesLoaded.value.add(sessionId)
+  }
+
   // Reset scroll state and scroll to bottom when switching sessions
   isUserNearBottom.value = true
   scrollToBottom(false)
@@ -995,7 +1039,49 @@ const endSession = async (sessionId) => {
   // Remove from local state
   sessions.value = sessions.value.filter(s => s.id !== sessionId)
   delete messages.value[sessionId]
+  messagesLoaded.value.delete(sessionId)  // Clean up loaded tracking
   awaitingToolResults.value.delete(sessionId)  // Clean up flag
+
+  // Clean up any pending timers
+  const existingTimer = todoHideTimers.value.get(sessionId)
+  if (existingTimer) {
+    clearTimeout(existingTimer)
+    todoHideTimers.value.delete(sessionId)
+  }
+
+  // Clean up live agents session data
+  cleanupSessionData(sessionId)
+
+  // Clean up session permissions
+  sessionPermissions.value.delete(sessionId)
+
+  // Clean up session metrics
+  sessionToolStats.value.delete(sessionId)
+  sessionPermissionStats.value.delete(sessionId)
+
+  if (activeSessionId.value === sessionId) {
+    activeSessionId.value = null
+  }
+}
+
+const deleteSession = async (sessionId) => {
+  if (!agentWs.connected) return
+
+  // Confirm deletion
+  if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
+    return
+  }
+
+  agentWs.send({
+    type: 'delete_session',
+    session_id: sessionId
+  })
+
+  // Remove from local state immediately (optimistic update)
+  sessions.value = sessions.value.filter(s => s.id !== sessionId)
+  delete messages.value[sessionId]
+  messagesLoaded.value.delete(sessionId)
+  awaitingToolResults.value.delete(sessionId)
 
   // Clean up any pending timers
   const existingTimer = todoHideTimers.value.get(sessionId)
@@ -1468,6 +1554,24 @@ const sendPermissionResponse = (request, approved, reason = '') => {
   }
 }
 
+// Delete all sessions functionality
+const deleteAllSessions = async () => {
+  if (!agentWs.connected || sessions.value.length === 0) return
+
+  if (!confirm('Are you sure you want to delete ALL sessions? This will permanently delete all session data from the database. This action cannot be undone.')) {
+    return
+  }
+
+  try {
+    agentWs.send({
+      type: 'delete_all_sessions'
+    })
+  } catch (error) {
+    console.error('Failed to delete all sessions:', error)
+    alert('Failed to delete all sessions. Please try again.')
+  }
+}
+
 // Kill switch functionality
 const killAllAgents = async () => {
   if (!agentWs.connected || sessions.value.length === 0) return
@@ -1545,11 +1649,38 @@ const extractCostData = (content: any) => {
   return null
 }
 
+// Helper to extract tool name from tool_uses JSON
+const extractToolName = (toolUses: any): string | undefined => {
+  if (!toolUses) return undefined
+
+  try {
+    // Parse if it's a JSON string
+    const parsed = typeof toolUses === 'string' ? JSON.parse(toolUses) : toolUses
+
+    // If it's an array, get the first tool
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed[0].name || parsed[0].type
+    }
+
+    // If it's a single object
+    if (parsed.name || parsed.type) {
+      return parsed.name || parsed.type
+    }
+  } catch (e) {
+    console.warn('Failed to parse tool_uses:', e)
+  }
+
+  return undefined
+}
+
 // WebSocket event handlers
 agentWs.on('onSessionCreated', (data) => {
   sessions.value.push(data.session)
   activeSessionId.value = data.session_id
   messages.value[data.session_id] = []
+
+  // Mark new session as loaded (it has no history to load)
+  messagesLoaded.value.add(data.session_id)
 
   // Focus the input after session creation
   focusMessageInput()
@@ -1925,11 +2056,88 @@ agentWs.on('onSessionsList', (data) => {
   sessions.value = data.sessions
 })
 
+agentWs.on('onSessionDeleted', (data) => {
+  console.log('🗑️ Session deleted:', data.session_id)
+  // Session already removed from local state in deleteSession (optimistic update)
+  // Just log confirmation
+})
+
+agentWs.on('onAllSessionsDeleted', (data) => {
+  console.log('🗑️ All sessions deleted, count:', data.count)
+
+  // Clear all sessions and messages
+  sessions.value = []
+  messages.value = {}
+  messagesLoaded.value.clear()
+  activeSessionId.value = null
+  awaitingToolResults.value.clear()
+
+  // Clear all pending timers
+  todoHideTimers.value.forEach((timer) => clearTimeout(timer))
+  todoHideTimers.value.clear()
+
+  // Clear all live agents session data
+  sessionTodos.value.clear()
+  sessionToolExecution.value.clear()
+  sessionPermissions.value.clear()
+
+  // Clear all session metrics
+  sessionToolStats.value.clear()
+  sessionPermissionStats.value.clear()
+
+  // Show success message
+  alert(`Successfully deleted ${data.count} sessions from the database`)
+})
+
+agentWs.on('onMessagesLoaded', (data) => {
+  console.log('📥 Messages loaded:', data)
+
+  if (!data.session_id || !data.messages) return
+
+  // Debug: log sequence numbers
+  console.log('Message sequences from DB:', data.messages.map((m: any) => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
+
+  // Convert DB messages to UI message format
+  const uiMessages = data.messages.map((dbMsg: any) => ({
+    id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
+    role: dbMsg.role,
+    content: dbMsg.content,
+    timestamp: new Date(dbMsg.timestamp),
+    sequence: dbMsg.sequence,
+    isHistorical: true,
+    toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
+    thinkingContent: dbMsg.thinking_content || undefined
+  }))
+
+  // Sort messages by sequence number first, then by timestamp for stable ordering
+  // This handles cases where multiple messages have the same sequence number
+  uiMessages.sort((a, b) => {
+    if (a.sequence !== b.sequence) {
+      return a.sequence - b.sequence
+    }
+    // If sequence numbers are equal, sort by timestamp
+    return a.timestamp.getTime() - b.timestamp.getTime()
+  })
+
+  console.log('Sorted message sequences:', uiMessages.map(m => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
+
+  // Set or prepend messages for the session
+  if (!messages.value[data.session_id]) {
+    messages.value[data.session_id] = []
+  }
+
+  // Prepend historical messages (now sorted by sequence, oldest first)
+  messages.value[data.session_id] = [...uiMessages, ...messages.value[data.session_id]]
+
+  console.log(`📥 Loaded ${uiMessages.length} historical messages for session ${data.session_id}`)
+})
+
 agentWs.on('onAgentsKilled', (data) => {
 
   // Clear all sessions and messages
   sessions.value = []
   messages.value = {}
+  messagesLoaded.value.clear()  // Clear loaded messages tracking
   activeSessionId.value = null
   awaitingToolResults.value.clear()  // Clear all flags
 
@@ -2012,6 +2220,7 @@ watch(activeMessages, () => {
   gap: 12px;
 }
 
+.btn-delete-all,
 .btn-kill-all {
   display: flex;
   align-items: center;
@@ -2027,10 +2236,19 @@ watch(activeMessages, () => {
   transition: all 0.2s;
 }
 
+.btn-delete-all {
+  background: #6c757d;
+}
+
+.btn-delete-all:hover:not(:disabled) {
+  background: #5a6268;
+}
+
 .btn-kill-all:hover:not(:disabled) {
   background: #c82333;
 }
 
+.btn-delete-all:disabled,
 .btn-kill-all:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -2281,22 +2499,42 @@ watch(activeMessages, () => {
   color: #dc3545;
 }
 
-.btn-end-session {
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-end-session,
+.btn-delete-session {
   padding: 4px;
   background: transparent;
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
   opacity: 0.6;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+  border-radius: 4px;
 }
 
-.btn-end-session:hover {
+.btn-end-session:hover,
+.btn-delete-session:hover {
   opacity: 1;
 }
 
-.session-item.active .btn-end-session {
+.btn-delete-session:hover {
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+}
+
+.session-item.active .btn-end-session,
+.session-item.active .btn-delete-session {
   color: white;
+}
+
+.session-item.active .btn-delete-session:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ff6b6b;
 }
 
 /* Chat Area with Metrics */

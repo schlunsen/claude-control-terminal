@@ -384,7 +384,7 @@ func (s *SQLiteSessionStorage) GetMessages(sessionID uuid.UUID, limit, offset in
 		       thinking_content, tool_uses, timestamp, tokens_used
 		FROM agent_messages
 		WHERE session_id = ?
-		ORDER BY sequence ASC
+		ORDER BY sequence ASC, timestamp ASC
 		LIMIT ? OFFSET ?
 	`
 

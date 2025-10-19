@@ -19,6 +19,8 @@ const (
 	MessageTypeSessionCreated MessageType = "session_created"
 	MessageTypeEndSession    MessageType = "end_session"
 	MessageTypeSessionEnded  MessageType = "session_ended"
+	MessageTypeDeleteSession MessageType = "delete_session"
+	MessageTypeSessionDeleted MessageType = "session_deleted"
 	MessageTypeListSessions  MessageType = "list_sessions"
 	MessageTypeSessionsList  MessageType = "sessions_list"
 	MessageTypeLoadMessages  MessageType = "load_messages"
@@ -37,8 +39,10 @@ const (
 	MessageTypePermissionAcknowledged MessageType = "permission_acknowledged"
 
 	// Kill switch
-	MessageTypeKillAllAgents MessageType = "kill_all_agents"
-	MessageTypeAgentsKilled  MessageType = "agents_killed"
+	MessageTypeKillAllAgents     MessageType = "kill_all_agents"
+	MessageTypeAgentsKilled      MessageType = "agents_killed"
+	MessageTypeDeleteAllSessions MessageType = "delete_all_sessions"
+	MessageTypeAllSessionsDeleted MessageType = "all_sessions_deleted"
 
 	// Session updates
 	MessageTypeSessionUpdated MessageType = "session_updated"
@@ -142,6 +146,19 @@ type SessionEndedMessage struct {
 	Status    string    `json:"status"`
 }
 
+// DeleteSessionMessage represents deleting a session
+type DeleteSessionMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+}
+
+// SessionDeletedMessage represents a session deletion response
+type SessionDeletedMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+	Status    string    `json:"status"`
+}
+
 // ListSessionsMessage represents a request to list sessions
 type ListSessionsMessage struct {
 	BaseMessage
@@ -179,6 +196,17 @@ type KillAllAgentsMessage struct {
 
 // AgentsKilledMessage represents agents killed response
 type AgentsKilledMessage struct {
+	BaseMessage
+	Count int `json:"count"`
+}
+
+// DeleteAllSessionsMessage represents deleting all sessions
+type DeleteAllSessionsMessage struct {
+	BaseMessage
+}
+
+// AllSessionsDeletedMessage represents all sessions deleted response
+type AllSessionsDeletedMessage struct {
 	BaseMessage
 	Count int `json:"count"`
 }

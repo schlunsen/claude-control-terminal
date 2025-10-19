@@ -186,6 +186,9 @@ func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, r
 	case MessageTypeEndSession:
 		return h.handleFiberEndSession(c, rawMsg)
 
+	case MessageTypeDeleteSession:
+		return h.handleFiberDeleteSession(c, rawMsg)
+
 	case MessageTypeListSessions:
 		return h.handleFiberListSessions(c)
 
@@ -194,6 +197,9 @@ func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, r
 
 	case MessageTypeKillAllAgents:
 		return h.handleFiberKillAllAgents(c)
+
+	case MessageTypeDeleteAllSessions:
+		return h.handleFiberDeleteAllSessions(c)
 
 	case MessageTypePing:
 		return h.handleFiberPing(c)
@@ -782,6 +788,29 @@ func (h *AgentHandler) handleFiberEndSession(c *fiberws.Conn, rawMsg map[string]
 	return c.WriteJSON(response)
 }
 
+// handleFiberDeleteSession deletes an agent session (Fiber version)
+func (h *AgentHandler) handleFiberDeleteSession(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+	var msg DeleteSessionMessage
+	msgBytes, _ := json.Marshal(rawMsg)
+	if err := json.Unmarshal(msgBytes, &msg); err != nil {
+		return fmt.Errorf("invalid delete_session message: %w", err)
+	}
+
+	// Delete session from database
+	if err := h.SessionManager.DeleteSession(msg.SessionID); err != nil {
+		h.sendFiberError(c, fmt.Sprintf("failed to delete session: %v", err))
+		return fmt.Errorf("failed to delete session: %w", err)
+	}
+
+	// Send session deleted response
+	response := SessionDeletedMessage{
+		BaseMessage: BaseMessage{Type: MessageTypeSessionDeleted},
+		SessionID:   msg.SessionID,
+		Status:      "deleted",
+	}
+	return c.WriteJSON(response)
+}
+
 // handleFiberListSessions lists all sessions from database (Fiber version)
 func (h *AgentHandler) handleFiberListSessions(c *fiberws.Conn) error {
 	log.Printf("handleFiberListSessions: Fetching all sessions from database")
@@ -874,6 +903,21 @@ func (h *AgentHandler) handleFiberKillAllAgents(c *fiberws.Conn) error {
 		"type":    "kill_all_agents_response",
 		"count":   count,
 		"message": fmt.Sprintf("Killed %d agent sessions", count),
+	}
+	return c.WriteJSON(response)
+}
+
+// handleFiberDeleteAllSessions deletes all sessions from database (Fiber version)
+func (h *AgentHandler) handleFiberDeleteAllSessions(c *fiberws.Conn) error {
+	count, err := h.SessionManager.DeleteAllSessions()
+	if err != nil {
+		h.sendFiberError(c, fmt.Sprintf("failed to delete all sessions: %v", err))
+		return fmt.Errorf("failed to delete all sessions: %w", err)
+	}
+
+	response := AllSessionsDeletedMessage{
+		BaseMessage: BaseMessage{Type: MessageTypeAllSessionsDeleted},
+		Count:       count,
 	}
 	return c.WriteJSON(response)
 }
