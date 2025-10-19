@@ -2094,6 +2094,9 @@ agentWs.on('onMessagesLoaded', (data) => {
 
   if (!data.session_id || !data.messages) return
 
+  // Debug: log sequence numbers
+  console.log('Message sequences from DB:', data.messages.map((m: any) => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
+
   // Convert DB messages to UI message format
   const uiMessages = data.messages.map((dbMsg: any) => ({
     id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
@@ -2108,6 +2111,8 @@ agentWs.on('onMessagesLoaded', (data) => {
 
   // Sort messages by sequence number to ensure correct order
   uiMessages.sort((a, b) => a.sequence - b.sequence)
+
+  console.log('Sorted message sequences:', uiMessages.map(m => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
 
   // Set or prepend messages for the session
   if (!messages.value[data.session_id]) {
