@@ -17,6 +17,16 @@
           <span class="nav-logo">CCT</span>
         </div>
         <div class="nav-right">
+          <button
+            @click="openShortcutsDialog"
+            class="shortcuts-button"
+            title="Keyboard shortcuts (⇧⌥⌘H)"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>
+            </svg>
+          </button>
           <div class="nav-brand">
             <span v-if="versionInfo.version" class="version-badge">v{{ versionInfo.version }}</span>
             <span class="nav-separator">|</span>
@@ -33,6 +43,9 @@
         <slot />
       </main>
     </div>
+
+    <!-- Shortcuts Dialog -->
+    <ShortcutsDialog />
   </div>
 </template>
 
@@ -44,6 +57,14 @@ const { isDark } = useDarkMode()
 
 // Initialize sidebar state
 const { isCollapsed, toggleSidebar } = useSidebar()
+
+// Initialize keyboard shortcuts
+const {
+  openDialog: openShortcutsDialog,
+  initializeShortcuts,
+  cleanupShortcuts,
+  registerDefaultShortcuts
+} = useKeyboardShortcuts()
 
 // Version info
 const versionInfo = ref({
@@ -66,6 +87,14 @@ async function loadVersion() {
 // Load version on mount
 onMounted(() => {
   loadVersion()
+  // Initialize keyboard shortcuts
+  registerDefaultShortcuts()
+  initializeShortcuts()
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+  cleanupShortcuts()
 })
 </script>
 
@@ -122,6 +151,27 @@ onMounted(() => {
 }
 
 .sidebar-toggle:hover {
+  background: var(--accent-purple);
+  color: white;
+  border-color: var(--accent-purple);
+}
+
+.shortcuts-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid var(--border-color);
+}
+
+.shortcuts-button:hover {
   background: var(--accent-purple);
   color: white;
   border-color: var(--accent-purple);
@@ -188,6 +238,11 @@ onMounted(() => {
   }
 
   .sidebar-toggle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .shortcuts-button {
     width: 36px;
     height: 36px;
   }
