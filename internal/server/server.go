@@ -5,6 +5,8 @@ package server
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/schlunsen/claude-control-terminal/internal/analytics"
 	"github.com/schlunsen/claude-control-terminal/internal/database"
+	"github.com/schlunsen/claude-control-terminal/internal/logging"
 	"github.com/schlunsen/claude-control-terminal/internal/server/agents"
 	"github.com/schlunsen/claude-control-terminal/internal/version"
 	ws "github.com/schlunsen/claude-control-terminal/internal/websocket"
@@ -44,15 +47,16 @@ type Server struct {
 	claudeDir            string
 	port                 int
 	quiet                bool // Suppress output when running in TUI
+	verbose              bool // Enable verbose/debug logging
 }
 
 // NewServer creates a new Fiber server instance
 func NewServer(claudeDir string, port int) *Server {
-	return NewServerWithOptions(claudeDir, port, false)
+	return NewServerWithOptions(claudeDir, port, false, false)
 }
 
 // NewServerWithOptions creates a new Fiber server instance with options
-func NewServerWithOptions(claudeDir string, port int, quiet bool) *Server {
+func NewServerWithOptions(claudeDir string, port int, quiet bool, verbose bool) *Server {
 	app := fiber.New(fiber.Config{
 		AppName: "Claude Code Analytics",
 		ServerHeader: "go-claude-templates",
@@ -64,11 +68,18 @@ func NewServerWithOptions(claudeDir string, port int, quiet bool) *Server {
 		claudeDir: claudeDir,
 		port:      port,
 		quiet:     quiet,
+		verbose:   verbose,
 	}
 }
 
 // Setup initializes analytics components and routes
 func (s *Server) Setup() error {
+	// Disable standard log output when in quiet mode (TUI)
+	// This prevents log.Printf calls from writing to stdout
+	if s.quiet {
+		log.SetOutput(io.Discard)
+	}
+
 	// Initialize configuration
 	configManager := NewConfigManager(s.claudeDir)
 	config, err := configManager.LoadOrCreateConfig()
@@ -80,6 +91,33 @@ func (s *Server) Setup() error {
 	// Override port from config if not set
 	if s.port == 0 {
 		s.port = config.Server.Port
+	}
+
+	// Use verbose from config if not set explicitly
+	if !s.verbose && config.Server.Verbose {
+		s.verbose = config.Server.Verbose
+	}
+
+	// Initialize logging if verbose is enabled
+	if s.verbose {
+		logDir := filepath.Join(s.claudeDir, "analytics", "logs")
+		logger, err := logging.Initialize(logDir, s.verbose)
+		if err != nil {
+			return fmt.Errorf("failed to initialize logging: %w", err)
+		}
+
+		// Redirect stderr to capture SDK debug logs
+		if err := logger.RedirectStderr(); err != nil {
+			return fmt.Errorf("failed to redirect stderr: %w", err)
+		}
+
+		if !s.quiet {
+			fmt.Printf("📝 Verbose logging enabled\n")
+			fmt.Printf("   Main log: %s\n", logger.GetLogFilePath())
+			fmt.Printf("   SDK log:  %s\n", logger.GetStderrFilePath())
+		}
+
+		logging.Info("Server setup starting (verbose mode enabled)")
 	}
 
 	// Initialize TLS certificates if enabled
@@ -111,6 +149,7 @@ func (s *Server) Setup() error {
 		Model:                 config.Agent.Model,
 		APIKey:                agentAPIKey,
 		MaxConcurrentSessions: config.Agent.MaxConcurrentSessions,
+		Verbose:               s.verbose,
 	}
 	s.agentConfig = agentConfig
 
@@ -118,8 +157,13 @@ func (s *Server) Setup() error {
 	s.agentHandler = agents.NewAgentHandler(agentConfig)
 
 	if !s.quiet {
-		fmt.Printf("🤖 Agent handler initialized (model: %s, max sessions: %d)\n",
-			agentConfig.Model, agentConfig.MaxConcurrentSessions)
+		fmt.Printf("🤖 Agent handler initialized (model: %s, max sessions: %d, verbose: %v)\n",
+			agentConfig.Model, agentConfig.MaxConcurrentSessions, agentConfig.Verbose)
+	}
+
+	if s.verbose {
+		logging.Info("Agent handler initialized: model=%s, maxSessions=%d, verbose=%v",
+			agentConfig.Model, agentConfig.MaxConcurrentSessions, agentConfig.Verbose)
 	}
 
 	// Configure CORS middleware

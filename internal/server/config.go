@@ -38,6 +38,7 @@ type ServerSettings struct {
 	Port      int    `json:"port"`
 	Host      string `json:"host"`
 	Quiet     bool   `json:"quiet"`
+	Verbose   bool   `json:"verbose"`
 }
 
 // CORSSettings holds CORS configuration

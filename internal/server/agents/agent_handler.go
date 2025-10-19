@@ -11,6 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 	fiberws "github.com/gofiber/websocket/v2"
 	"github.com/schlunsen/claude-agent-sdk-go/types"
+	"github.com/schlunsen/claude-control-terminal/internal/logging"
 )
 
 // WebSocket upgrader
@@ -101,6 +102,7 @@ func (h *AgentHandler) HandleFiberWebSocket(c *fiberws.Conn) {
 	h.Mu.Lock()
 	if h.Active >= h.Config.MaxConcurrentSessions {
 		h.Mu.Unlock()
+		logging.Warning("Max concurrent sessions reached: %d/%d", h.Active, h.Config.MaxConcurrentSessions)
 		c.WriteJSON(map[string]interface{}{
 			"type":    "error",
 			"message": "max concurrent sessions reached",
@@ -114,9 +116,11 @@ func (h *AgentHandler) HandleFiberWebSocket(c *fiberws.Conn) {
 		h.Mu.Lock()
 		h.Active--
 		h.Mu.Unlock()
+		logging.Debug("WebSocket connection closed, active connections: %d", h.Active)
 	}()
 
 	log.Printf("Fiber WebSocket connection established from %s", c.RemoteAddr().String())
+	logging.Info("WebSocket connection established from %s (active: %d)", c.RemoteAddr().String(), h.Active)
 
 	// Main message loop
 	for {
@@ -329,21 +333,33 @@ func (h *AgentHandler) sendAgentMessage(ws *websocket.Conn, sessionID uuid.UUID,
 	case "assistant":
 		if assistantMsg, ok := msg.(*types.AssistantMessage); ok {
 			log.Printf("Assistant message type assertion succeeded, content blocks: %d", len(assistantMsg.Content))
-			// Extract text content
 			var textContent []string
+			var toolUses []map[string]interface{}
+
 			for i, block := range assistantMsg.Content {
 				log.Printf("Block %d: type=%s, block=%+v", i, block.GetType(), block)
+
 				if textBlock, ok := block.(*types.TextBlock); ok {
 					log.Printf("TextBlock found with text: %s", textBlock.Text)
 					textContent = append(textContent, textBlock.Text)
+				} else if toolUseBlock, ok := block.(*types.ToolUseBlock); ok {
+					log.Printf("ToolUseBlock found: name=%s, id=%s", toolUseBlock.Name, toolUseBlock.ID)
+					toolUses = append(toolUses, map[string]interface{}{
+						"id":     toolUseBlock.ID,
+						"name":   toolUseBlock.Name,
+						"input":  toolUseBlock.Input,
+						"status": "running",
+					})
 				} else {
-					log.Printf("Block %d is not a TextBlock (type=%T)", i, block)
+					log.Printf("Block %d is not a TextBlock or ToolUseBlock (type=%T)", i, block)
 				}
 			}
-			log.Printf("Extracted %d text blocks: %v", len(textContent), textContent)
+			log.Printf("Extracted %d text blocks and %d tool uses", len(textContent), len(toolUses))
+
 			response.Content = map[string]interface{}{
-				"type": "assistant",
-				"text": textContent,
+				"type":  "assistant",
+				"text":  textContent,
+				"tools": toolUses,
 			}
 		} else {
 			log.Printf("Failed to assert message as AssistantMessage (type=%T)", msg)
@@ -351,9 +367,27 @@ func (h *AgentHandler) sendAgentMessage(ws *websocket.Conn, sessionID uuid.UUID,
 
 	case "user":
 		if userMsg, ok := msg.(*types.UserMessage); ok {
+			var toolResults []map[string]interface{}
+
+			// Check if user message content is a slice of ContentBlocks (tool results)
+			if contentBlocks, ok := userMsg.Content.([]types.ContentBlock); ok {
+				for _, block := range contentBlocks {
+					if toolResultBlock, ok := block.(*types.ToolResultBlock); ok {
+						log.Printf("ToolResultBlock found: tool_use_id=%s", toolResultBlock.ToolUseID)
+						toolResults = append(toolResults, map[string]interface{}{
+							"tool_use_id": toolResultBlock.ToolUseID,
+							"content":     toolResultBlock.Content,
+							"is_error":    toolResultBlock.IsError,
+							"status":      "completed",
+						})
+					}
+				}
+			}
+
 			response.Content = map[string]interface{}{
-				"type":    "user",
-				"content": userMsg.Content,
+				"type":         "user",
+				"content":      userMsg.Content,
+				"tool_results": toolResults,
 			}
 		}
 
@@ -552,19 +586,32 @@ func (h *AgentHandler) sendFiberAgentMessage(c *fiberws.Conn, sessionID uuid.UUI
 		if assistantMsg, ok := msg.(*types.AssistantMessage); ok {
 			log.Printf("Assistant message type assertion succeeded, content blocks: %d", len(assistantMsg.Content))
 			var textContent []string
+			var toolUses []map[string]interface{}
+
 			for i, block := range assistantMsg.Content {
 				log.Printf("Block %d: type=%s, block=%+v", i, block.GetType(), block)
+
 				if textBlock, ok := block.(*types.TextBlock); ok {
 					log.Printf("TextBlock found with text: %s", textBlock.Text)
 					textContent = append(textContent, textBlock.Text)
+				} else if toolUseBlock, ok := block.(*types.ToolUseBlock); ok {
+					log.Printf("ToolUseBlock found: name=%s, id=%s", toolUseBlock.Name, toolUseBlock.ID)
+					toolUses = append(toolUses, map[string]interface{}{
+						"id":     toolUseBlock.ID,
+						"name":   toolUseBlock.Name,
+						"input":  toolUseBlock.Input,
+						"status": "running",
+					})
 				} else {
-					log.Printf("Block %d is not a TextBlock (type=%T)", i, block)
+					log.Printf("Block %d is not a TextBlock or ToolUseBlock (type=%T)", i, block)
 				}
 			}
-			log.Printf("Extracted %d text blocks: %v", len(textContent), textContent)
+			log.Printf("Extracted %d text blocks and %d tool uses", len(textContent), len(toolUses))
+
 			response.Content = map[string]interface{}{
-				"type": "assistant",
-				"text": textContent,
+				"type":  "assistant",
+				"text":  textContent,
+				"tools": toolUses,
 			}
 		} else {
 			log.Printf("Failed to assert message as AssistantMessage (type=%T)", msg)
@@ -572,9 +619,27 @@ func (h *AgentHandler) sendFiberAgentMessage(c *fiberws.Conn, sessionID uuid.UUI
 
 	case "user":
 		if userMsg, ok := msg.(*types.UserMessage); ok {
+			var toolResults []map[string]interface{}
+
+			// Check if user message content is a slice of ContentBlocks (tool results)
+			if contentBlocks, ok := userMsg.Content.([]types.ContentBlock); ok {
+				for _, block := range contentBlocks {
+					if toolResultBlock, ok := block.(*types.ToolResultBlock); ok {
+						log.Printf("ToolResultBlock found: tool_use_id=%s", toolResultBlock.ToolUseID)
+						toolResults = append(toolResults, map[string]interface{}{
+							"tool_use_id": toolResultBlock.ToolUseID,
+							"content":     toolResultBlock.Content,
+							"is_error":    toolResultBlock.IsError,
+							"status":      "completed",
+						})
+					}
+				}
+			}
+
 			response.Content = map[string]interface{}{
-				"type":    "user",
-				"content": userMsg.Content,
+				"type":         "user",
+				"content":      userMsg.Content,
+				"tool_results": toolResults,
 			}
 		}
 

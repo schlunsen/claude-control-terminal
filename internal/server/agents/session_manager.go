@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	claude "github.com/schlunsen/claude-agent-sdk-go"
 	"github.com/schlunsen/claude-agent-sdk-go/types"
+	"github.com/schlunsen/claude-control-terminal/internal/logging"
 )
 
 // SessionManager manages agent sessions
@@ -42,8 +43,11 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
+	logging.Debug("CreateSession called for session: %s", sessionID)
+
 	// Check if session already exists
 	if _, exists := sm.sessions[sessionID]; exists {
+		logging.Warning("Session already exists: %s", sessionID)
 		return nil, fmt.Errorf("session already exists: %s", sessionID)
 	}
 
@@ -68,6 +72,8 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 	session.permissionReq = make(chan *PermissionRequestMessage, 10)
 
 	sm.sessions[sessionID] = session
+
+	logging.Info("Session created: %s (total sessions: %d)", sessionID, len(sm.sessions))
 
 	return &session.Session, nil
 }
@@ -172,11 +178,12 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	}
 
 	// Build SDK options
-	log.Printf("SendPrompt: Building SDK options (model: %s, permMode: %v)", sm.config.Model, permMode)
+	log.Printf("SendPrompt: Building SDK options (model: %s, permMode: %v, verbose: %v)", sm.config.Model, permMode, sm.config.Verbose)
 	opts := types.NewClaudeAgentOptions().
 		WithModel(sm.config.Model).
 		WithPermissionMode(permMode).
-		WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey)
+		WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey).
+		WithVerbose(sm.config.Verbose)
 
 	// Set working directory if provided
 	if session.Options.WorkingDirectory != nil && *session.Options.WorkingDirectory != "" {
@@ -187,9 +194,13 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	// Execute query (uses non-streaming mode, no control protocol initialization)
 	log.Printf("SendPrompt: Executing claude.Query...")
 	log.Printf("SendPrompt: API Key length: %d", len(sm.config.APIKey))
+	logging.Debug("Executing claude.Query for session %s with options: model=%s, verbose=%v, permMode=%v",
+		sessionID, sm.config.Model, sm.config.Verbose, permMode)
+
 	messages, err := claude.Query(session.ctx, prompt, opts)
 	if err != nil {
 		log.Printf("SendPrompt ERROR: Failed to execute query: %v", err)
+		logging.Error("Failed to execute query for session %s: %v", sessionID, err)
 		sm.mu.Lock()
 		errMsg := err.Error()
 		session.ErrorMessage = &errMsg
@@ -199,9 +210,11 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	}
 	if messages == nil {
 		log.Printf("SendPrompt ERROR: messages channel is nil!")
+		logging.Error("Messages channel is nil for session %s", sessionID)
 		return fmt.Errorf("messages channel is nil")
 	}
 	log.Printf("SendPrompt: Query executed successfully, messages channel ready")
+	logging.Info("Query executed successfully for session %s, starting response stream", sessionID)
 
 	// Start receiving responses in background
 	go sm.receiveQueryResponses(session, messages)

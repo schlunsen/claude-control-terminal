@@ -97,6 +97,22 @@
         </div>
 
         <div v-else class="chat-content">
+          <!-- Tool Overlays Container -->
+          <div v-if="activeSessionTools.length > 0" class="tool-overlays-container">
+            <template v-for="tool in activeSessionTools" :key="tool.id">
+              <TodoWriteOverlay
+                v-if="tool.name === 'TodoWrite'"
+                :tool="tool"
+                @dismiss="removeActiveTool(tool.sessionId, $event)"
+              />
+              <ToolOverlay
+                v-else
+                :tool="tool"
+                @dismiss="removeActiveTool(tool.sessionId, $event)"
+              />
+            </template>
+          </div>
+
           <!-- TodoWrite Box -->
           <div v-if="shouldShowTodoBox" class="todo-write-box">
             <div class="todo-box-header">
@@ -587,6 +603,7 @@
 import { useAgentWebSocket } from '~/composables/useAgentWebSocket'
 import SessionMetrics from '~/components/SessionMetrics.vue'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import type { ActiveTool } from '~/types/agents'
 
 interface TodoItem {
   content: string
@@ -630,6 +647,9 @@ const sessionTodos = ref(new Map<string, TodoItem[]>()) // { sessionId: [...todo
 const sessionToolExecution = ref(new Map<string, ToolExecution | null>()) // { sessionId: toolExecution }
 const todoHideTimers = ref(new Map<string, NodeJS.Timeout>()) // { sessionId: timeoutId }
 
+// Tool overlays state
+const activeTools = ref(new Map<string, ActiveTool[]>()) // { sessionId: [...activeTools] }
+
 // Session metrics state
 const sessionToolStats = ref(new Map<string, Record<string, number>>()) // { sessionId: { toolName: count } }
 const sessionPermissionStats = ref(new Map<string, { approved: number; denied: number; total: number }>()) // { sessionId: stats }
@@ -668,6 +688,11 @@ const activeSessionTodos = computed(() => {
   return sessionTodos.value.get(activeSessionId.value) || []
 })
 
+const activeSessionTools = computed(() => {
+  if (!activeSessionId.value) return []
+  return activeTools.value.get(activeSessionId.value) || []
+})
+
 const activeSessionPermissions = computed(() => {
   if (!activeSessionId.value) return []
   return sessionPermissions.value.get(activeSessionId.value) || []
@@ -702,8 +727,31 @@ const formatTime = (timestamp) => {
 }
 
 const formatMessage = (content) => {
+  // If content is an object, extract text from it first
+  if (typeof content === 'object' && content !== null) {
+    // Try to extract meaningful text from the object
+    if (content.text) {
+      content = Array.isArray(content.text) ? content.text.join('\n') : String(content.text)
+    } else if (content.content) {
+      content = String(content.content)
+    } else {
+      // For other objects, create a concise representation
+      const objType = content.type || 'unknown'
+      const keys = Object.keys(content).filter(k => k !== 'type')
+      if (keys.length === 0) {
+        return `<em class="system-message">${objType}</em>`
+      }
+      // Show key properties in a readable format
+      const props = keys.slice(0, 3).map(k => `${k}: ${String(content[k]).substring(0, 30)}`).join(', ')
+      return `<em class="system-message">${objType} - ${props}</em>`
+    }
+  }
+
+  // Ensure content is a string at this point
+  content = String(content)
+
   // Skip system messages and JSON-like content
-  if (typeof content === 'string' && content.includes('SystemMessage(') || content.startsWith('{') && content.includes('"type"')) {
+  if (content.includes('SystemMessage(') || (content.startsWith('{') && content.includes('"type"'))) {
     return '<em class="system-message">Processing...</em>'
   }
 
@@ -711,7 +759,7 @@ const formatMessage = (content) => {
   let cleanContent = content
 
   // If it's a string representation of an object, try to extract meaningful text
-  if (typeof cleanContent === 'string' && cleanContent.includes('assistant:')) {
+  if (cleanContent.includes('assistant:')) {
     const match = cleanContent.match(/assistant:\s*(.+?)(?:\n|$)/i)
     if (match) {
       cleanContent = match[1]
@@ -1142,9 +1190,41 @@ const clearSessionToolExecution = (sessionId: string) => {
   sessionToolExecution.value.delete(sessionId)
 }
 
+// Tool overlay management
+const addActiveTool = (sessionId: string, toolUse: any) => {
+  const tools = activeTools.value.get(sessionId) || []
+  const activeTool: ActiveTool = {
+    id: toolUse.id,
+    name: toolUse.name,
+    input: toolUse.input,
+    status: 'running',
+    startTime: Date.now(),
+    sessionId
+  }
+  tools.push(activeTool)
+  activeTools.value.set(sessionId, tools)
+}
+
+const completeActiveTool = (sessionId: string, toolUseId: string, isError: boolean = false) => {
+  const tools = activeTools.value.get(sessionId) || []
+  const tool = tools.find(t => t.id === toolUseId)
+  if (tool) {
+    tool.status = isError ? 'error' : 'completed'
+    tool.endTime = Date.now()
+    activeTools.value.set(sessionId, [...tools])
+  }
+}
+
+const removeActiveTool = (sessionId: string, toolId: string) => {
+  const tools = activeTools.value.get(sessionId) || []
+  const filtered = tools.filter(t => t.id !== toolId)
+  activeTools.value.set(sessionId, filtered)
+}
+
 const cleanupSessionData = (sessionId: string) => {
   sessionTodos.value.delete(sessionId)
   sessionToolExecution.value.delete(sessionId)
+  activeTools.value.delete(sessionId)
 }
 
 const truncatePath = (path: string): string => {
@@ -1409,6 +1489,22 @@ agentWs.on('onAgentMessage', (data) => {
 
   console.log('💬 Extracted:', { isComplete, costData, textContent: textContent.substring(0, 50) })
 
+  // Process tool uses (when Claude starts using a tool)
+  if (data.content && data.content.tools && Array.isArray(data.content.tools)) {
+    data.content.tools.forEach((toolUse: any) => {
+      console.log('🔧 Tool use detected:', toolUse.name)
+      addActiveTool(data.session_id, toolUse)
+    })
+  }
+
+  // Process tool results (when tool execution completes)
+  if (data.content && data.content.tool_results && Array.isArray(data.content.tool_results)) {
+    data.content.tool_results.forEach((toolResult: any) => {
+      console.log('✅ Tool result received:', toolResult.tool_use_id)
+      completeActiveTool(data.session_id, toolResult.tool_use_id, toolResult.is_error || false)
+    })
+  }
+
   // Update session status and metadata
   const session = sessions.value.find(s => s.id === data.session_id)
   if (session) {
@@ -1453,6 +1549,65 @@ agentWs.on('onAgentMessage', (data) => {
 
     // Don't create a UI message for result/completion
     console.log('✅ Message complete (result received)')
+    return
+  }
+
+  // Handle user messages with tool results differently
+  if (data.content && data.content.type === 'user' && data.content.tool_results && Array.isArray(data.content.tool_results)) {
+    // Format tool results as readable messages
+    const sessionTools = activeTools.value.get(data.session_id) || []
+    const formattedTools: string[] = []
+
+    data.content.tool_results.forEach((toolResult: any) => {
+      // Find the original tool use by tool_use_id
+      const tool = sessionTools.find(t => t.id === toolResult.tool_use_id)
+
+      if (tool && tool.name !== 'TodoWrite') {
+        // Format based on tool type
+        let formatted = ''
+
+        switch (tool.name) {
+          case 'Read':
+            formatted = `Read(${tool.input.file_path || ''})`
+            break
+          case 'Write':
+            formatted = `Write(${tool.input.file_path || ''})`
+            break
+          case 'Edit':
+            formatted = `Edit(${tool.input.file_path || ''})`
+            break
+          case 'Bash':
+            const cmd = tool.input.command || ''
+            formatted = `Bash(${cmd.length > 50 ? cmd.substring(0, 50) + '...' : cmd})`
+            break
+          case 'Glob':
+            formatted = `Glob(${tool.input.pattern || ''})`
+            break
+          case 'Grep':
+            formatted = `Grep(${tool.input.pattern || ''})`
+            break
+          default:
+            formatted = `${tool.name}()`
+        }
+
+        formattedTools.push(formatted)
+      }
+    })
+
+    // Only create a message if we have tools to display
+    if (formattedTools.length > 0) {
+      const toolMessage = {
+        id: `msg-${data.session_id}-${Date.now()}`,
+        role: 'user',
+        content: formattedTools.join(', '),
+        timestamp: new Date(),
+        isToolResult: true
+      }
+
+      messages.value[data.session_id].push(toolMessage)
+      console.log('🔧 Created tool result message:', toolMessage.content)
+    }
+
     return
   }
 
@@ -2039,7 +2194,23 @@ watch(() => agentWs.connected, (connected) => {
   flex-direction: column;
   overflow: hidden; /* Contain children */
   min-height: 0; /* Important for flex children */
-  position: relative; /* For absolutely positioned TodoWrite box */
+  position: relative; /* For absolutely positioned TodoWrite box and tool overlays */
+}
+
+/* Tool Overlays Container - positioned in top right */
+.tool-overlays-container {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none; /* Allow clicks through container */
+}
+
+.tool-overlays-container > * {
+  pointer-events: auto; /* Re-enable clicks on overlay items */
 }
 
 .messages-container {

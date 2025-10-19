@@ -5,4 +5,5 @@ type Config struct {
 	Model                 string
 	APIKey                string
 	MaxConcurrentSessions int
+	Verbose               bool
 }
