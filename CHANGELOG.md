@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New internal/logging package providing centralized logging infrastructure
 - Debug logging throughout agent server for full conversation visibility
 - TodoWrite and tool execution event overlays in agents page for real-time visibility
+- API key validation warnings on server startup for better troubleshooting
 
 ### Changed
 - **BREAKING**: Migrated agent server from Python FastAPI to Go with native implementation
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved session management with Go-native implementation
 - Enhanced agent handler with comprehensive logging and error tracking
 - Streamlined server architecture with single-process unified server
+- Converted all log.Printf statements to internal/logging package for consistent verbose output
 
 ### Removed
 - Python-based agent server (internal/agents/agents_server/)
@@ -29,11 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Legacy Python agent manager, auth, and session modules (~2500 lines of Python code)
 
 ### Fixed
-- Updated to latest claude-agent-sdk-go (v0.1.7) for improved stability and compatibility
-- Removed deprecated WithVerbose method from agent configuration
+- **CRITICAL**: Downgraded claude-agent-sdk-go from v0.2.0 to v0.1.3 for stability and compatibility
+- **CRITICAL**: Restored WithVerbose option that was removed in SDK v0.2.0 for better debugging
+- Agent connection issues caused by SDK v0.2.0 incompatibilities
 - Server tests updated to match NewServerWithOptions signature with verbose parameter
 - Improved error handling and logging throughout agent lifecycle
 - Better signal handling and cleanup for agent server process lifecycle
+- Enhanced verbose logging provides comprehensive session and tool execution visibility
 
 ## [0.4.4] - Real-Time Session Metrics Dashboard - 2025-01-16
 
