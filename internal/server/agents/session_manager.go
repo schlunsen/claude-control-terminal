@@ -3,7 +3,6 @@ package agents
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
@@ -148,10 +147,10 @@ func (sm *SessionManager) EndAllSessions() int {
 
 // SendPrompt sends a prompt to an agent session using claude.Query
 func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
-	log.Printf("SendPrompt: Getting session %s", sessionID)
+	logging.Debug("SendPrompt: Getting session %s", sessionID)
 	session, err := sm.GetSession(sessionID)
 	if err != nil {
-		log.Printf("SendPrompt ERROR: Failed to get session: %v", err)
+		logging.Error("SendPrompt: Failed to get session: %v", err)
 		return err
 	}
 
@@ -162,7 +161,7 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	session.MessageCount++
 	sm.mu.Unlock()
 
-	log.Printf("SendPrompt: Executing query for session")
+	logging.Debug("SendPrompt: Executing query for session %s", sessionID)
 
 	// Determine permission mode
 	permMode := types.PermissionModeDefault
@@ -178,28 +177,28 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	}
 
 	// Build SDK options
-	log.Printf("SendPrompt: Building SDK options (model: %s, permMode: %v)", sm.config.Model, permMode)
+	logging.Debug("SendPrompt: Building SDK options (model: %s, permMode: %v, verbose: %v)", sm.config.Model, permMode, sm.config.Verbose)
 	opts := types.NewClaudeAgentOptions().
 		WithModel(sm.config.Model).
 		WithPermissionMode(permMode).
-		WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey)
+		WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey).
+		WithVerbose(sm.config.Verbose)
 
 	// Set working directory if provided
 	if session.Options.WorkingDirectory != nil && *session.Options.WorkingDirectory != "" {
-		log.Printf("SendPrompt: Setting working directory: %s", *session.Options.WorkingDirectory)
+		logging.Debug("SendPrompt: Setting working directory: %s", *session.Options.WorkingDirectory)
 		opts = opts.WithCWD(*session.Options.WorkingDirectory)
 	}
 
 	// Execute query (uses non-streaming mode, no control protocol initialization)
-	log.Printf("SendPrompt: Executing claude.Query...")
-	log.Printf("SendPrompt: API Key length: %d", len(sm.config.APIKey))
+	logging.Debug("SendPrompt: Executing claude.Query...")
+	logging.Debug("SendPrompt: API Key length: %d", len(sm.config.APIKey))
 	logging.Debug("Executing claude.Query for session %s with options: model=%s, permMode=%v",
 		sessionID, sm.config.Model, permMode)
 
 	messages, err := claude.Query(session.ctx, prompt, opts)
 	if err != nil {
-		log.Printf("SendPrompt ERROR: Failed to execute query: %v", err)
-		logging.Error("Failed to execute query for session %s: %v", sessionID, err)
+		logging.Error("SendPrompt: Failed to execute query: %v", err)
 		sm.mu.Lock()
 		errMsg := err.Error()
 		session.ErrorMessage = &errMsg
@@ -208,17 +207,16 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 		return fmt.Errorf("failed to execute query: %w", err)
 	}
 	if messages == nil {
-		log.Printf("SendPrompt ERROR: messages channel is nil!")
-		logging.Error("Messages channel is nil for session %s", sessionID)
+		logging.Error("SendPrompt: messages channel is nil for session %s", sessionID)
 		return fmt.Errorf("messages channel is nil")
 	}
-	log.Printf("SendPrompt: Query executed successfully, messages channel ready")
+	logging.Info("SendPrompt: Query executed successfully, messages channel ready")
 	logging.Info("Query executed successfully for session %s, starting response stream", sessionID)
 
 	// Start receiving responses in background
 	go sm.receiveQueryResponses(session, messages)
 
-	log.Printf("SendPrompt: Completed successfully")
+	logging.Debug("SendPrompt: Completed successfully for session %s", sessionID)
 	return nil
 }
 
@@ -226,16 +224,16 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages <-chan types.Message) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Session %s: PANIC in receiveQueryResponses: %v", session.ID, r)
+			logging.Error("Session %s: PANIC in receiveQueryResponses: %v", session.ID, r)
 		}
 		sm.mu.Lock()
 		session.Status = SessionStatusIdle
 		session.UpdatedAt = time.Now()
 		sm.mu.Unlock()
-		log.Printf("Session %s: Query response receiving completed", session.ID)
+		logging.Debug("Session %s: Query response receiving completed", session.ID)
 	}()
 
-	log.Printf("Session %s: Starting to receive query responses", session.ID)
+	logging.Debug("Session %s: Starting to receive query responses", session.ID)
 
 	messageCount := 0
 	timeout := time.After(60 * time.Second) // 60 second timeout for first message
@@ -244,18 +242,18 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 		select {
 		case msg, ok := <-messages:
 			if !ok {
-				log.Printf("Session %s: Messages channel closed after %d messages", session.ID, messageCount)
+				logging.Info("Session %s: Messages channel closed after %d messages", session.ID, messageCount)
 				return
 			}
 
 			messageCount++
-			log.Printf("Session %s: Received message #%d, type: %s", session.ID, messageCount, msg.GetMessageType())
+			logging.Debug("Session %s: Received message #%d, type: %s", session.ID, messageCount, msg.GetMessageType())
 
 			select {
 			case session.responseChan <- msg:
-				log.Printf("Session %s: Message #%d forwarded to response channel", session.ID, messageCount)
+				logging.Debug("Session %s: Message #%d forwarded to response channel", session.ID, messageCount)
 			case <-session.ctx.Done():
-				log.Printf("Session %s: Context cancelled after %d messages", session.ID, messageCount)
+				logging.Info("Session %s: Context cancelled after %d messages", session.ID, messageCount)
 				return
 			}
 
@@ -263,11 +261,11 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 			timeout = time.After(60 * time.Second)
 
 		case <-timeout:
-			log.Printf("Session %s: TIMEOUT waiting for messages (received %d so far)", session.ID, messageCount)
+			logging.Warning("Session %s: TIMEOUT waiting for messages (received %d so far)", session.ID, messageCount)
 			return
 
 		case <-session.ctx.Done():
-			log.Printf("Session %s: Context cancelled while waiting for messages", session.ID)
+			logging.Info("Session %s: Context cancelled while waiting for messages", session.ID)
 			return
 		}
 	}

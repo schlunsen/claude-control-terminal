@@ -145,6 +145,20 @@ func (s *Server) Setup() error {
 		agentAPIKey = os.Getenv("CLAUDE_API_KEY")
 	}
 
+	// Log API key status
+	if agentAPIKey == "" {
+		if !s.quiet {
+			fmt.Printf("⚠️  WARNING: No API key found in environment variables (ANTHROPIC_API_KEY or CLAUDE_API_KEY)\n")
+		}
+		if s.verbose {
+			logging.Warning("No API key found in environment variables")
+		}
+	} else {
+		if s.verbose {
+			logging.Info("API key loaded from environment (length: %d characters)", len(agentAPIKey))
+		}
+	}
+
 	agentConfig := &agents.Config{
 		Model:                 config.Agent.Model,
 		APIKey:                agentAPIKey,
@@ -162,8 +176,8 @@ func (s *Server) Setup() error {
 	}
 
 	if s.verbose {
-		logging.Info("Agent handler initialized: model=%s, maxSessions=%d, verbose=%v",
-			agentConfig.Model, agentConfig.MaxConcurrentSessions, agentConfig.Verbose)
+		logging.Info("Agent handler initialized: model=%s, maxSessions=%d, verbose=%v, apiKeySet=%v",
+			agentConfig.Model, agentConfig.MaxConcurrentSessions, agentConfig.Verbose, agentAPIKey != "")
 	}
 
 	// Configure CORS middleware
