@@ -2,6 +2,8 @@ package agents
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -17,6 +19,7 @@ type SessionManager struct {
 	sessions map[uuid.UUID]*AgentSession
 	mu       sync.RWMutex
 	config   *Config
+	storage  SessionStorage
 }
 
 // AgentSession represents an active agent session
@@ -30,10 +33,114 @@ type AgentSession struct {
 }
 
 // NewSessionManager creates a new session manager
-func NewSessionManager(config *Config) *SessionManager {
-	return &SessionManager{
+func NewSessionManager(config *Config, db *sql.DB) (*SessionManager, error) {
+	// Initialize storage
+	storage, err := NewSQLiteSessionStorage(db)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize session storage: %w", err)
+	}
+
+	sm := &SessionManager{
 		sessions: make(map[uuid.UUID]*AgentSession),
 		config:   config,
+		storage:  storage,
+	}
+
+	// Load active sessions from database
+	if err := sm.loadSessionsFromDB(); err != nil {
+		logging.Warning("Failed to load sessions from database: %v", err)
+		// Don't fail initialization, just log the warning
+	}
+
+	return sm, nil
+}
+
+// loadSessionsFromDB loads active sessions from the database into memory
+func (sm *SessionManager) loadSessionsFromDB() error {
+	sessions, err := sm.storage.ListSessions("active")
+	if err != nil {
+		return fmt.Errorf("failed to list sessions: %w", err)
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	for _, sessionMeta := range sessions {
+		// Create an in-memory session object
+		session := &AgentSession{
+			Session: Session{
+				ID:              sessionMeta.ID,
+				CreatedAt:       sessionMeta.CreatedAt,
+				UpdatedAt:       sessionMeta.UpdatedAt,
+				Status:          SessionStatus(sessionMeta.Status),
+				MessageCount:    sessionMeta.MessageCount,
+				CostUSD:         sessionMeta.CostUSD,
+				NumTurns:        sessionMeta.NumTurns,
+				DurationMS:      sessionMeta.DurationMS,
+				ModelName:       sessionMeta.ModelName,
+				ClaudeSessionID: sessionMeta.ClaudeSessionID,
+			},
+			active: true,
+		}
+
+		if sessionMeta.ErrorMessage != "" {
+			session.ErrorMessage = &sessionMeta.ErrorMessage
+		}
+
+		// Create context for session
+		session.ctx, session.cancel = context.WithCancel(context.Background())
+
+		// Create channels
+		session.responseChan = make(chan types.Message, 10)
+		session.permissionReq = make(chan *PermissionRequestMessage, 10)
+
+		sm.sessions[sessionMeta.ID] = session
+
+		logging.Info("Loaded session from database: %s (status: %s, messages: %d)",
+			sessionMeta.ID, sessionMeta.Status, sessionMeta.MessageCount)
+	}
+
+	if len(sessions) > 0 {
+		logging.Info("Loaded %d active sessions from database", len(sessions))
+	}
+
+	return nil
+}
+
+// StartCleanupJob starts a background goroutine that periodically cleans up old sessions
+func (sm *SessionManager) StartCleanupJob() {
+	if !sm.config.CleanupEnabled {
+		logging.Info("Session cleanup job disabled")
+		return
+	}
+
+	logging.Info("Starting session cleanup job (retention: %d days, interval: %d hours)",
+		sm.config.SessionRetentionDays, sm.config.CleanupIntervalHours)
+
+	go func() {
+		ticker := time.NewTicker(time.Duration(sm.config.CleanupIntervalHours) * time.Hour)
+		defer ticker.Stop()
+
+		// Run cleanup once immediately
+		sm.runCleanup()
+
+		// Then run on ticker
+		for range ticker.C {
+			sm.runCleanup()
+		}
+	}()
+}
+
+// runCleanup performs the actual cleanup of old sessions
+func (sm *SessionManager) runCleanup() {
+	deleted, err := sm.storage.DeleteOldSessions(sm.config.SessionRetentionDays)
+	if err != nil {
+		logging.Error("Failed to cleanup old sessions: %v", err)
+		return
+	}
+
+	if deleted > 0 {
+		logging.Info("Cleaned up %d old sessions (retention: %d days)", deleted, sm.config.SessionRetentionDays)
 	}
 }
 
@@ -44,21 +151,67 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 
 	logging.Debug("CreateSession called for session: %s", sessionID)
 
-	// Check if session already exists
+	// Check if session already exists in memory
 	if _, exists := sm.sessions[sessionID]; exists {
-		logging.Warning("Session already exists: %s", sessionID)
+		logging.Warning("Session already exists in memory: %s", sessionID)
 		return nil, fmt.Errorf("session already exists: %s", sessionID)
 	}
 
-	// Create session
+	// Check if session exists in database (from previous server run or browser refresh)
+	existingMeta, err := sm.storage.GetSession(sessionID)
+	if err == nil && existingMeta != nil {
+		logging.Info("Restoring session from database: %s (Claude session: %s)", sessionID, existingMeta.ClaudeSessionID)
+
+		// Restore session to memory with data from database
+		session := &AgentSession{
+			Session: Session{
+				ID:              existingMeta.ID,
+				CreatedAt:       existingMeta.CreatedAt,
+				UpdatedAt:       time.Now(), // Update to current time
+				Status:          SessionStatus(existingMeta.Status),
+				Options:         options, // Use new options from request
+				MessageCount:    existingMeta.MessageCount,
+				CostUSD:         existingMeta.CostUSD,
+				NumTurns:        existingMeta.NumTurns,
+				DurationMS:      existingMeta.DurationMS,
+				ModelName:       existingMeta.ModelName,
+				ClaudeSessionID: existingMeta.ClaudeSessionID, // CRITICAL: Restore Claude session ID
+			},
+			active: true,
+		}
+
+		if existingMeta.ErrorMessage != "" {
+			session.ErrorMessage = &existingMeta.ErrorMessage
+		}
+
+		// Create context for restored session
+		session.ctx, session.cancel = context.WithCancel(context.Background())
+
+		// Create response and permission channels
+		session.responseChan = make(chan types.Message, 10)
+		session.permissionReq = make(chan *PermissionRequestMessage, 10)
+
+		sm.sessions[sessionID] = session
+
+		logging.Info("Session restored from database: %s (total sessions: %d)", sessionID, len(sm.sessions))
+		return &session.Session, nil
+	}
+
+	// Session doesn't exist anywhere, create new one
+	logging.Debug("Creating new session: %s", sessionID)
+	now := time.Now()
 	session := &AgentSession{
 		Session: Session{
 			ID:           sessionID,
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
+			CreatedAt:    now,
+			UpdatedAt:    now,
 			Status:       SessionStatusIdle,
 			Options:      options,
 			MessageCount: 0,
+			CostUSD:      0.0,
+			NumTurns:     0,
+			DurationMS:   0,
+			ModelName:    sm.config.Model,
 		},
 		active: true,
 	}
@@ -72,9 +225,54 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 
 	sm.sessions[sessionID] = session
 
+	// Save to database
+	if err := sm.saveSessionToDB(&session.Session); err != nil {
+		logging.Error("Failed to save session to database: %v", err)
+		// Don't fail the creation, just log the error
+	}
+
 	logging.Info("Session created: %s (total sessions: %d)", sessionID, len(sm.sessions))
 
 	return &session.Session, nil
+}
+
+// sessionToMetadata converts a Session to SessionMetadata
+func (sm *SessionManager) sessionToMetadata(session *Session) *SessionMetadata {
+	metadata := &SessionMetadata{
+		ID:              session.ID,
+		Status:          string(session.Status),
+		CreatedAt:       session.CreatedAt,
+		UpdatedAt:       session.UpdatedAt,
+		EndedAt:         nil,
+		MessageCount:    session.MessageCount,
+		CostUSD:         session.CostUSD,
+		NumTurns:        session.NumTurns,
+		DurationMS:      session.DurationMS,
+		ModelName:       session.ModelName,
+		ClaudeSessionID: session.ClaudeSessionID,
+	}
+
+	if session.ErrorMessage != nil {
+		metadata.ErrorMessage = *session.ErrorMessage
+	}
+
+	// Check if session is ended
+	if session.Status == SessionStatusEnded {
+		now := time.Now()
+		metadata.EndedAt = &now
+	}
+
+	return metadata
+}
+
+// saveSessionToDB persists a session to the database
+func (sm *SessionManager) saveSessionToDB(session *Session) error {
+	return sm.storage.SaveSession(sm.sessionToMetadata(session))
+}
+
+// updateSessionInDB updates an existing session in the database
+func (sm *SessionManager) updateSessionInDB(session *Session) error {
+	return sm.storage.UpdateSession(sm.sessionToMetadata(session))
 }
 
 // GetSession retrieves a session by ID
@@ -103,6 +301,38 @@ func (sm *SessionManager) ListSessions() []Session {
 	return sessions
 }
 
+// ListAllSessions returns all sessions (active and ended) from database
+func (sm *SessionManager) ListAllSessions(statusFilter string) ([]Session, error) {
+	sessionMetas, err := sm.storage.ListSessions(statusFilter)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions from storage: %w", err)
+	}
+
+	sessions := make([]Session, 0, len(sessionMetas))
+	for _, meta := range sessionMetas {
+		session := Session{
+			ID:              meta.ID,
+			CreatedAt:       meta.CreatedAt,
+			UpdatedAt:       meta.UpdatedAt,
+			Status:          SessionStatus(meta.Status),
+			MessageCount:    meta.MessageCount,
+			CostUSD:         meta.CostUSD,
+			NumTurns:        meta.NumTurns,
+			DurationMS:      meta.DurationMS,
+			ModelName:       meta.ModelName,
+			ClaudeSessionID: meta.ClaudeSessionID,
+		}
+
+		if meta.ErrorMessage != "" {
+			session.ErrorMessage = &meta.ErrorMessage
+		}
+
+		sessions = append(sessions, session)
+	}
+
+	return sessions, nil
+}
+
 // EndSession ends a session
 func (sm *SessionManager) EndSession(sessionID uuid.UUID) error {
 	sm.mu.Lock()
@@ -120,10 +350,22 @@ func (sm *SessionManager) EndSession(sessionID uuid.UUID) error {
 
 	// Update status
 	session.Status = SessionStatusEnded
+	session.UpdatedAt = time.Now()
 	session.active = false
 
-	// Remove from sessions
+	// Calculate duration
+	session.DurationMS = time.Since(session.CreatedAt).Milliseconds()
+
+	// Update in database
+	if err := sm.updateSessionInDB(&session.Session); err != nil {
+		logging.Error("Failed to update ended session in database: %v", err)
+	}
+
+	// Remove from active sessions map
 	delete(sm.sessions, sessionID)
+
+	logging.Info("Session ended: %s (duration: %dms, messages: %d)",
+		sessionID, session.DurationMS, session.MessageCount)
 
 	return nil
 }
@@ -159,7 +401,13 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	session.Status = SessionStatusProcessing
 	session.UpdatedAt = time.Now()
 	session.MessageCount++
+	currentMsgCount := session.MessageCount
 	sm.mu.Unlock()
+
+	// Save user prompt message to database
+	if err := sm.saveMessageToDB(session.ID, currentMsgCount-1, "user", prompt, "", nil); err != nil {
+		logging.Error("Failed to save user message to database: %v", err)
+	}
 
 	logging.Debug("SendPrompt: Executing query for session %s", sessionID)
 
@@ -181,13 +429,23 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	opts := types.NewClaudeAgentOptions().
 		WithModel(sm.config.Model).
 		WithPermissionMode(permMode).
-		WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey).
 		WithVerbose(sm.config.Verbose)
+
+	// Only set API key if provided (don't override SDK's default detection)
+	if sm.config.APIKey != "" {
+		opts = opts.WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey)
+	}
 
 	// Set working directory if provided
 	if session.Options.WorkingDirectory != nil && *session.Options.WorkingDirectory != "" {
 		logging.Debug("SendPrompt: Setting working directory: %s", *session.Options.WorkingDirectory)
 		opts = opts.WithCWD(*session.Options.WorkingDirectory)
+	}
+
+	// Resume existing conversation if Claude session ID exists
+	if session.ClaudeSessionID != "" {
+		logging.Debug("SendPrompt: Resuming conversation from Claude session: %s", session.ClaudeSessionID)
+		opts = opts.WithResume(session.ClaudeSessionID)
 	}
 
 	// Execute query (uses non-streaming mode, no control protocol initialization)
@@ -243,11 +501,19 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 		case msg, ok := <-messages:
 			if !ok {
 				logging.Info("Session %s: Messages channel closed after %d messages", session.ID, messageCount)
+				// Update session in database before finishing
+				sm.mu.Lock()
+				session.UpdatedAt = time.Now()
+				sm.updateSessionInDB(&session.Session)
+				sm.mu.Unlock()
 				return
 			}
 
 			messageCount++
 			logging.Debug("Session %s: Received message #%d, type: %s", session.ID, messageCount, msg.GetMessageType())
+
+			// Save message to database based on type
+			sm.persistSDKMessage(session.ID, messageCount, msg)
 
 			select {
 			case session.responseChan <- msg:
@@ -279,4 +545,148 @@ func (sm *SessionManager) GetResponseChannel(sessionID uuid.UUID) (chan types.Me
 	}
 
 	return session.responseChan, nil
+}
+
+// saveMessageToDB persists a message to the database
+func (sm *SessionManager) saveMessageToDB(sessionID uuid.UUID, sequence int, role, content, thinkingContent string, toolUses interface{}) error {
+	var toolUsesJSON []byte
+	if toolUses != nil {
+		var err error
+		toolUsesJSON, err = json.Marshal(toolUses)
+		if err != nil {
+			return fmt.Errorf("failed to marshal tool uses: %w", err)
+		}
+	}
+
+	msg := &MessageRecord{
+		ID:              uuid.New(),
+		SessionID:       sessionID,
+		Sequence:        sequence,
+		Role:            role,
+		Content:         content,
+		ThinkingContent: thinkingContent,
+		ToolUses:        toolUsesJSON,
+		Timestamp:       time.Now(),
+		TokensUsed:      0, // TODO: Extract from SDK response if available
+	}
+
+	return sm.storage.SaveMessage(msg)
+}
+
+// GetMessages retrieves messages for a session with pagination
+func (sm *SessionManager) GetMessages(sessionID uuid.UUID, limit, offset int) ([]*MessageRecord, bool, error) {
+	return sm.storage.GetMessages(sessionID, limit, offset)
+}
+
+// persistSDKMessage saves an SDK message to the database
+func (sm *SessionManager) persistSDKMessage(sessionID uuid.UUID, sequence int, msg types.Message) {
+	messageType := msg.GetMessageType()
+
+	switch messageType {
+	case "assistant":
+		// Assistant message contains multiple content blocks
+		if assistantMsg, ok := msg.(*types.AssistantMessage); ok {
+			var textContent, thinkingContent string
+			var toolUses []map[string]interface{}
+
+			// Extract content from blocks
+			for _, block := range assistantMsg.Content {
+				switch b := block.(type) {
+				case *types.TextBlock:
+					if textContent != "" {
+						textContent += "\n"
+					}
+					textContent += b.Text
+
+				case *types.ThinkingBlock:
+					if thinkingContent != "" {
+						thinkingContent += "\n"
+					}
+					thinkingContent += b.Thinking
+
+				case *types.ToolUseBlock:
+					toolUses = append(toolUses, map[string]interface{}{
+						"id":    b.ID,
+						"name":  b.Name,
+						"input": b.Input,
+					})
+				}
+			}
+
+			// Save the combined assistant message
+			var toolUsesData interface{}
+			if len(toolUses) > 0 {
+				toolUsesData = toolUses
+			}
+
+			if err := sm.saveMessageToDB(sessionID, sequence, "assistant", textContent, thinkingContent, toolUsesData); err != nil {
+				logging.Error("Failed to save assistant message: %v", err)
+			}
+		}
+
+	case "result":
+		// Result message with cost and usage info
+		if resultMsg, ok := msg.(*types.ResultMessage); ok {
+			content := ""
+			if resultMsg.Result != nil {
+				content = *resultMsg.Result
+			}
+
+			resultData := map[string]interface{}{
+				"duration_ms":     resultMsg.DurationMs,
+				"duration_api_ms": resultMsg.DurationAPIMs,
+				"is_error":        resultMsg.IsError,
+				"num_turns":       resultMsg.NumTurns,
+			}
+			if resultMsg.TotalCostUSD != nil {
+				resultData["total_cost_usd"] = *resultMsg.TotalCostUSD
+			}
+			if resultMsg.Usage != nil {
+				resultData["usage"] = resultMsg.Usage
+			}
+
+			if err := sm.saveMessageToDB(sessionID, sequence, "system", content, "", resultData); err != nil {
+				logging.Error("Failed to save result message: %v", err)
+			}
+
+			// Update session with cost and turn info
+			sm.mu.Lock()
+			if session, exists := sm.sessions[sessionID]; exists {
+				if resultMsg.TotalCostUSD != nil {
+					session.CostUSD = *resultMsg.TotalCostUSD
+				}
+				session.NumTurns = resultMsg.NumTurns
+				session.DurationMS = int64(resultMsg.DurationMs)
+
+				// Extract and store Claude CLI session ID for resuming conversations
+				if resultMsg.SessionID != "" && session.ClaudeSessionID == "" {
+					session.ClaudeSessionID = resultMsg.SessionID
+					logging.Debug("Extracted Claude session ID for session %s: %s", sessionID, resultMsg.SessionID)
+
+					// Persist to database
+					metadata := sm.sessionToMetadata(&session.Session)
+					if err := sm.storage.UpdateSession(metadata); err != nil {
+						logging.Error("Failed to persist Claude session ID: %v", err)
+					}
+				}
+			}
+			sm.mu.Unlock()
+		}
+
+	case "user":
+		// User message (shouldn't normally come through here, but handle it)
+		if userMsg, ok := msg.(*types.UserMessage); ok {
+			content := ""
+			if str, ok := userMsg.Content.(string); ok {
+				content = str
+			}
+			if err := sm.saveMessageToDB(sessionID, sequence, "user", content, "", nil); err != nil {
+				logging.Error("Failed to save user message: %v", err)
+			}
+		}
+
+	default:
+		// Log unhandled message types (system, stream_event, etc.)
+		logging.Debug("Unhandled message type for persistence: %s", messageType)
+	}
 }

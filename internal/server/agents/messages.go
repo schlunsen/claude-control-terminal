@@ -21,6 +21,8 @@ const (
 	MessageTypeSessionEnded  MessageType = "session_ended"
 	MessageTypeListSessions  MessageType = "list_sessions"
 	MessageTypeSessionsList  MessageType = "sessions_list"
+	MessageTypeLoadMessages  MessageType = "load_messages"
+	MessageTypeMessagesLoaded MessageType = "messages_loaded"
 
 	// Agent interaction
 	MessageTypeSendPrompt     MessageType = "send_prompt"
@@ -68,13 +70,18 @@ type SessionOptions struct {
 
 // Session represents an agent conversation session
 type Session struct {
-	ID           uuid.UUID      `json:"id"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	Status       SessionStatus  `json:"status"`
-	Options      SessionOptions `json:"options"`
-	MessageCount int            `json:"message_count"`
-	ErrorMessage *string        `json:"error_message,omitempty"`
+	ID             uuid.UUID      `json:"id"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	Status         SessionStatus  `json:"status"`
+	Options        SessionOptions `json:"options"`
+	MessageCount   int            `json:"message_count"`
+	ErrorMessage   *string        `json:"error_message,omitempty"`
+	CostUSD          float64        `json:"cost_usd"`
+	NumTurns         int            `json:"num_turns"`
+	DurationMS       int64          `json:"duration_ms"`
+	ModelName        string         `json:"model_name,omitempty"`
+	ClaudeSessionID  string         `json:"claude_session_id,omitempty"`  // Claude CLI session ID for resuming conversations
 }
 
 // BaseMessage represents a base WebSocket message
@@ -140,6 +147,25 @@ type ListSessionsMessage struct {
 type SessionsListMessage struct {
 	BaseMessage
 	Sessions []Session `json:"sessions"`
+}
+
+// LoadMessagesMessage represents a request to load messages for a session
+type LoadMessagesMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+	Limit     int       `json:"limit"`
+	Offset    int       `json:"offset"`
+}
+
+// MessagesLoadedMessage represents a response with loaded messages
+type MessagesLoadedMessage struct {
+	BaseMessage
+	SessionID uuid.UUID        `json:"session_id"`
+	Messages  []MessageRecord  `json:"messages"`
+	HasMore   bool             `json:"has_more"`
+	Count     int              `json:"count"`
+	Limit     int              `json:"limit"`
+	Offset    int              `json:"offset"`
 }
 
 // KillAllAgentsMessage represents killing all agents

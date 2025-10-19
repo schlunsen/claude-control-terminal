@@ -55,26 +55,49 @@
           </div>
         </div>
 
+        <!-- Session Filter Tabs -->
+        <div class="session-filters">
+          <button
+            v-for="filter in sessionFilters"
+            :key="filter.value"
+            @click="activeFilter = filter.value"
+            class="filter-tab"
+            :class="{ active: activeFilter === filter.value }"
+          >
+            {{ filter.label }}
+            <span class="filter-count">{{ getFilterCount(filter.value) }}</span>
+          </button>
+        </div>
+
         <div class="sessions-list">
-          <div v-if="sessions.length === 0" class="no-sessions">
-            No active sessions
+          <div v-if="filteredSessions.length === 0" class="no-sessions">
+            No {{ activeFilter }} sessions
           </div>
           <div
-            v-for="session in sessions"
+            v-for="session in filteredSessions"
             :key="session.id"
             class="session-item"
-            :class="{ active: activeSessionId === session.id }"
+            :class="{
+              active: activeSessionId === session.id,
+              ended: session.status === 'ended'
+            }"
             @click="selectSession(session.id)"
           >
+            <div class="session-status-dot" :class="session.status"></div>
             <div class="session-info">
               <div class="session-name">Session {{ session.id.slice(0, 8) }}</div>
               <div class="session-meta">
                 <span class="session-status" :class="session.status">{{ session.status }}</span>
                 <span class="session-messages">{{ session.message_count }} messages</span>
-                <span v-if="session.cost_usd" class="session-cost">${{ session.cost_usd.toFixed(4) }}</span>
+                <span v-if="session.cost_usd && session.cost_usd > 0" class="session-cost">${{ session.cost_usd.toFixed(4) }}</span>
               </div>
             </div>
-            <button @click.stop="endSession(session.id)" class="btn-end-session" title="End session">
+            <button
+              v-if="session.status !== 'ended'"
+              @click.stop="endSession(session.id)"
+              class="btn-end-session"
+              title="End session"
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -649,6 +672,38 @@ const todoHideTimers = ref(new Map<string, NodeJS.Timeout>()) // { sessionId: ti
 
 // Tool overlays state
 const activeTools = ref(new Map<string, ActiveTool[]>()) // { sessionId: [...activeTools] }
+
+// Session filtering state
+const activeFilter = ref('active') // 'all', 'active', 'ended'
+const sessionFilters = [
+  { label: 'Active', value: 'active' },
+  { label: 'All', value: 'all' },
+  { label: 'Ended', value: 'ended' }
+]
+
+// Computed: Filtered sessions based on active filter
+const filteredSessions = computed(() => {
+  if (activeFilter.value === 'all') {
+    return sessions.value
+  } else if (activeFilter.value === 'active') {
+    return sessions.value.filter((s: any) => s.status !== 'ended')
+  } else if (activeFilter.value === 'ended') {
+    return sessions.value.filter((s: any) => s.status === 'ended')
+  }
+  return sessions.value
+})
+
+// Get count for each filter
+const getFilterCount = (filter: string) => {
+  if (filter === 'all') {
+    return sessions.value.length
+  } else if (filter === 'active') {
+    return sessions.value.filter((s: any) => s.status !== 'ended').length
+  } else if (filter === 'ended') {
+    return sessions.value.filter((s: any) => s.status === 'ended').length
+  }
+  return 0
+}
 
 // Session metrics state
 const sessionToolStats = ref(new Map<string, Record<string, number>>()) // { sessionId: { toolName: count } }
@@ -2003,6 +2058,60 @@ watch(() => agentWs.connected, (connected) => {
   color: var(--text-primary);
 }
 
+/* Session Filters */
+.session-filters {
+  display: flex;
+  gap: 4px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.filter-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-tab:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent-purple);
+}
+
+.filter-tab.active {
+  background: var(--accent-purple);
+  border-color: var(--accent-purple);
+  color: white;
+}
+
+.filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.filter-tab.active .filter-count {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .btn-new-session {
   width: 100%;
   display: flex;
@@ -2061,6 +2170,39 @@ watch(() => agentWs.connected, (connected) => {
 .session-item.active {
   background: var(--accent-purple);
   color: white;
+}
+
+.session-item.ended {
+  opacity: 0.7;
+}
+
+.session-item.ended:hover {
+  opacity: 0.85;
+}
+
+/* Session Status Dot */
+.session-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+
+.session-status-dot.active,
+.session-status-dot.processing,
+.session-status-dot.idle {
+  background: var(--status-success);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+}
+
+.session-status-dot.ended {
+  background: var(--text-muted);
+}
+
+.session-status-dot.error {
+  background: var(--status-error);
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
 }
 
 .session-info {

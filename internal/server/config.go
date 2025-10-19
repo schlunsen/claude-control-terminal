@@ -50,6 +50,9 @@ type CORSSettings struct {
 type AgentSettings struct {
 	Model                 string `json:"model"`
 	MaxConcurrentSessions int    `json:"max_concurrent_sessions"`
+	SessionRetentionDays  int    `json:"session_retention_days"`
+	CleanupEnabled        bool   `json:"cleanup_enabled"`
+	CleanupIntervalHours  int    `json:"cleanup_interval_hours"`
 }
 
 // ConfigManager handles configuration loading and saving
