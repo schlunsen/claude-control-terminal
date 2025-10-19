@@ -187,6 +187,13 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 	if err == nil && existingMeta != nil {
 		logging.Info("Restoring session from database: %s (Claude session: %s)", sessionID, existingMeta.ClaudeSessionID)
 
+		// Detect git branch if working directory is provided
+		gitBranch := existingMeta.GitBranch // Use stored value first
+		if gitBranch == "" && options.WorkingDirectory != nil && *options.WorkingDirectory != "" {
+			// If not stored, try to detect it now
+			gitBranch = GetGitBranch(*options.WorkingDirectory)
+		}
+
 		// Restore session to memory with data from database
 		session := &AgentSession{
 			Session: Session{
@@ -201,6 +208,7 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 				DurationMS:      existingMeta.DurationMS,
 				ModelName:       existingMeta.ModelName,
 				ClaudeSessionID: existingMeta.ClaudeSessionID, // CRITICAL: Restore Claude session ID
+				GitBranch:       gitBranch,
 			},
 			active: true,
 		}
@@ -227,6 +235,13 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 	// Session doesn't exist anywhere, create new one
 	logging.Debug("Creating new session: %s", sessionID)
 	now := time.Now()
+
+	// Detect git branch if working directory is provided
+	gitBranch := ""
+	if options.WorkingDirectory != nil && *options.WorkingDirectory != "" {
+		gitBranch = GetGitBranch(*options.WorkingDirectory)
+	}
+
 	session := &AgentSession{
 		Session: Session{
 			ID:           sessionID,
@@ -239,6 +254,7 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 			NumTurns:     0,
 			DurationMS:   0,
 			ModelName:    sm.config.Model,
+			GitBranch:    gitBranch,
 		},
 		active: true,
 	}
@@ -279,6 +295,7 @@ func (sm *SessionManager) sessionToMetadata(session *Session) *SessionMetadata {
 		DurationMS:      session.DurationMS,
 		ModelName:       session.ModelName,
 		ClaudeSessionID: session.ClaudeSessionID,
+		GitBranch:       session.GitBranch,
 	}
 
 	if session.ErrorMessage != nil {

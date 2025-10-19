@@ -82,6 +82,7 @@ type Session struct {
 	DurationMS       int64          `json:"duration_ms"`
 	ModelName        string         `json:"model_name,omitempty"`
 	ClaudeSessionID  string         `json:"claude_session_id,omitempty"`  // Claude CLI session ID for resuming conversations
+	GitBranch        string         `json:"git_branch,omitempty"`         // Git branch of working directory (if applicable)
 }
 
 // BaseMessage represents a base WebSocket message
