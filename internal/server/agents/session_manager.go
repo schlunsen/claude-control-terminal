@@ -684,6 +684,12 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 			messageCount++
 			logging.Debug("Session %s: Received message #%d, type: %s", session.ID, messageCount, msg.GetMessageType())
 
+			// Refresh git branch before forwarding message (especially after tool execution)
+			// This ensures the current message will have the updated git branch
+			if _, _, err := sm.RefreshGitBranch(session.ID); err != nil {
+				logging.Debug("Session %s: Failed to refresh git branch: %v", session.ID, err)
+			}
+
 			// Save message to database based on type
 			sm.persistSDKMessage(session.ID, messageCount, msg)
 
