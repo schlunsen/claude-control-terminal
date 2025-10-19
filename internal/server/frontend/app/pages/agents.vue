@@ -653,6 +653,7 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const sessions = ref([])
 const activeSessionId = ref(null)
 const messages = ref({}) // { sessionId: [...messages] }
+const messagesLoaded = ref(new Set()) // Track which sessions have loaded messages from DB
 const inputMessage = ref('')
 const isProcessing = ref(false)
 const isThinking = ref(false)
@@ -976,6 +977,20 @@ const loadSelectedAgent = async () => {
 const selectSession = (sessionId) => {
   activeSessionId.value = sessionId
 
+  // Load historical messages if not already loaded
+  // Only load if we haven't loaded this session before (prevents loading for new sessions)
+  if (!messagesLoaded.value.has(sessionId)) {
+    console.log(`Loading messages for session ${sessionId}`)
+    agentWs.send({
+      type: 'load_messages',
+      session_id: sessionId,
+      limit: 100,
+      offset: 0
+    })
+    // Mark as loaded (even if empty) to prevent re-loading
+    messagesLoaded.value.add(sessionId)
+  }
+
   // Reset scroll state and scroll to bottom when switching sessions
   isUserNearBottom.value = true
   scrollToBottom(false)
@@ -995,6 +1010,7 @@ const endSession = async (sessionId) => {
   // Remove from local state
   sessions.value = sessions.value.filter(s => s.id !== sessionId)
   delete messages.value[sessionId]
+  messagesLoaded.value.delete(sessionId)  // Clean up loaded tracking
   awaitingToolResults.value.delete(sessionId)  // Clean up flag
 
   // Clean up any pending timers
@@ -1545,11 +1561,38 @@ const extractCostData = (content: any) => {
   return null
 }
 
+// Helper to extract tool name from tool_uses JSON
+const extractToolName = (toolUses: any): string | undefined => {
+  if (!toolUses) return undefined
+
+  try {
+    // Parse if it's a JSON string
+    const parsed = typeof toolUses === 'string' ? JSON.parse(toolUses) : toolUses
+
+    // If it's an array, get the first tool
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed[0].name || parsed[0].type
+    }
+
+    // If it's a single object
+    if (parsed.name || parsed.type) {
+      return parsed.name || parsed.type
+    }
+  } catch (e) {
+    console.warn('Failed to parse tool_uses:', e)
+  }
+
+  return undefined
+}
+
 // WebSocket event handlers
 agentWs.on('onSessionCreated', (data) => {
   sessions.value.push(data.session)
   activeSessionId.value = data.session_id
   messages.value[data.session_id] = []
+
+  // Mark new session as loaded (it has no history to load)
+  messagesLoaded.value.add(data.session_id)
 
   // Focus the input after session creation
   focusMessageInput()
@@ -1925,11 +1968,39 @@ agentWs.on('onSessionsList', (data) => {
   sessions.value = data.sessions
 })
 
+agentWs.on('onMessagesLoaded', (data) => {
+  console.log('📥 Messages loaded:', data)
+
+  if (!data.session_id || !data.messages) return
+
+  // Convert DB messages to UI message format
+  const uiMessages = data.messages.map((dbMsg: any) => ({
+    id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
+    role: dbMsg.role,
+    content: dbMsg.content,
+    timestamp: new Date(dbMsg.timestamp),
+    isHistorical: true,
+    toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
+    thinkingContent: dbMsg.thinking_content || undefined
+  }))
+
+  // Set or prepend messages for the session
+  if (!messages.value[data.session_id]) {
+    messages.value[data.session_id] = []
+  }
+
+  // Prepend historical messages (they come in order, oldest first)
+  messages.value[data.session_id] = [...uiMessages, ...messages.value[data.session_id]]
+
+  console.log(`📥 Loaded ${uiMessages.length} historical messages for session ${data.session_id}`)
+})
+
 agentWs.on('onAgentsKilled', (data) => {
 
   // Clear all sessions and messages
   sessions.value = []
   messages.value = {}
+  messagesLoaded.value.clear()  // Clear loaded messages tracking
   activeSessionId.value = null
   awaitingToolResults.value.clear()  // Clear all flags
 
