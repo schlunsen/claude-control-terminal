@@ -78,8 +78,28 @@ const features = [
   },
   {
     icon: '🤖',
-    title: 'Claude CLI Installer',
-    description: 'Automatic installation and setup of Claude CLI (no Node.js required)'
+    title: 'Live Agents Dashboard',
+    description: 'Real-time Claude agent conversations with WebSocket streaming, session metrics, and tool tracking'
+  },
+  {
+    icon: '🔌',
+    title: 'MCP Server Integration',
+    description: 'Extend Claude with Model Context Protocol servers for custom tools and resources'
+  },
+  {
+    icon: '🎨',
+    title: 'Multiple Themes',
+    description: 'Choose from 5 theme families: Default, Neon, Nord, Dracula, and South Park'
+  },
+  {
+    icon: '⌨️',
+    title: 'Keyboard Shortcuts',
+    description: 'Global keyboard shortcuts for enhanced productivity and navigation (press \'?\' for help)'
+  },
+  {
+    icon: '💾',
+    title: 'Session Persistence',
+    description: 'SQLite-backed agent session storage with crash recovery and history loading'
   },
   {
     icon: '🚀',
