@@ -70,75 +70,25 @@
         </div>
 
         <!-- Session Filter Tabs -->
-        <div class="session-filters">
-          <button
-            v-for="filter in sessionFilters"
-            :key="filter.value"
-            @click="activeFilter = filter.value"
-            class="filter-tab"
-            :class="{ active: activeFilter === filter.value }"
-          >
-            {{ filter.label }}
-            <span class="filter-count">{{ getFilterCount(filter.value) }}</span>
-          </button>
-        </div>
+        <SessionFilters
+          :active-filter="activeFilter"
+          :filters="sessionFiltersWithCounts"
+          @update:active-filter="activeFilter = $event"
+        />
 
         <div class="sessions-list">
           <div v-if="filteredSessions.length === 0" class="no-sessions">
             No {{ activeFilter }} sessions
           </div>
-          <div
+          <SessionItem
             v-for="session in filteredSessions"
             :key="session.id"
-            class="session-item"
-            :class="{
-              active: activeSessionId === session.id,
-              ended: session.status === 'ended'
-            }"
-            @click="selectSession(session.id)"
-          >
-            <div class="session-status-dot" :class="session.status"></div>
-            <img
-              :src="useCharacterAvatar(session.id).avatar"
-              :alt="useCharacterAvatar(session.id).name"
-              class="session-avatar"
-            />
-            <div class="session-info">
-              <div class="session-name">{{ useCharacterAvatar(session.id).name }}</div>
-              <div class="session-meta">
-                <span class="session-id">{{ session.id.slice(0, 8) }}</span>
-                <span class="session-status" :class="session.status">{{ session.status }}</span>
-                <span class="session-messages">{{ session.message_count }} messages</span>
-                <span v-if="session.cost_usd && session.cost_usd > 0" class="session-cost">${{ session.cost_usd.toFixed(4) }}</span>
-              </div>
-            </div>
-            <div class="session-actions">
-              <button
-                v-if="session.status !== 'ended'"
-                @click.stop="endSession(session.id)"
-                class="btn-end-session"
-                title="End session"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="15" y1="9" x2="9" y2="15"></line>
-                  <line x1="9" y1="9" x2="15" y2="15"></line>
-                </svg>
-              </button>
-              <button
-                @click.stop="deleteSession(session.id)"
-                class="btn-delete-session"
-                title="Delete session"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  <line x1="10" y1="11" x2="10" y2="17"></line>
-                  <line x1="14" y1="11" x2="14" y2="17"></line>
-                </svg>
-              </button>
-            </div>
-          </div>
+            :session="session"
+            :is-active="activeSessionId === session.id"
+            @select="selectSession"
+            @end="endSession"
+            @delete="deleteSession"
+          />
         </div>
       </aside>
 
@@ -200,7 +150,7 @@
           </div>
 
           <!-- Messages -->
-          <div class="messages-container" ref="messagesContainer" @scroll="handleScroll">
+          <div class="messages-container" ref="messagesContainer" @scroll="handleScroll(messagesContainer)">
             <div v-for="message in activeMessages" :key="message.id" class="message" :class="{
               [message.role]: true,
               isToolResult: message.isToolResult,
@@ -243,73 +193,17 @@
 
           <!-- Permission Requests -->
           <div v-if="activeSessionPermissions.length > 0" class="permission-requests">
-            <div
+            <PermissionRequest
               v-for="permission in activeSessionPermissions"
               :key="permission.request_id"
-              class="permission-request"
-            >
-              <div class="permission-header">
-                <div class="permission-icon">🔐</div>
-                <div class="permission-title">Permission Request</div>
-                <div class="permission-time">{{ formatTime(permission.timestamp) }}</div>
-              </div>
-              <div class="permission-description">
-                {{ permission.description }}
-              </div>
-              <div class="permission-actions">
-                <button
-                  @click="denyPermission(permission)"
-                  class="btn-deny"
-                  title="Deny this request"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                  Deny
-                </button>
-                <button
-                  @click="approvePermission(permission)"
-                  class="btn-approve"
-                  title="Approve this request"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="20,6 9,17 4,12"></polyline>
-                  </svg>
-                  Approve
-                </button>
-              </div>
-            </div>
+              :permission="permission"
+              @approve="approvePermission"
+              @deny="denyPermission"
+            />
           </div>
 
           <!-- Tool Execution Bar -->
-          <div v-if="shouldShowToolBar" class="tool-execution-bar">
-            <div class="tool-execution-content">
-              <div class="tool-execution-icon">
-                <span v-if="activeSessionToolExecution?.toolName === 'Bash'">⚡</span>
-                <span v-else-if="activeSessionToolExecution?.toolName === 'Read'">📖</span>
-                <span v-else-if="activeSessionToolExecution?.toolName === 'Write'">✏️</span>
-                <span v-else-if="activeSessionToolExecution?.toolName === 'Edit'">🔧</span>
-                <span v-else-if="activeSessionToolExecution?.toolName === 'Search' || activeSessionToolExecution?.toolName === 'Grep'">🔍</span>
-                <span v-else>🛠️</span>
-              </div>
-              <div class="tool-execution-details">
-                <div class="tool-execution-name">
-                  {{ activeSessionToolExecution?.toolName }}
-                  <span v-if="activeSessionToolExecution?.detail" class="tool-execution-detail-badge">
-                    {{ truncatePath(activeSessionToolExecution.detail, 40) }}
-                  </span>
-                </div>
-                <div class="tool-execution-info">
-                  <span v-if="activeSessionToolExecution?.command">{{ truncatePath(activeSessionToolExecution.command, 60) }}</span>
-                  <span v-else-if="activeSessionToolExecution?.filePath">{{ truncatePath(activeSessionToolExecution.filePath, 60) }}</span>
-                  <span v-else-if="activeSessionToolExecution?.pattern">{{ truncatePath(activeSessionToolExecution.pattern, 60) }}</span>
-                  <span v-else>Executing...</span>
-                </div>
-              </div>
-              <div class="tool-execution-pulse"></div>
-            </div>
-          </div>
+          <ToolExecutionBar :tool-execution="activeSessionToolExecution" />
 
           <!-- Input Area -->
           <div class="input-area">
@@ -348,349 +242,36 @@
     </div>
 
     <!-- Create Session Modal -->
-    <div v-if="showCreateSessionModal" class="modal-overlay" @click="showCreateSessionModal = false">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h2>Create New Session</h2>
-          <button @click="showCreateSessionModal = false" class="modal-close">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="working-directory">Working Directory</label>
-            <input
-              id="working-directory"
-              v-model="sessionForm.workingDirectory"
-              @change="handleWorkingDirectoryChange"
-              @blur="handleWorkingDirectoryChange"
-              type="text"
-              placeholder="/home/user/projects"
-              class="form-input"
-            />
-            <small class="form-help">The directory where the agent will work</small>
-          </div>
-
-          <div class="form-group">
-            <label for="permission-mode">Permission Mode</label>
-            <select id="permission-mode" v-model="sessionForm.permissionMode" class="form-select">
-              <option value="default">Default (ask for permissions)</option>
-              <option value="acceptEdits">Allow All (full permissions)</option>
-              <option value="plan">Read Only (no file modifications)</option>
-            </select>
-            <small class="form-help">Control what permissions the agent has</small>
-          </div>
-
-          <div class="form-group">
-            <label for="model-provider">Model Provider</label>
-            <select id="model-provider" v-model="sessionForm.modelProvider" class="form-select" :disabled="loadingProviders">
-              <option v-for="provider in availableProviders" :key="provider.id" :value="provider.id">
-                {{ provider.icon }} {{ provider.name }}
-              </option>
-            </select>
-            <small class="form-help" v-if="currentProvider">
-              Current: {{ currentProvider.provider_id }} {{ currentProvider.model_name ? `(${currentProvider.model_name})` : '' }}
-            </small>
-            <small class="form-help" v-else>Choose the AI model provider</small>
-          </div>
-
-          <div class="form-group">
-            <label for="model">Model</label>
-            <select id="model" v-model="sessionForm.model" class="form-select" :disabled="!sessionForm.modelProvider || loadingProviders">
-              <option v-if="!sessionForm.modelProvider" value="">Select a provider first</option>
-              <template v-else>
-                <option
-                  v-for="model in getProviderModels(sessionForm.modelProvider)"
-                  :key="model"
-                  :value="model"
-                >
-                  {{ model }}
-                </option>
-              </template>
-            </select>
-            <small class="form-help">Select the AI model to use</small>
-          </div>
-
-          <div class="form-group">
-            <label for="prompt-mode">System Prompt</label>
-            <div class="prompt-mode-toggle">
-              <button
-                type="button"
-                class="mode-btn"
-                :class="{ active: sessionForm.promptMode === 'agent' }"
-                @click="sessionForm.promptMode = 'agent'"
-              >
-                📦 Project Agent
-              </button>
-              <button
-                type="button"
-                class="mode-btn"
-                :class="{ active: sessionForm.promptMode === 'custom' }"
-                @click="sessionForm.promptMode = 'custom'"
-              >
-                ✏️ Custom
-              </button>
-            </div>
-            <small class="form-help">Choose a project agent or write a custom system prompt</small>
-          </div>
-
-          <!-- Agent Selection Mode -->
-          <div v-if="sessionForm.promptMode === 'agent'" class="form-group">
-            <label for="agent-select">Select Agent</label>
-            <div v-if="loadingAgents" class="agents-loading">
-              <div class="loading-spinner-small"></div>
-              <span>Loading agents...</span>
-            </div>
-            <div v-else-if="availableAgents.length === 0" class="agents-empty">
-              No agents found. Make sure you've set a valid working directory.
-            </div>
-            <div v-else class="agents-grid">
-              <button
-                v-for="agent in availableAgents"
-                :key="agent.name"
-                type="button"
-                class="agent-card"
-                :class="{ selected: sessionForm.selectedAgent === agent.name }"
-                @click="sessionForm.selectedAgent = agent.name; loadSelectedAgent()"
-              >
-                <div class="agent-card-color" :style="{ backgroundColor: agent.color || '#8B5CF6' }"></div>
-                <div class="agent-card-content">
-                  <div class="agent-card-name">{{ agent.name }}</div>
-                  <div v-if="agent.model" class="agent-card-model">{{ agent.model }}</div>
-                </div>
-                <div v-if="sessionForm.selectedAgent === agent.name" class="agent-card-checkmark">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                  </svg>
-                </div>
-              </button>
-            </div>
-            <small class="form-help">Select from available agents</small>
-
-            <!-- Agent Preview -->
-            <div v-if="sessionForm.selectedAgent && selectedAgentPreview" class="agent-preview">
-              <div class="agent-preview-header">
-                <strong>{{ selectedAgentPreview.name }}</strong>
-                <span v-if="selectedAgentPreview.model" class="agent-model">{{ selectedAgentPreview.model }}</span>
-              </div>
-              <p v-if="selectedAgentPreview.description" class="agent-description">{{ selectedAgentPreview.description }}</p>
-              <div class="agent-prompt-preview">
-                <p class="preview-label">System Prompt Preview:</p>
-                <div class="prompt-content">{{ selectedAgentPreview.system_prompt.substring(0, 300) }}...</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Custom Prompt Mode -->
-          <div v-if="sessionForm.promptMode === 'custom'" class="form-group">
-            <label for="system-prompt">Custom System Prompt</label>
-            <textarea
-              id="system-prompt"
-              v-model="sessionForm.systemPrompt"
-              placeholder="You are a helpful AI assistant."
-              class="form-textarea"
-              rows="4"
-            ></textarea>
-            <small class="form-help">Enter custom instructions for the agent</small>
-          </div>
-
-          <div class="form-group">
-            <label>Available Tools</label>
-            <div class="tools-grid">
-              <label class="tool-checkbox">
-                <input type="checkbox" v-model="sessionForm.tools" value="Read" />
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-label">Read</span>
-              </label>
-              <label class="tool-checkbox">
-                <input type="checkbox" v-model="sessionForm.tools" value="Write" />
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-label">Write</span>
-              </label>
-              <label class="tool-checkbox">
-                <input type="checkbox" v-model="sessionForm.tools" value="Edit" />
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-label">Edit</span>
-              </label>
-              <label class="tool-checkbox">
-                <input type="checkbox" v-model="sessionForm.tools" value="Bash" />
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-label">Bash</span>
-              </label>
-              <label class="tool-checkbox">
-                <input type="checkbox" v-model="sessionForm.tools" value="Search" />
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-label">Search</span>
-              </label>
-              <label class="tool-checkbox">
-                <input type="checkbox" v-model="sessionForm.tools" value="Grep" />
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-label">Grep</span>
-              </label>
-              <label class="tool-checkbox">
-                <input type="checkbox" v-model="sessionForm.tools" value="TodoWrite" />
-                <span class="checkbox-custom"></span>
-                <span class="checkbox-label">TodoWrite</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button @click="showCreateSessionModal = false" class="btn-cancel" :disabled="creatingSession">Cancel</button>
-          <button @click="createSessionWithOptions" class="btn-create" :disabled="!sessionForm.workingDirectory || creatingSession">
-            <div v-if="creatingSession" class="btn-spinner"></div>
-            <span v-if="!creatingSession">Create Session</span>
-            <span v-else>Creating...</span>
-          </button>
-        </div>
-      </div>
-    </div>
+    <CreateSessionModal
+      :show="showCreateSessionModal"
+      :form-data="sessionForm"
+      :providers="availableProviders"
+      :current-provider="currentProvider"
+      :agents="availableAgents"
+      :selected-agent-preview="selectedAgentPreview"
+      :loading-providers="loadingProviders"
+      :loading-agents="loadingAgents"
+      :creating="creatingSession"
+      @close="showCreateSessionModal = false"
+      @create="createSessionWithOptions"
+      @working-directory-change="handleWorkingDirectoryChange"
+      @agent-select="loadSelectedAgent"
+    />
 
     <!-- Resume Session Modal -->
-    <div v-if="showResumeModal" class="modal-overlay" @click="showResumeModal = false">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h2>Resume Session</h2>
-          <button @click="showResumeModal = false" class="modal-close">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
-        <div class="modal-body">
-          <div v-if="loadingSessions" class="loading-sessions">
-            <div class="loading-spinner"></div>
-            Loading available sessions...
-          </div>
-          <div v-else-if="availableSessions.length === 0" class="no-sessions-available">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.5">
-              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-            </svg>
-            <p>No previous sessions found</p>
-          </div>
-          <div v-else-if="!selectedResumeSession" class="sessions-list-modal">
-            <div
-              v-for="session in availableSessions"
-              :key="session.conversation_id"
-              class="session-card-modal"
-              @click="selectSessionForResume(session)"
-            >
-              <div class="session-card-avatar">
-                <img
-                  :src="`/avatars/${session.session_name || 'default'}.png`"
-                  :alt="session.session_name"
-                  @error="$event.target.src = '/avatars/default.png'"
-                  class="avatar-image"
-                />
-              </div>
-              <div class="session-card-info">
-                <div class="session-card-name">{{ session.session_name || 'Unnamed Session' }}</div>
-                <div class="session-card-directory">📁 {{ session.working_directory || 'No directory' }}</div>
-                <div class="session-card-meta">
-                  <span class="session-card-messages">💬 {{ session.total_messages }} messages</span>
-                  <span class="session-card-time">⏱️ {{ formatRelativeTime(session.last_activity) }}</span>
-                </div>
-              </div>
-              <div class="session-card-arrow">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-              </div>
-            </div>
-          </div>
+    <ResumeSessionModal
+      :show="showResumeModal"
+      :sessions="availableSessions"
+      :selected-session="selectedResumeSession"
+      :form-data="resumeForm"
+      :loading="loadingSessions"
+      :resuming="resumingSession"
+      @close="showResumeModal = false; selectedResumeSession = null"
+      @select-session="selectSessionForResume"
+      @back="selectedResumeSession = null"
+      @resume="resumeSessionWithOptions"
+    />
 
-          <!-- Resume Session Options -->
-          <div v-else class="resume-session-options">
-            <div class="selected-session-info">
-              <h3>{{ selectedResumeSession.session_name || 'Selected Session' }}</h3>
-              <p>Original working directory: <code>{{ selectedResumeSession.working_directory }}</code></p>
-            </div>
-
-            <div class="form-group">
-              <label for="resume-working-directory">Working Directory</label>
-              <input
-                id="resume-working-directory"
-                v-model="resumeForm.workingDirectory"
-                type="text"
-                :placeholder="selectedResumeSession.working_directory"
-                class="form-input"
-              />
-              <small class="form-help">Directory where the agent will work (defaults to original)</small>
-            </div>
-
-            <div class="form-group">
-              <label for="resume-permission-mode">Permission Mode</label>
-              <select id="resume-permission-mode" v-model="resumeForm.permissionMode" class="form-select">
-                <option value="default">Default (ask for permissions)</option>
-                <option value="acceptEdits">Allow All (full permissions)</option>
-                <option value="plan">Read Only (no file modifications)</option>
-              </select>
-              <small class="form-help">Control what permissions the agent has</small>
-            </div>
-
-            <div class="form-group">
-              <label for="resume-system-prompt">System Prompt (optional)</label>
-              <textarea
-                id="resume-system-prompt"
-                v-model="resumeForm.systemPrompt"
-                placeholder="You are a helpful AI assistant."
-                class="form-textarea"
-                rows="3"
-              ></textarea>
-              <small class="form-help">Custom instructions for the agent</small>
-            </div>
-
-            <div class="form-group">
-              <label>Available Tools</label>
-              <div class="tools-grid">
-                <label class="tool-checkbox">
-                  <input type="checkbox" v-model="resumeForm.tools" value="Read" />
-                  <span>Read</span>
-                </label>
-                <label class="tool-checkbox">
-                  <input type="checkbox" v-model="resumeForm.tools" value="Write" />
-                  <span>Write</span>
-                </label>
-                <label class="tool-checkbox">
-                  <input type="checkbox" v-model="resumeForm.tools" value="Edit" />
-                  <span>Edit</span>
-                </label>
-                <label class="tool-checkbox">
-                  <input type="checkbox" v-model="resumeForm.tools" value="Bash" />
-                  <span>Bash</span>
-                </label>
-                <label class="tool-checkbox">
-                  <input type="checkbox" v-model="resumeForm.tools" value="Search" />
-                  <span>Search</span>
-                </label>
-                <label class="tool-checkbox">
-                  <input type="checkbox" v-model="resumeForm.tools" value="Grep" />
-                  <span>Grep</span>
-                </label>
-                <label class="tool-checkbox">
-                  <input type="checkbox" v-model="resumeForm.tools" value="TodoWrite" />
-                  <span>TodoWrite</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="modal-actions">
-              <button @click="selectedResumeSession = null" class="btn-cancel" :disabled="resumingSession">Back</button>
-              <button @click="resumeSessionWithOptions" class="btn-create" :disabled="resumingSession">
-                <div v-if="resumingSession" class="btn-spinner"></div>
-                <span v-if="!resumingSession">Resume Session</span>
-                <span v-else>Resuming...</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -700,11 +281,25 @@ import SessionMetrics from '~/components/SessionMetrics.vue'
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import type { ActiveTool } from '~/types/agents'
 
-interface TodoItem {
-  content: string
-  status: 'pending' | 'in_progress' | 'completed'
-  activeForm?: string
-}
+// Refactored Components
+import SessionItem from '~/components/agents/SessionItem.vue'
+import SessionFilters from '~/components/agents/SessionFilters.vue'
+import PermissionRequest from '~/components/agents/PermissionRequest.vue'
+import ToolExecutionBar from '~/components/agents/ToolExecutionBar.vue'
+import CreateSessionModal from '~/components/agents/CreateSessionModal.vue'
+import ResumeSessionModal from '~/components/agents/ResumeSessionModal.vue'
+
+// Utilities
+import { formatTime, formatMessage, formatRelativeTime, truncatePath } from '~/utils/agents/messageFormatters'
+import { parseTodoWrite, formatTodosForTool, type TodoItem } from '~/utils/agents/todoParser'
+import { parseToolUse, getToolIcon } from '~/utils/agents/toolParser'
+import { useMessageScroll } from '~/composables/agents/useMessageScroll'
+
+// Existing overlays
+import TodoWriteOverlay from '~/components/TodoWriteOverlay.vue'
+import ToolOverlay from '~/components/ToolOverlay.vue'
+
+// TodoItem interface is now imported from '~/utils/agents/todoParser'
 
 interface ToolExecution {
   toolName: string
@@ -747,8 +342,8 @@ const todoHideTimers = ref(new Map<string, NodeJS.Timeout>()) // { sessionId: ti
 // Tool overlays state
 const activeTools = ref(new Map<string, ActiveTool[]>()) // { sessionId: [...activeTools] }
 
-// Auto-scroll state
-const isUserNearBottom = ref(true) // Track if user is near bottom of messages
+// Auto-scroll composable
+const { isUserNearBottom, handleScroll, scrollToBottom, autoScrollIfNearBottom } = useMessageScroll()
 
 // Session filtering state
 const activeFilter = ref('active') // 'all', 'active', 'ended'
@@ -757,6 +352,13 @@ const sessionFilters = [
   { label: 'All', value: 'all' },
   { label: 'Ended', value: 'ended' }
 ]
+
+// Computed property with counts for SessionFilters component
+const sessionFiltersWithCounts = computed(() => [
+  { label: 'Active', value: 'active', count: getFilterCount('active') },
+  { label: 'All', value: 'all', count: getFilterCount('all') },
+  { label: 'Ended', value: 'ended', count: getFilterCount('ended') }
+])
 
 // Computed: Filtered sessions based on active filter
 const filteredSessions = computed(() => {
@@ -1062,30 +664,7 @@ const handleWorkingDirectoryChange = async () => {
 }
 
 // Auto-scroll helpers
-const handleScroll = () => {
-  if (!messagesContainer.value) return
-
-  const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value
-  const threshold = 100 // pixels from bottom
-  isUserNearBottom.value = scrollHeight - scrollTop - clientHeight < threshold
-}
-
-const scrollToBottom = (smooth = false) => {
-  if (!messagesContainer.value) return
-
-  nextTick(() => {
-    messagesContainer.value?.scrollTo({
-      top: messagesContainer.value.scrollHeight,
-      behavior: smooth ? 'smooth' : 'auto'
-    })
-  })
-}
-
-const autoScrollIfNearBottom = (smooth = true) => {
-  if (isUserNearBottom.value) {
-    scrollToBottom(smooth)
-  }
-}
+// Scroll functions are now provided by useMessageScroll() composable
 
 const loadSelectedAgent = async () => {
   if (!sessionForm.value.selectedAgent) {
@@ -1124,7 +703,7 @@ const selectSession = (sessionId) => {
 
   // Reset scroll state and scroll to bottom when switching sessions
   isUserNearBottom.value = true
-  scrollToBottom(false)
+  scrollToBottom(messagesContainer.value, false)
 
   // Focus the input when switching to a session
   focusMessageInput()
@@ -1647,7 +1226,7 @@ const sendPermissionResponse = (request, approved, reason = '') => {
 
     // Auto-scroll to bottom only if viewing this session
     if (request.session_id === activeSessionId.value) {
-      autoScrollIfNearBottom()
+      autoScrollIfNearBottom(messagesContainer.value)
     }
 
   } catch (error) {
@@ -1966,7 +1545,7 @@ agentWs.on('onAgentMessage', (data) => {
   isThinking.value = false
 
   // Auto-scroll to bottom if user is near bottom
-  autoScrollIfNearBottom()
+  autoScrollIfNearBottom(messagesContainer.value)
 })
 
 agentWs.on('onAgentThinking', (data) => {
@@ -2122,7 +1701,7 @@ agentWs.on('onPermissionAcknowledged', (data) => {
     }
 
     // Auto-scroll to bottom if user is near bottom
-    autoScrollIfNearBottom()
+    autoScrollIfNearBottom(messagesContainer.value)
   }
 })
 
@@ -2278,7 +1857,7 @@ watch(() => agentWs.connected, (connected) => {
 
 // Watch for new messages and auto-scroll if user is near bottom
 watch(activeMessages, () => {
-  autoScrollIfNearBottom()
+  autoScrollIfNearBottom(messagesContainer.value)
 }, { deep: true, flush: 'post' })
 </script>
 
