@@ -304,6 +304,11 @@ func (sm *SessionManager) sessionToMetadata(session *Session) *SessionMetadata {
 		metadata.ErrorMessage = *session.ErrorMessage
 	}
 
+	// Serialize Options to JSON
+	if optionsBytes, err := json.Marshal(session.Options); err == nil {
+		metadata.OptionsJSON = string(optionsBytes)
+	}
+
 	// Check if session is ended
 	if session.Status == SessionStatusEnded {
 		now := time.Now()
@@ -369,10 +374,21 @@ func (sm *SessionManager) ListAllSessions(statusFilter string) ([]Session, error
 			DurationMS:      meta.DurationMS,
 			ModelName:       meta.ModelName,
 			ClaudeSessionID: meta.ClaudeSessionID,
+			GitBranch:       meta.GitBranch,
 		}
 
 		if meta.ErrorMessage != "" {
 			session.ErrorMessage = &meta.ErrorMessage
+		}
+
+		// Deserialize Options from JSON
+		if meta.OptionsJSON != "" {
+			var options SessionOptions
+			if err := json.Unmarshal([]byte(meta.OptionsJSON), &options); err == nil {
+				session.Options = options
+			} else {
+				logging.Warning("Failed to deserialize session options for session %s: %v", meta.ID, err)
+			}
 		}
 
 		sessions = append(sessions, session)
