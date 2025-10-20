@@ -34,11 +34,17 @@ func DefaultConfig() *Config {
 		apiKey = os.Getenv("CLAUDE_API_KEY")
 	}
 
+	// Get model from ANTHROPIC_MODEL (set by provider config), then AGENT_SERVER_MODEL, then default
+	model := os.Getenv("ANTHROPIC_MODEL")
+	if model == "" {
+		model = getEnvOrDefault("AGENT_SERVER_MODEL", "claude-sonnet-4.5-20250514")
+	}
+
 	return &Config{
 		Host:                  getEnvOrDefault("AGENT_SERVER_HOST", "127.0.0.1"),
 		Port:                  getEnvIntOrDefault("AGENT_SERVER_PORT", 8001),
 		LogLevel:              getEnvOrDefault("AGENT_SERVER_LOG_LEVEL", "INFO"),
-		Model:                 getEnvOrDefault("AGENT_SERVER_MODEL", "claude-3-5-sonnet-latest"),
+		Model:                 model,
 		APIKey:                apiKey,
 		MaxConcurrentSessions: getEnvIntOrDefault("AGENT_SERVER_MAX_CONCURRENT_SESSIONS", 10),
 		ServerDir:             serverDir,

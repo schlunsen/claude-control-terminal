@@ -16,6 +16,7 @@ import (
 	"github.com/schlunsen/claude-control-terminal/internal/analytics"
 	"github.com/schlunsen/claude-control-terminal/internal/database"
 	"github.com/schlunsen/claude-control-terminal/internal/logging"
+	"github.com/schlunsen/claude-control-terminal/internal/providers"
 	"github.com/schlunsen/claude-control-terminal/internal/server/agents"
 	"github.com/schlunsen/claude-control-terminal/internal/version"
 	ws "github.com/schlunsen/claude-control-terminal/internal/websocket"
@@ -329,6 +330,12 @@ func (s *Server) setupRoutes() {
 	// Agent WebSocket endpoint (direct, not proxied)
 	// Use Fiber's WebSocket middleware with our Fiber-compatible handler
 	s.app.Get("/agent/ws", websocket.New(s.agentHandler.HandleFiberWebSocket))
+
+	// Providers endpoint (serve providers.json for unified configuration)
+	api.Get("/providers", s.handleGetProviders)
+
+	// System info endpoint (system metrics and runtime information)
+	api.Get("/system-info", s.handleGetSystemInfo)
 }
 
 // Handler: Health check
@@ -1905,5 +1912,143 @@ func (s *Server) handleGetAgentMessages(c *fiber.Ctx) error {
 		"limit":      limit,
 		"offset":     offset,
 		"has_more":   hasMore,
+	})
+}
+
+// Handler: Get available AI providers (from providers.json)
+func (s *Server) handleGetProviders(c *fiber.Ctx) error {
+	availableProviders := providers.GetAvailableProviders()
+
+	// Get current provider configuration
+	var currentProvider *database.ProviderConfig
+	if s.repo != nil {
+		currentProvider, _ = s.repo.GetCurrentProvider()
+	}
+
+	return c.JSON(fiber.Map{
+		"providers": availableProviders,
+		"count":     len(availableProviders),
+		"current":   currentProvider,
+		"timestamp": time.Now(),
+	})
+}
+
+// Handler: Get system information (runtime metrics and server stats)
+func (s *Server) handleGetSystemInfo(c *fiber.Ctx) error {
+	// Get working directory
+	cwd, _ := os.Getwd()
+
+	// Get hostname
+	hostname, _ := os.Hostname()
+
+	// Get Go runtime information
+	var memStats struct {
+		Alloc      uint64
+		TotalAlloc uint64
+		Sys        uint64
+		NumGC      uint32
+	}
+	// Note: We're not importing runtime to keep this simple
+	// If you want actual memory stats, uncomment the import and use:
+	// import "runtime"
+	// var m runtime.MemStats
+	// runtime.ReadMemStats(&m)
+	// memStats.Alloc = m.Alloc
+	// etc.
+
+	// Server configuration
+	serverConfig := fiber.Map{
+		"port":       s.port,
+		"tls":        s.config != nil && s.config.TLS.Enabled,
+		"auth":       s.config != nil && s.config.Auth.Enabled,
+		"quiet":      s.quiet,
+		"verbose":    s.verbose,
+		"claude_dir": s.claudeDir,
+	}
+
+	// Agent configuration
+	agentConfig := fiber.Map{
+		"enabled":              s.agentHandler != nil,
+		"model":                "",
+		"max_sessions":         0,
+		"session_retention":    0,
+		"cleanup_enabled":      false,
+		"cleanup_interval":     0,
+	}
+
+	if s.agentConfig != nil {
+		agentConfig["model"] = s.agentConfig.Model
+		agentConfig["max_sessions"] = s.agentConfig.MaxConcurrentSessions
+		agentConfig["session_retention"] = s.agentConfig.SessionRetentionDays
+		agentConfig["cleanup_enabled"] = s.agentConfig.CleanupEnabled
+		agentConfig["cleanup_interval"] = s.agentConfig.CleanupIntervalHours
+	}
+
+	// Provider configuration (for actual AI model used in conversations)
+	providerConfig := fiber.Map{
+		"enabled": false,
+		"provider": "",
+		"model":   "",
+	}
+
+	// Load provider configuration if database is available
+	if s.db != nil {
+		repo := database.NewRepository(s.db)
+		if providerName, isConfigured, err := providers.GetCurrentProviderInfo(repo); err == nil && isConfigured {
+			providerConfig["enabled"] = true
+			providerConfig["provider"] = providerName
+
+			// Try to get the actual model configuration
+			if config, err := providers.LoadProviderConfig(repo); err == nil && config != nil {
+				providerConfig["model"] = config.ModelName
+				if config.ModelName == "" {
+					// If no specific model is set, get the provider's default model
+					if provider := providers.GetProviderByID(config.ProviderID); provider != nil {
+						providerConfig["model"] = provider.DefaultModel
+					}
+				}
+			}
+		}
+	}
+
+	// WebSocket stats
+	wsStats := fiber.Map{
+		"enabled":    s.wsHub != nil,
+		"clients":    0,
+	}
+
+	if s.wsHub != nil {
+		wsStats["clients"] = s.wsHub.ClientCount()
+	}
+
+	// Database stats
+	dbStats := fiber.Map{
+		"enabled": s.db != nil,
+		"path":    "",
+	}
+
+	if s.db != nil {
+		dbStats["path"] = s.db.Path()
+		if stats, err := s.db.Stats(); err == nil {
+			dbStats["stats"] = stats
+		}
+	}
+
+	return c.JSON(fiber.Map{
+		"system": fiber.Map{
+			"hostname": hostname,
+			"cwd":      cwd,
+			"pid":      os.Getpid(),
+		},
+		"runtime": fiber.Map{
+			"memory": memStats,
+		},
+		"server":     serverConfig,
+		"agent":      agentConfig,
+		"provider":   providerConfig,
+		"websocket": wsStats,
+		"database":  dbStats,
+		"version":   version.Version,
+		"timestamp": time.Now(),
 	})
 }

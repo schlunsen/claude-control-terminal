@@ -254,7 +254,7 @@ CCT allows you to configure and switch between different AI providers that suppo
 
 | Provider | Models | Description |
 |----------|--------|-------------|
-| **Claude (Default)** | claude-sonnet-4.5, claude-opus-4.1, claude-3-5-sonnet, etc. | Official Anthropic Claude models |
+| **Claude (Default)** | claude-sonnet-4-5-20250929 (default), claude-3-5-sonnet-20241022, etc. | Official Anthropic Claude models |
 | **DeepSeek** | deepseek-chat, deepseek-reasoner | DeepSeek AI with Anthropic compatibility |
 | **GLM (Z.ai)** | GLM-4.6, GLM-4.5-Air | Zhipu AI GLM models via Z.ai |
 | **Kimi** | kimi-k2, moonshot-v1-128k | Moonshot AI Kimi models |
@@ -313,7 +313,7 @@ For custom Anthropic-compatible APIs:
 1. Select "Custom" provider in TUI
 2. Enter your API key
 3. Enter base URL (e.g., `https://api.example.com/v1/anthropic`)
-4. Optionally specify model name (e.g., `claude-3-5-sonnet-20241022`)
+4. Optionally specify model name (e.g., `claude-sonnet-4-5-20250929`)
 5. Save configuration
 
 ### Switching Providers

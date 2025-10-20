@@ -20,6 +20,7 @@ type SessionManager struct {
 	mu       sync.RWMutex
 	config   *Config
 	storage  SessionStorage
+	db       *sql.DB // Database connection for loading provider configs
 }
 
 // PermissionRequest represents a pending permission request
@@ -67,6 +68,7 @@ func NewSessionManager(config *Config, db *sql.DB) (*SessionManager, error) {
 		sessions: make(map[uuid.UUID]*AgentSession),
 		config:   config,
 		storage:  storage,
+		db:       db,
 	}
 
 	// Load active sessions from database
@@ -302,6 +304,11 @@ func (sm *SessionManager) sessionToMetadata(session *Session) *SessionMetadata {
 		metadata.ErrorMessage = *session.ErrorMessage
 	}
 
+	// Serialize Options to JSON
+	if optionsBytes, err := json.Marshal(session.Options); err == nil {
+		metadata.OptionsJSON = string(optionsBytes)
+	}
+
 	// Check if session is ended
 	if session.Status == SessionStatusEnded {
 		now := time.Now()
@@ -367,10 +374,21 @@ func (sm *SessionManager) ListAllSessions(statusFilter string) ([]Session, error
 			DurationMS:      meta.DurationMS,
 			ModelName:       meta.ModelName,
 			ClaudeSessionID: meta.ClaudeSessionID,
+			GitBranch:       meta.GitBranch,
 		}
 
 		if meta.ErrorMessage != "" {
 			session.ErrorMessage = &meta.ErrorMessage
+		}
+
+		// Deserialize Options from JSON
+		if meta.OptionsJSON != "" {
+			var options SessionOptions
+			if err := json.Unmarshal([]byte(meta.OptionsJSON), &options); err == nil {
+				session.Options = options
+			} else {
+				logging.Warning("Failed to deserialize session options for session %s: %v", meta.ID, err)
+			}
 		}
 
 		sessions = append(sessions, session)
@@ -636,8 +654,15 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	logging.Info("Allowed tools for session %s: %v", sessionID, allowedTools)
 	logging.Info("Permission mode: %v", permMode)
 
+	// Determine model to use: session-specific > config default
+	modelToUse := sm.config.Model
+	if session.Options.Model != nil && *session.Options.Model != "" {
+		modelToUse = *session.Options.Model
+		logging.Info("Using session-specific model: %s", modelToUse)
+	}
+
 	opts := types.NewClaudeAgentOptions().
-		WithModel(sm.config.Model).
+		WithModel(modelToUse).
 		WithPermissionMode(permMode).
 		WithVerbose(sm.config.Verbose).
 		WithCanUseTool(canUseTool).
@@ -645,9 +670,42 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 		// WithAllowedTools(allowedTools...).
 		WithSystemPrompt("code")
 
+	// Set base URL if specified in session options (for custom providers)
+	if session.Options.BaseURL != nil && *session.Options.BaseURL != "" {
+		logging.Info("Using session-specific base URL: %s", *session.Options.BaseURL)
+		opts = opts.WithBaseURL(*session.Options.BaseURL)
+	}
+
+	// Set API key: session-specific > database provider config > config default
+	apiKeyToUse := sm.config.APIKey
+
+	// If session specifies a provider, try to get API key from database
+	if session.Options.Provider != nil && *session.Options.Provider != "" {
+		// Query providers table directly
+		var apiKey string
+		err := sm.db.QueryRow("SELECT api_key FROM providers WHERE provider_id = ? LIMIT 1", *session.Options.Provider).Scan(&apiKey)
+		if err == nil && apiKey != "" {
+			apiKeyToUse = apiKey
+			logging.Info("Using API key from provider database: %s (masked)", *session.Options.Provider)
+		} else if err == sql.ErrNoRows {
+			logging.Warning("No API key found for provider: %s - configure it via TUI first", *session.Options.Provider)
+		} else if err != nil {
+			logging.Warning("Failed to load provider config from database: %v", err)
+		}
+	}
+
+	// Session-specific API key overrides everything
+	if session.Options.APIKey != nil && *session.Options.APIKey != "" {
+		apiKeyToUse = *session.Options.APIKey
+		logging.Info("Using session-specific API key (masked)")
+	}
+
 	// Only set API key if provided (don't override SDK's default detection)
-	if sm.config.APIKey != "" {
-		opts = opts.WithEnvVar("ANTHROPIC_API_KEY", sm.config.APIKey)
+	if apiKeyToUse != "" {
+		opts = opts.WithEnvVar("ANTHROPIC_API_KEY", apiKeyToUse)
+		logging.Debug("API key configured (length: %d)", len(apiKeyToUse))
+	} else {
+		logging.Warning("No API key configured for this session - make sure ANTHROPIC_API_KEY is set in environment or configure provider in TUI")
 	}
 
 	// Set working directory if provided

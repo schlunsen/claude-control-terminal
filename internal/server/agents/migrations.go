@@ -10,7 +10,7 @@ import (
 
 const (
 	// Current schema version - increment when adding new migrations
-	currentSchemaVersion = 3
+	currentSchemaVersion = 4
 )
 
 // InitializeAgentTables creates the necessary tables for agent session persistence
@@ -309,6 +309,10 @@ func runMigrations(db *sql.DB, fromVersion, toVersion int) error {
 			if err := migrate_v2_to_v3(db); err != nil {
 				return fmt.Errorf("migration v2->v3 failed: %w", err)
 			}
+		case 4:
+			if err := migrateV3ToV4(db); err != nil {
+				return fmt.Errorf("migration v3->v4 failed: %w", err)
+			}
 		default:
 			return fmt.Errorf("unknown migration version: %d", nextVersion)
 		}
@@ -452,5 +456,36 @@ func migrate_v2_to_v3(db *sql.DB) error {
 	}
 
 	log.Printf("Migration v2->v3: Successfully added git_branch column")
+	return nil
+}
+
+// migrateV3ToV4 adds options column for storing session options (provider, model, etc.)
+func migrateV3ToV4(db *sql.DB) error {
+	log.Printf("Running migration v3->v4: Adding options column")
+
+	// Check if migration already applied
+	var optionsExists bool
+	err := db.QueryRow(`
+		SELECT COUNT(*) > 0
+		FROM pragma_table_info('agent_sessions')
+		WHERE name = 'options'
+	`).Scan(&optionsExists)
+
+	if err != nil {
+		return fmt.Errorf("failed to check if options column exists: %w", err)
+	}
+
+	if optionsExists {
+		log.Printf("Migration v3->v4: options column already exists, skipping")
+		return nil
+	}
+
+	// Add options column (JSON text)
+	_, err = db.Exec("ALTER TABLE agent_sessions ADD COLUMN options TEXT")
+	if err != nil {
+		return fmt.Errorf("failed to add options column: %w", err)
+	}
+
+	log.Printf("Migration v3->v4: Successfully added options column")
 	return nil
 }

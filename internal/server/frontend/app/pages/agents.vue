@@ -379,6 +379,36 @@
           </div>
 
           <div class="form-group">
+            <label for="model-provider">Model Provider</label>
+            <select id="model-provider" v-model="sessionForm.modelProvider" class="form-select" :disabled="loadingProviders">
+              <option v-for="provider in availableProviders" :key="provider.id" :value="provider.id">
+                {{ provider.icon }} {{ provider.name }}
+              </option>
+            </select>
+            <small class="form-help" v-if="currentProvider">
+              Current: {{ currentProvider.provider_id }} {{ currentProvider.model_name ? `(${currentProvider.model_name})` : '' }}
+            </small>
+            <small class="form-help" v-else>Choose the AI model provider</small>
+          </div>
+
+          <div class="form-group">
+            <label for="model">Model</label>
+            <select id="model" v-model="sessionForm.model" class="form-select" :disabled="!sessionForm.modelProvider || loadingProviders">
+              <option v-if="!sessionForm.modelProvider" value="">Select a provider first</option>
+              <template v-else>
+                <option
+                  v-for="model in getProviderModels(sessionForm.modelProvider)"
+                  :key="model"
+                  :value="model"
+                >
+                  {{ model }}
+                </option>
+              </template>
+            </select>
+            <small class="form-help">Select the AI model to use</small>
+          </div>
+
+          <div class="form-group">
             <label for="prompt-mode">System Prompt</label>
             <div class="prompt-mode-toggle">
               <button
@@ -466,31 +496,38 @@
             <div class="tools-grid">
               <label class="tool-checkbox">
                 <input type="checkbox" v-model="sessionForm.tools" value="Read" />
-                <span>Read</span>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-label">Read</span>
               </label>
               <label class="tool-checkbox">
                 <input type="checkbox" v-model="sessionForm.tools" value="Write" />
-                <span>Write</span>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-label">Write</span>
               </label>
               <label class="tool-checkbox">
                 <input type="checkbox" v-model="sessionForm.tools" value="Edit" />
-                <span>Edit</span>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-label">Edit</span>
               </label>
               <label class="tool-checkbox">
                 <input type="checkbox" v-model="sessionForm.tools" value="Bash" />
-                <span>Bash</span>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-label">Bash</span>
               </label>
               <label class="tool-checkbox">
                 <input type="checkbox" v-model="sessionForm.tools" value="Search" />
-                <span>Search</span>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-label">Search</span>
               </label>
               <label class="tool-checkbox">
                 <input type="checkbox" v-model="sessionForm.tools" value="Grep" />
-                <span>Grep</span>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-label">Grep</span>
               </label>
               <label class="tool-checkbox">
                 <input type="checkbox" v-model="sessionForm.tools" value="TodoWrite" />
-                <span>TodoWrite</span>
+                <span class="checkbox-custom"></span>
+                <span class="checkbox-label">TodoWrite</span>
               </label>
             </div>
           </div>
@@ -747,6 +784,8 @@ const sessionPermissionStats = ref(new Map<string, { approved: number; denied: n
 const sessionForm = ref({
   workingDirectory: '',
   permissionMode: 'default',
+  modelProvider: 'anthropic',
+  model: 'claude-sonnet-4.5-20250514',
   systemPrompt: '',
   promptMode: 'agent', // 'agent' or 'custom'
   selectedAgent: '',
@@ -765,6 +804,11 @@ const resumeForm = ref({
 const availableAgents = ref([])
 const selectedAgentPreview = ref(null)
 const loadingAgents = ref(false)
+
+// Provider configuration
+const availableProviders = ref([])
+const currentProvider = ref(null)
+const loadingProviders = ref(false)
 
 // Computed
 const activeMessages = computed(() => {
@@ -804,6 +848,12 @@ const activeSession = computed(() => {
   if (!activeSessionId.value) return null
   return sessions.value.find(s => s.id === activeSessionId.value) || null
 })
+
+// Get models for selected provider
+const getProviderModels = (providerId) => {
+  const provider = availableProviders.value.find(p => p.id === providerId)
+  return provider?.models || []
+}
 
 // Message formatting
 const formatTime = (timestamp) => {
@@ -872,6 +922,8 @@ const createNewSession = async () => {
   sessionForm.value = {
     workingDirectory: '',
     permissionMode: 'default',
+    modelProvider: 'anthropic',
+    model: 'claude-sonnet-4.5-20250514',
     systemPrompt: '',
     promptMode: 'agent',
     selectedAgent: '',
@@ -905,10 +957,20 @@ const createSessionWithOptions = async () => {
   try {
     const sessionId = crypto.randomUUID()
 
+    // Find the selected provider to get base_url
+    const selectedProvider = availableProviders.value.find(p => p.id === sessionForm.value.modelProvider)
+
     const options: any = {
       tools: sessionForm.value.tools,
       working_directory: sessionForm.value.workingDirectory,
-      permission_mode: sessionForm.value.permissionMode
+      permission_mode: sessionForm.value.permissionMode,
+      provider: sessionForm.value.modelProvider,
+      model: sessionForm.value.model
+    }
+
+    // Add base_url if the provider has one (for non-default Anthropic providers)
+    if (selectedProvider?.base_url) {
+      options.base_url = selectedProvider.base_url
     }
 
     // Use agent_name if agent mode is selected, otherwise use system_prompt
@@ -917,6 +979,8 @@ const createSessionWithOptions = async () => {
     } else {
       options.system_prompt = sessionForm.value.systemPrompt || 'You are a helpful AI assistant.'
     }
+
+    console.log('Creating session with options:', options)
 
     agentWs.send({
       type: 'create_session',
@@ -946,6 +1010,38 @@ const loadAvailableAgents = async () => {
     availableAgents.value = []
   } finally {
     loadingAgents.value = false
+  }
+}
+
+// Load available providers from backend
+const loadProviders = async () => {
+  loadingProviders.value = true
+  try {
+    const response = await fetch('/api/providers')
+    if (!response.ok) throw new Error(`Failed to fetch providers: ${response.status}`)
+    const data = await response.json()
+    availableProviders.value = data.providers || []
+    currentProvider.value = data.current
+
+    // Update form defaults based on current provider
+    if (currentProvider.value) {
+      const provider = availableProviders.value.find(p => p.id === currentProvider.value.provider_id)
+      if (provider) {
+        sessionForm.value.modelProvider = provider.id
+        if (currentProvider.value.model_name) {
+          sessionForm.value.model = currentProvider.value.model_name
+        } else if (provider.default_model) {
+          sessionForm.value.model = provider.default_model
+        }
+      }
+    }
+
+    console.log(`Loaded ${availableProviders.value.length} providers`, availableProviders.value)
+  } catch (error) {
+    console.error('Error loading providers:', error)
+    availableProviders.value = []
+  } finally {
+    loadingProviders.value = false
   }
 }
 
@@ -2163,6 +2259,8 @@ onMounted(() => {
   if (agentWs.connected) {
     agentWs.send({ type: 'list_sessions' })
   }
+  // Load available providers
+  loadProviders()
 })
 
 // Watch for connection changes
@@ -3367,34 +3465,89 @@ watch(activeMessages, () => {
 
 .tools-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
 }
 
 .tool-checkbox {
-  display: flex;
+  position: relative;
+  display: flex !important;
+  flex-direction: row !important;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px 14px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .tool-checkbox:hover {
   background: var(--bg-tertiary);
   border-color: var(--accent-purple);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.1);
 }
 
 .tool-checkbox input[type="checkbox"] {
-  margin: 0;
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
-.tool-checkbox span {
-  font-size: 0.9rem;
+.checkbox-custom {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--bg-primary);
+  border: 2px solid var(--border-color);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.checkbox-custom::after {
+  content: '';
+  position: absolute;
+  display: none;
+  left: 5px;
+  top: 1px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.tool-checkbox input[type="checkbox"]:checked ~ .checkbox-custom {
+  background: var(--accent-purple);
+  border-color: var(--accent-purple);
+}
+
+.tool-checkbox input[type="checkbox"]:checked ~ .checkbox-custom::after {
+  display: block;
+}
+
+.tool-checkbox:hover .checkbox-custom {
+  border-color: var(--accent-purple);
+}
+
+.checkbox-label {
+  font-size: 0.95rem;
+  font-weight: 500;
   color: var(--text-primary);
+  user-select: none;
+  line-height: 20px;
+  display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .modal-actions {
@@ -3920,7 +4073,8 @@ watch(activeMessages, () => {
   }
 
   .tools-grid {
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
   }
 
   .modal-actions {

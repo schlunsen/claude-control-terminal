@@ -6,15 +6,16 @@
       "base_url": "",
       "icon": "🟠",
       "models": [
-        "claude-sonnet-4.5-20250514",
-        "claude-opus-4.1-20250805",
-        "claude-sonnet-4-20250522",
+        "sonnet",
+        "opus",
+        "haiku",
         "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
         "claude-3-opus-20240229",
         "claude-3-sonnet-20240229",
         "claude-3-haiku-20240307"
       ],
-      "default_model": "claude-sonnet-4.5-20250514",
+      "default_model": "sonnet",
       "description": "Official Anthropic Claude models"
     },
     {
@@ -35,11 +36,11 @@
       "base_url": "https://api.z.ai/api/anthropic",
       "icon": "🌟",
       "models": [
-        "GLM-4.6",
-        "GLM-4.5-Air"
+        "glm-4.6",
+        "glm-4.5-air"
       ],
-      "default_model": "GLM-4.6",
-      "description": "Zhipu AI GLM models via Z.ai"
+      "default_model": "glm-4.6",
+      "description": "Zhipu AI GLM models via Z.ai (Anthropic-compatible API)"
     },
     {
       "name": "Kimi",
