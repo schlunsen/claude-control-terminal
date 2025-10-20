@@ -720,32 +720,53 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 		opts = opts.WithResume(session.ClaudeSessionID)
 	}
 
-	// Execute query using streaming mode (required for permission callbacks via control protocol)
-	logging.Debug("SendPrompt: Creating streaming client...")
-	logging.Debug("SendPrompt: API Key length: %d", len(sm.config.APIKey))
-	logging.Debug("Creating streaming client for session %s with options: model=%s, permMode=%v",
-		sessionID, sm.config.Model, permMode)
+	// Reuse existing client if available (preserves conversation context)
+	// Otherwise create a new client
+	session.mu.Lock()
+	client := session.client
+	hasClaudeSession := session.ClaudeSessionID != ""
+	session.mu.Unlock()
 
-	client, err := claude.NewClient(session.ctx, opts)
-	if err != nil {
-		logging.Error("SendPrompt: Failed to create client: %v", err)
-		sm.mu.Lock()
-		errMsg := err.Error()
-		session.ErrorMessage = &errMsg
-		session.Status = SessionStatusError
-		sm.mu.Unlock()
-		return fmt.Errorf("failed to create client: %w", err)
-	}
+	if client == nil {
+		// Execute query using streaming mode (required for permission callbacks via control protocol)
+		if hasClaudeSession {
+			logging.Info("SendPrompt: Creating new client for restored session %s (Claude session: %s)", sessionID, session.ClaudeSessionID)
+		} else {
+			logging.Debug("SendPrompt: Creating streaming client...")
+		}
+		logging.Debug("SendPrompt: API Key length: %d", len(sm.config.APIKey))
+		logging.Debug("Creating streaming client for session %s with options: model=%s, permMode=%v",
+			sessionID, sm.config.Model, permMode)
 
-	// Connect to Claude
-	if err := client.Connect(session.ctx); err != nil {
-		logging.Error("SendPrompt: Failed to connect client: %v", err)
-		sm.mu.Lock()
-		errMsg := err.Error()
-		session.ErrorMessage = &errMsg
-		session.Status = SessionStatusError
-		sm.mu.Unlock()
-		return fmt.Errorf("failed to connect client: %w", err)
+		newClient, err := claude.NewClient(session.ctx, opts)
+		if err != nil {
+			logging.Error("SendPrompt: Failed to create client: %v", err)
+			sm.mu.Lock()
+			errMsg := err.Error()
+			session.ErrorMessage = &errMsg
+			session.Status = SessionStatusError
+			sm.mu.Unlock()
+			return fmt.Errorf("failed to create client: %w", err)
+		}
+
+		// Connect to Claude
+		if err := newClient.Connect(session.ctx); err != nil {
+			logging.Error("SendPrompt: Failed to connect client: %v", err)
+			sm.mu.Lock()
+			errMsg := err.Error()
+			session.ErrorMessage = &errMsg
+			session.Status = SessionStatusError
+			sm.mu.Unlock()
+			return fmt.Errorf("failed to connect client: %w", err)
+		}
+
+		// Store client reference
+		session.mu.Lock()
+		session.client = newClient
+		session.mu.Unlock()
+		client = newClient
+	} else {
+		logging.Info("SendPrompt: Reusing existing client for session %s (preserves conversation context)", sessionID)
 	}
 
 	// Send the query
@@ -763,15 +784,6 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	messages := client.ReceiveResponse(session.ctx)
 	logging.Info("SendPrompt: Client connected and query sent, starting response stream")
 	logging.Info("Streaming client created for session %s, starting response stream", sessionID)
-
-	// Start receiving responses in background
-	// Store client reference for cleanup
-	session.mu.Lock()
-	if session.client != nil {
-		session.client.Close(session.ctx)
-	}
-	session.client = client
-	session.mu.Unlock()
 
 	go sm.receiveQueryResponses(session, messages)
 
