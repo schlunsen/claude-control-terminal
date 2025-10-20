@@ -89,9 +89,11 @@ defineEmits<{
 }>()
 
 const messagesContainer = ref<HTMLElement | null>(null)
+const messageInput = ref<HTMLTextAreaElement | null>(null)
 
 defineExpose({
-  messagesContainer
+  messagesContainer,
+  messageInput
 })
 </script>
 

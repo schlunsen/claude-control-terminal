@@ -215,10 +215,10 @@ import ToolOverlay from '~/components/ToolOverlay.vue'
 const agentWs = useAgentWebSocket()
 
 // Refs
-const messageInput = ref(null)
 const chatAreaRef = ref(null)
-// Access messagesContainer through chatAreaRef
+// Access messagesContainer and messageInput through chatAreaRef
 const messagesContainer = computed(() => chatAreaRef.value?.messagesContainer || null)
+const messageInput = computed(() => chatAreaRef.value?.messageInput || null)
 
 // Composables - Session State Management
 const {
