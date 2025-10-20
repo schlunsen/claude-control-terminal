@@ -11,7 +11,21 @@
       <span class="message-role">{{ roleName }}</span>
       <span class="message-time">{{ formattedTime }}</span>
     </div>
-    <div class="message-content" v-html="formattedContent"></div>
+
+    <!-- Text content -->
+    <div v-if="textContent" class="message-content" v-html="formattedContent"></div>
+
+    <!-- Images -->
+    <div v-if="imageBlocks.length > 0" class="message-images">
+      <img
+        v-for="(img, idx) in imageBlocks"
+        :key="idx"
+        :src="img.dataUrl"
+        :alt="`Image ${idx + 1}`"
+        class="message-image"
+        @click="$emit('open-lightbox', { images: imageBlocks, startIndex: idx })"
+      />
+    </div>
 
     <!-- Tool use indicator -->
     <div v-if="message.toolUse" class="tool-use">
@@ -26,10 +40,20 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+interface ContentBlock {
+  type: string
+  text?: string
+  source?: {
+    type: string
+    media_type: string
+    data: string
+  }
+}
+
 interface Message {
   id: string
   role: string
-  content: string
+  content: string | ContentBlock[]
   timestamp: Date
   toolUse?: string
   isToolResult?: boolean
@@ -42,10 +66,14 @@ interface Message {
 interface Props {
   message: Message
   formatTime: (date: Date) => string
-  formatMessage: (content: string) => string
+  formatMessage: (content: string | ContentBlock[]) => string
 }
 
 const props = defineProps<Props>()
+
+defineEmits<{
+  'open-lightbox': [{ images: any[], startIndex: number }]
+}>()
 
 const roleName = computed(() => {
   if (props.message.role === 'user') return 'You'
@@ -54,7 +82,48 @@ const roleName = computed(() => {
 })
 
 const formattedTime = computed(() => props.formatTime(props.message.timestamp))
-const formattedContent = computed(() => props.formatMessage(props.message.content))
+
+// Extract text content from message
+const textContent = computed(() => {
+  const content = props.message.content
+
+  // Handle string content (legacy)
+  if (typeof content === 'string') {
+    return content
+  }
+
+  // Handle array content (structured)
+  if (Array.isArray(content)) {
+    const textBlocks = content
+      .filter((block: ContentBlock) => block.type === 'text')
+      .map((block: ContentBlock) => block.text)
+      .filter(Boolean)
+
+    return textBlocks.join('\n\n')
+  }
+
+  return ''
+})
+
+// Extract image blocks from message
+const imageBlocks = computed(() => {
+  const content = props.message.content
+
+  if (!Array.isArray(content)) return []
+
+  return content
+    .filter((block: ContentBlock) => block.type === 'image' && block.source)
+    .map((block: ContentBlock) => ({
+      dataUrl: `data:${block.source!.media_type};base64,${block.source!.data}`,
+      mediaType: block.source!.media_type
+    }))
+})
+
+// Format text content
+const formattedContent = computed(() => {
+  if (!textContent.value) return ''
+  return props.formatMessage(textContent.value)
+})
 </script>
 
 <style scoped>
@@ -174,6 +243,41 @@ const formattedContent = computed(() => props.formatMessage(props.message.conten
   color: var(--text-secondary);
 }
 
+/* Message Images */
+.message-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.message.user .message-images {
+  margin-left: 48px;
+}
+
+.message.assistant .message-images {
+  margin-right: 48px;
+}
+
+.message-image {
+  max-width: 300px;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.message-image:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.message.user .message-image {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
 @media (max-width: 768px) {
   .message.user .message-content {
     margin-left: 24px;
@@ -181,6 +285,19 @@ const formattedContent = computed(() => props.formatMessage(props.message.conten
 
   .message.assistant .message-content {
     margin-right: 24px;
+  }
+
+  .message.user .message-images {
+    margin-left: 24px;
+  }
+
+  .message.assistant .message-images {
+    margin-right: 24px;
+  }
+
+  .message-image {
+    max-width: 200px;
+    max-height: 200px;
   }
 }
 </style>

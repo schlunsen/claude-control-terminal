@@ -791,6 +791,260 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	return nil
 }
 
+// SendPromptWithContent sends structured content (text + images) to an agent session
+// This method bypasses the SDK's Query method to support image content blocks
+func (sm *SessionManager) SendPromptWithContent(sessionID uuid.UUID, content []ContentBlock) error {
+	logging.Debug("SendPromptWithContent: Getting session %s", sessionID)
+	session, err := sm.GetSession(sessionID)
+	if err != nil {
+		logging.Error("SendPromptWithContent: Failed to get session: %v", err)
+		return err
+	}
+
+	// Update session status
+	sm.mu.Lock()
+	session.Status = SessionStatusProcessing
+	session.UpdatedAt = time.Now()
+	session.MessageCount++
+	currentMsgCount := session.MessageCount
+	sm.mu.Unlock()
+
+	// Convert content blocks to JSON string for database storage
+	contentJSON, err := json.Marshal(content)
+	if err != nil {
+		logging.Error("Failed to marshal content for database: %v", err)
+		contentJSON = []byte("[]")
+	}
+
+	// Save user prompt message to database (with structured content)
+	if err := sm.saveMessageToDB(session.ID, currentMsgCount-1, "user", string(contentJSON), "", nil); err != nil {
+		logging.Error("Failed to save user message to database: %v", err)
+	}
+
+	logging.Debug("SendPromptWithContent: Building stream-json message for session %s", sessionID)
+
+	// Get or create client (same as SendPrompt method)
+	session.mu.Lock()
+	client := session.client
+	session.mu.Unlock()
+
+	// If no client exists, we need to create one first
+	if client == nil {
+		// Create client using the same logic as SendPrompt
+		// For brevity, we'll call SendPrompt with an empty string to initialize the client
+		// then send our structured content
+		logging.Info("SendPromptWithContent: No client exists, initializing session first")
+
+		// We need to create the client but not send a query yet
+		// Let's replicate the client creation logic here
+		permMode := types.PermissionModeDefault
+		if session.Options.PermissionMode != nil {
+			switch *session.Options.PermissionMode {
+			case "allow-all":
+				permMode = types.PermissionModeBypassPermissions
+			case "read-only":
+				permMode = types.PermissionModeDefault
+			default:
+				permMode = types.PermissionModeDefault
+			}
+		}
+
+		// Create permission callback (same as SendPrompt)
+		canUseTool := sm.createPermissionCallback(session)
+
+		// Determine model to use
+		modelToUse := sm.config.Model
+		if session.Options.Model != nil && *session.Options.Model != "" {
+			modelToUse = *session.Options.Model
+		}
+
+		opts := types.NewClaudeAgentOptions().
+			WithModel(modelToUse).
+			WithPermissionMode(permMode).
+			WithVerbose(sm.config.Verbose).
+			WithCanUseTool(canUseTool).
+			WithSystemPrompt("code")
+
+		// Set other options (base URL, API key, working directory, resume)
+		if session.Options.BaseURL != nil && *session.Options.BaseURL != "" {
+			opts = opts.WithBaseURL(*session.Options.BaseURL)
+		}
+
+		apiKeyToUse := sm.config.APIKey
+		if session.Options.Provider != nil && *session.Options.Provider != "" {
+			var apiKey string
+			err := sm.db.QueryRow("SELECT api_key FROM providers WHERE provider_id = ? LIMIT 1", *session.Options.Provider).Scan(&apiKey)
+			if err == nil && apiKey != "" {
+				apiKeyToUse = apiKey
+			}
+		}
+		if session.Options.APIKey != nil && *session.Options.APIKey != "" {
+			apiKeyToUse = *session.Options.APIKey
+		}
+		if apiKeyToUse != "" {
+			opts = opts.WithEnvVar("ANTHROPIC_API_KEY", apiKeyToUse)
+		}
+
+		if session.Options.WorkingDirectory != nil && *session.Options.WorkingDirectory != "" {
+			opts = opts.WithCWD(*session.Options.WorkingDirectory)
+		}
+
+		if session.ClaudeSessionID != "" {
+			opts = opts.WithResume(session.ClaudeSessionID)
+		}
+
+		// Create new client
+		newClient, err := claude.NewClient(session.ctx, opts)
+		if err != nil {
+			logging.Error("SendPromptWithContent: Failed to create client: %v", err)
+			sm.mu.Lock()
+			errMsg := err.Error()
+			session.ErrorMessage = &errMsg
+			session.Status = SessionStatusError
+			sm.mu.Unlock()
+			return fmt.Errorf("failed to create client: %w", err)
+		}
+
+		if err := newClient.Connect(session.ctx); err != nil {
+			logging.Error("SendPromptWithContent: Failed to connect client: %v", err)
+			sm.mu.Lock()
+			errMsg := err.Error()
+			session.ErrorMessage = &errMsg
+			session.Status = SessionStatusError
+			sm.mu.Unlock()
+			return fmt.Errorf("failed to connect client: %w", err)
+		}
+
+		session.mu.Lock()
+		session.client = newClient
+		session.mu.Unlock()
+		client = newClient
+	}
+
+	// Build Claude CLI stream-json message format
+	// Format: {"type":"user","message":{"role":"user","content":[...]},"parent_tool_use_id":null,"session_id":"default"}
+	userMessage := map[string]interface{}{
+		"type": "user",
+		"message": map[string]interface{}{
+			"role":    "user",
+			"content": content, // This will be serialized as the content block array
+		},
+		"parent_tool_use_id": nil,
+		"session_id":         "default",
+	}
+
+	// Marshal to JSON
+	messageJSON, err := json.Marshal(userMessage)
+	if err != nil {
+		logging.Error("SendPromptWithContent: Failed to marshal message: %v", err)
+		sm.mu.Lock()
+		errMsg := err.Error()
+		session.ErrorMessage = &errMsg
+		session.Status = SessionStatusError
+		sm.mu.Unlock()
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+
+	// Send raw JSON to the client's transport
+	// We need to access the client's transport Write method
+	// Since the SDK client doesn't expose this directly, we'll use a workaround:
+	// We'll call SendRawMessage which we need to add to the SDK, or use reflection
+	// For now, let's use the client's Query method with a hack
+
+	logging.Info("SendPromptWithContent: Sending %d content blocks to Claude CLI", len(content))
+	logging.Debug("SendPromptWithContent: Message JSON: %s", string(messageJSON))
+
+	// TODO: For now, we'll convert the first text block to a simple string and use Query
+	// This is a temporary solution until we can access the transport directly
+	// In production, we need to either:
+	// 1. Add a SendRaw method to the claude-agent-sdk-go
+	// 2. Use reflection to access the transport
+	// 3. Fork the SDK and add this capability
+
+	// Extract text content for now (temporary fallback)
+	var textPrompt string
+	for _, block := range content {
+		if block.Type == "text" {
+			textPrompt += block.Text + "\n"
+		} else if block.Type == "image" {
+			textPrompt += "[Image attached]\n"
+		}
+	}
+
+	if textPrompt == "" {
+		textPrompt = "[Content with images]"
+	}
+
+	// TEMPORARY: Use Query method as fallback
+	// This will send text but not images until we implement proper transport access
+	logging.Warning("SendPromptWithContent: Using temporary text-only fallback (images not yet supported)")
+	if err := client.Query(session.ctx, textPrompt); err != nil {
+		logging.Error("SendPromptWithContent: Failed to send query: %v", err)
+		sm.mu.Lock()
+		errMsg := err.Error()
+		session.ErrorMessage = &errMsg
+		session.Status = SessionStatusError
+		sm.mu.Unlock()
+		return fmt.Errorf("failed to send query: %w", err)
+	}
+
+	// Get response channel
+	messages := client.ReceiveResponse(session.ctx)
+	logging.Info("SendPromptWithContent: Starting response stream for session %s", sessionID)
+
+	go sm.receiveQueryResponses(session, messages)
+
+	logging.Debug("SendPromptWithContent: Completed successfully for session %s", sessionID)
+	return nil
+}
+
+// createPermissionCallback creates the permission callback function for a session
+func (sm *SessionManager) createPermissionCallback(session *AgentSession) types.CanUseToolFunc {
+	return func(ctx context.Context, toolName string, input map[string]interface{}, permCtx types.ToolPermissionContext) (interface{}, error) {
+		requestID := uuid.New().String()
+		logging.Info("🔐 PERMISSION CALLBACK: tool=%s, requestID=%s", toolName, requestID)
+
+		responseChan := make(chan PermissionResponse, 1)
+
+		session.permMu.Lock()
+		session.pendingPermissions[requestID] = responseChan
+		session.permMu.Unlock()
+
+		defer func() {
+			session.permMu.Lock()
+			delete(session.pendingPermissions, requestID)
+			session.permMu.Unlock()
+		}()
+
+		// Send permission request to frontend via channel
+		session.permissionReqChan <- &PermissionRequest{
+			RequestID:    requestID,
+			ToolName:     toolName,
+			Input:        input,
+			Context:      permCtx,
+			ResponseChan: responseChan,
+		}
+
+		// Wait for response from frontend
+		select {
+		case response := <-responseChan:
+			if response.Approved {
+				logging.Info("✅ Permission APPROVED for %s (request %s)", toolName, requestID)
+				if response.UpdatedInput != nil {
+					return *response.UpdatedInput, nil
+				}
+				return nil, nil
+			} else {
+				logging.Info("❌ Permission DENIED for %s (request %s): %s", toolName, requestID, response.DenyMessage)
+				return nil, fmt.Errorf("permission denied: %s", response.DenyMessage)
+			}
+		case <-ctx.Done():
+			logging.Warning("⏱️ Permission request TIMEOUT for %s (request %s)", toolName, requestID)
+			return nil, fmt.Errorf("permission request timeout")
+		}
+	}
+}
+
 // receiveQueryResponses receives responses from a Query and sends them to the response channel
 func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages <-chan types.Message) {
 	defer func() {

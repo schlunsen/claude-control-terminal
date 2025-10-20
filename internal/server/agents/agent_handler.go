@@ -596,11 +596,13 @@ func (h *AgentHandler) handleFiberSendPrompt(c *fiberws.Conn, rawMsg map[string]
 		return fmt.Errorf("invalid send_prompt message: %w", err)
 	}
 
-	if msg.Prompt == "" {
-		return fmt.Errorf("prompt cannot be empty")
-	}
+	// Check if we have content array (new format) or prompt string (legacy format)
+	hasContent := len(msg.Content) > 0
+	hasPrompt := msg.Prompt != ""
 
-	log.Printf("Sending prompt to session %s: %s", msg.SessionID, msg.Prompt)
+	if !hasContent && !hasPrompt {
+		return fmt.Errorf("either prompt or content must be provided")
+	}
 
 	// Get the session first
 	session, err := h.SessionManager.GetSession(msg.SessionID)
@@ -616,9 +618,19 @@ func (h *AgentHandler) handleFiberSendPrompt(c *fiberws.Conn, rawMsg map[string]
 		go h.forwardPermissionRequests(c, msg.SessionID, session)
 	}
 
-	// Send prompt to session
-	if err := h.SessionManager.SendPrompt(msg.SessionID, msg.Prompt); err != nil {
-		return err
+	// Send prompt or content to session
+	if hasContent {
+		// New format: structured content with images
+		log.Printf("Sending structured content to session %s (%d blocks)", msg.SessionID, len(msg.Content))
+		if err := h.SessionManager.SendPromptWithContent(msg.SessionID, msg.Content); err != nil {
+			return err
+		}
+	} else {
+		// Legacy format: plain text prompt
+		log.Printf("Sending prompt to session %s: %s", msg.SessionID, msg.Prompt)
+		if err := h.SessionManager.SendPrompt(msg.SessionID, msg.Prompt); err != nil {
+			return err
+		}
 	}
 
 	// Get response channel

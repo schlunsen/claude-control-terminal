@@ -122,11 +122,26 @@ type SessionCreatedMessage struct {
 	Status    string    `json:"status"`
 }
 
+// ContentBlock represents a piece of content (text or image)
+type ContentBlock struct {
+	Type   string       `json:"type"`             // "text" or "image"
+	Text   string       `json:"text,omitempty"`   // For text blocks
+	Source *ImageSource `json:"source,omitempty"` // For image blocks
+}
+
+// ImageSource represents base64-encoded image data
+type ImageSource struct {
+	Type      string `json:"type"`       // "base64"
+	MediaType string `json:"media_type"` // "image/png", "image/jpeg", "image/gif", "image/webp"
+	Data      string `json:"data"`       // Base64 encoded image data
+}
+
 // SendPromptMessage represents sending a prompt to an agent
 type SendPromptMessage struct {
 	BaseMessage
-	SessionID uuid.UUID `json:"session_id"`
-	Prompt    string    `json:"prompt"`
+	SessionID uuid.UUID      `json:"session_id"`
+	Prompt    string         `json:"prompt,omitempty"`  // Legacy text-only support
+	Content   []ContentBlock `json:"content,omitempty"` // New structured content (text + images)
 }
 
 // AgentMessageResponse represents a message from the agent
