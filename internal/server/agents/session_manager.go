@@ -921,64 +921,30 @@ func (sm *SessionManager) SendPromptWithContent(sessionID uuid.UUID, content []C
 		client = newClient
 	}
 
-	// Build Claude CLI stream-json message format
-	// Format: {"type":"user","message":{"role":"user","content":[...]},"parent_tool_use_id":null,"session_id":"default"}
-	userMessage := map[string]interface{}{
-		"type": "user",
-		"message": map[string]interface{}{
-			"role":    "user",
-			"content": content, // This will be serialized as the content block array
-		},
-		"parent_tool_use_id": nil,
-		"session_id":         "default",
-	}
+	// Convert ContentBlock array to interface{} for SDK
+	// The SDK's QueryWithContent accepts interface{} which can be a content array
+	contentInterface := make([]interface{}, len(content))
+	for i, block := range content {
+		blockMap := make(map[string]interface{})
+		blockMap["type"] = block.Type
 
-	// Marshal to JSON
-	messageJSON, err := json.Marshal(userMessage)
-	if err != nil {
-		logging.Error("SendPromptWithContent: Failed to marshal message: %v", err)
-		sm.mu.Lock()
-		errMsg := err.Error()
-		session.ErrorMessage = &errMsg
-		session.Status = SessionStatusError
-		sm.mu.Unlock()
-		return fmt.Errorf("failed to marshal message: %w", err)
-	}
+		if block.Type == "text" {
+			blockMap["text"] = block.Text
+		} else if block.Type == "image" && block.Source != nil {
+			blockMap["source"] = map[string]interface{}{
+				"type":       block.Source.Type,
+				"media_type": block.Source.MediaType,
+				"data":       block.Source.Data,
+			}
+		}
 
-	// Send raw JSON to the client's transport
-	// We need to access the client's transport Write method
-	// Since the SDK client doesn't expose this directly, we'll use a workaround:
-	// We'll call SendRawMessage which we need to add to the SDK, or use reflection
-	// For now, let's use the client's Query method with a hack
+		contentInterface[i] = blockMap
+	}
 
 	logging.Info("SendPromptWithContent: Sending %d content blocks to Claude CLI", len(content))
-	logging.Debug("SendPromptWithContent: Message JSON: %s", string(messageJSON))
 
-	// TODO: For now, we'll convert the first text block to a simple string and use Query
-	// This is a temporary solution until we can access the transport directly
-	// In production, we need to either:
-	// 1. Add a SendRaw method to the claude-agent-sdk-go
-	// 2. Use reflection to access the transport
-	// 3. Fork the SDK and add this capability
-
-	// Extract text content for now (temporary fallback)
-	var textPrompt string
-	for _, block := range content {
-		if block.Type == "text" {
-			textPrompt += block.Text + "\n"
-		} else if block.Type == "image" {
-			textPrompt += "[Image attached]\n"
-		}
-	}
-
-	if textPrompt == "" {
-		textPrompt = "[Content with images]"
-	}
-
-	// TEMPORARY: Use Query method as fallback
-	// This will send text but not images until we implement proper transport access
-	logging.Warning("SendPromptWithContent: Using temporary text-only fallback (images not yet supported)")
-	if err := client.Query(session.ctx, textPrompt); err != nil {
+	// Use the new QueryWithContent method to send structured content
+	if err := client.QueryWithContent(session.ctx, contentInterface); err != nil {
 		logging.Error("SendPromptWithContent: Failed to send query: %v", err)
 		sm.mu.Lock()
 		errMsg := err.Error()
