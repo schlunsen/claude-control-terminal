@@ -76,12 +76,30 @@ export function useSessionActions(params: SessionActionParams) {
   const createNewSession = async () => {
     if (!agentWs.connected) return
 
-    // Reset form to defaults
+    // Determine provider and model from currentProvider if available
+    let defaultProvider = 'anthropic'
+    let defaultModel = 'claude-sonnet-4.5-20250514'
+
+    if (currentProvider.value) {
+      // Find the provider in availableProviders
+      const provider = availableProviders.value.find(p => p.id === currentProvider.value.provider_id)
+      if (provider) {
+        defaultProvider = provider.id
+        // Use the model from currentProvider if set, otherwise use the provider's default
+        if (currentProvider.value.model_name) {
+          defaultModel = currentProvider.value.model_name
+        } else if (provider.default_model) {
+          defaultModel = provider.default_model
+        }
+      }
+    }
+
+    // Reset form to defaults (preserving provider/model from TUI settings)
     sessionForm.value = {
       workingDirectory: '',
       permissionMode: 'default',
-      modelProvider: 'anthropic',
-      model: 'claude-sonnet-4.5-20250514',
+      modelProvider: defaultProvider,
+      model: defaultModel,
       systemPrompt: '',
       promptMode: 'agent',
       selectedAgent: '',
