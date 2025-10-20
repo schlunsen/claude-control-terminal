@@ -71,7 +71,7 @@
           :connected="agentWs.connected"
           :is-thinking="isThinking"
           :is-processing="isProcessing"
-          @send="sendMessage"
+          @send="handleSendMessage"
         >
           <!-- Tool Overlays Slot -->
           <template #tool-overlays>
@@ -107,6 +107,7 @@
               :message="message"
               :format-time="formatTime"
               :format-message="formatMessage"
+              @open-lightbox="openLightbox"
             />
           </template>
 
@@ -170,6 +171,14 @@
       @resume="resumeSessionWithOptions"
     />
 
+    <!-- Image Lightbox -->
+    <ImageLightbox
+      :images="lightboxImages"
+      :start-index="lightboxStartIndex"
+      :is-open="showLightbox"
+      @close="closeLightbox"
+    />
+
   </div>
 </template>
 
@@ -192,6 +201,7 @@ import MetricsSidebar from '~/components/agents/MetricsSidebar.vue'
 import MessageBubble from '~/components/agents/MessageBubble.vue'
 import TodoWriteBox from '~/components/agents/TodoWriteBox.vue'
 import ToolOverlaysContainer from '~/components/agents/ToolOverlaysContainer.vue'
+import ImageLightbox from '~/components/agents/ImageLightbox.vue'
 
 // Utilities
 import { formatTime, formatMessage } from '~/utils/agents/messageFormatters'
@@ -385,6 +395,42 @@ const {
   autoScrollIfNearBottom,
   messagesContainer
 })
+
+// Handle send message with image attachments
+const handleSendMessage = async () => {
+  // Get attached images from ChatArea component
+  const attachedImages = chatAreaRef.value?.attachedImages || []
+
+  // Send message with images
+  await sendMessage(attachedImages)
+
+  // Clear image attachments in ChatArea after sending
+  if (chatAreaRef.value?.clearAttachments) {
+    chatAreaRef.value.clearAttachments()
+  }
+}
+
+// Image lightbox state
+const showLightbox = ref(false)
+const lightboxImages = ref<any[]>([])
+const lightboxStartIndex = ref(0)
+
+// Open lightbox with images
+const openLightbox = ({ images, startIndex }: { images: any[], startIndex: number }) => {
+  lightboxImages.value = images
+  lightboxStartIndex.value = startIndex
+  showLightbox.value = true
+}
+
+// Close lightbox
+const closeLightbox = () => {
+  showLightbox.value = false
+  // Clear images after animation completes
+  setTimeout(() => {
+    lightboxImages.value = []
+    lightboxStartIndex.value = 0
+  }, 300)
+}
 
 // WebSocket handlers composable
 const { setupHandlers } = useWebSocketHandlers({

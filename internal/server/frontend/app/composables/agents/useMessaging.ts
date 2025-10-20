@@ -40,8 +40,11 @@ export function useMessaging(params: MessagingParams) {
   } = params
 
   // Messaging
-  const sendMessage = async () => {
-    if (!inputMessage.value.trim() || !activeSessionId.value) return
+  const sendMessage = async (attachedImages: any[] = []) => {
+    const hasMessage = inputMessage.value.trim()
+    const hasImages = attachedImages.length > 0
+
+    if ((!hasMessage && !hasImages) || !activeSessionId.value) return
 
     const message = inputMessage.value
     inputMessage.value = ''
@@ -51,10 +54,34 @@ export function useMessaging(params: MessagingParams) {
       messages.value[activeSessionId.value] = []
     }
 
+    // Build content array for structured content (text + images)
+    const content: any[] = []
+
+    // Add text block if message exists
+    if (hasMessage) {
+      content.push({
+        type: 'text',
+        text: message
+      })
+    }
+
+    // Add image blocks
+    for (const img of attachedImages) {
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: img.mediaType,
+          data: img.base64Data
+        }
+      })
+    }
+
+    // Store message in local state with structured content
     messages.value[activeSessionId.value].push({
       id: crypto.randomUUID(),
       role: 'user',
-      content: message,
+      content: content,
       timestamp: new Date()
     })
 
@@ -70,11 +97,22 @@ export function useMessaging(params: MessagingParams) {
     sessionTodos.value.delete(sessionId)
 
     // Send to agent
-    agentWs.send({
-      type: 'send_prompt',
-      session_id: activeSessionId.value,
-      prompt: message
-    })
+    // If we have structured content (text + images), send content array
+    // Otherwise, send legacy prompt string for backward compatibility
+    if (hasImages || content.length > 1) {
+      agentWs.send({
+        type: 'send_prompt',
+        session_id: activeSessionId.value,
+        content: content
+      })
+    } else {
+      // Legacy format for text-only messages
+      agentWs.send({
+        type: 'send_prompt',
+        session_id: activeSessionId.value,
+        prompt: message
+      })
+    }
   }
 
   // Permission request functionality

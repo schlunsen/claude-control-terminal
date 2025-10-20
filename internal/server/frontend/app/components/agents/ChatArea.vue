@@ -45,26 +45,48 @@
 
       <!-- Input Area -->
       <div class="input-area">
-        <textarea
-          ref="messageInput"
-          :value="inputMessage"
-          @input="$emit('update:input-message', ($event.target as HTMLTextAreaElement).value)"
-          @keydown.enter.prevent="$emit('send')"
-          placeholder="Type your message... (Enter to send)"
-          class="message-input"
-          :disabled="!connected"
-          rows="3"
-        ></textarea>
-        <button
-          @click="$emit('send')"
-          class="btn-send"
-          :disabled="!inputMessage.trim() || !connected"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-          </svg>
-        </button>
+        <!-- Image Preview Area -->
+        <div v-if="attachedImages.length > 0" class="image-previews">
+          <div
+            v-for="(img, idx) in attachedImages"
+            :key="idx"
+            class="preview-item"
+          >
+            <img :src="img.dataUrl" :alt="`Preview ${idx + 1}`" class="preview-image" />
+            <button @click="removeImage(idx)" class="remove-btn" type="button">
+              ×
+            </button>
+            <span class="image-info">{{ img.fileName }} ({{ formatSize(img.size) }})</span>
+          </div>
+        </div>
+
+        <!-- Input Container -->
+        <div class="input-container" :class="{ 'drag-over': isDragging }">
+          <textarea
+            ref="messageInput"
+            :value="inputMessage"
+            @input="$emit('update:input-message', ($event.target as HTMLTextAreaElement).value)"
+            @keydown.enter.prevent="handleEnter"
+            @paste="handlePaste"
+            @drop.prevent="handleDrop"
+            @dragover.prevent="isDragging = true"
+            @dragleave="isDragging = false"
+            placeholder="Type your message or paste/drop an image... (Enter to send)"
+            class="message-input"
+            :disabled="!connected"
+            rows="3"
+          ></textarea>
+          <button
+            @click="$emit('send')"
+            class="btn-send"
+            :disabled="(!inputMessage.trim() && attachedImages.length === 0) || !connected"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -72,6 +94,14 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
+
+interface AttachedImage {
+  fileName: string
+  mediaType: string
+  size: number
+  dataUrl: string
+  base64Data: string
+}
 
 interface Props {
   hasActiveSession: boolean
@@ -83,17 +113,128 @@ interface Props {
 
 defineProps<Props>()
 
-defineEmits<{
+const emit = defineEmits<{
   'update:input-message': [value: string]
   'send': []
+  'images-attached': [images: AttachedImage[]]
 }>()
 
 const messagesContainer = ref<HTMLElement | null>(null)
 const messageInput = ref<HTMLTextAreaElement | null>(null)
+const attachedImages = ref<AttachedImage[]>([])
+const isDragging = ref(false)
+
+// Allowed image formats
+const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+const MAX_SIZE = 3.75 * 1024 * 1024 // 3.75 MB
+
+// Handle paste event
+async function handlePaste(event: ClipboardEvent) {
+  const items = event.clipboardData?.items
+  if (!items) return
+
+  for (const item of Array.from(items)) {
+    if (item.type.startsWith('image/')) {
+      event.preventDefault()
+      const file = item.getAsFile()
+      if (file) {
+        await addImageFile(file)
+      }
+    }
+  }
+}
+
+// Handle drop event
+async function handleDrop(event: DragEvent) {
+  isDragging.value = false
+  const files = event.dataTransfer?.files
+  if (!files) return
+
+  for (const file of Array.from(files)) {
+    if (file.type.startsWith('image/') && ALLOWED_TYPES.includes(file.type)) {
+      await addImageFile(file)
+    }
+  }
+}
+
+// Add image file to attachments
+async function addImageFile(file: File) {
+  // Validate format
+  if (!ALLOWED_TYPES.includes(file.type)) {
+    console.error(`Unsupported image format: ${file.type}. Supported: PNG, JPEG, GIF, WebP`)
+    return
+  }
+
+  // Validate size
+  if (file.size > MAX_SIZE) {
+    console.error(`Image too large: ${(file.size / 1024 / 1024).toFixed(2)} MB. Maximum: 3.75 MB`)
+    return
+  }
+
+  try {
+    // Convert to base64
+    const base64 = await fileToBase64(file)
+
+    const image: AttachedImage = {
+      fileName: file.name,
+      mediaType: file.type,
+      size: file.size,
+      dataUrl: `data:${file.type};base64,${base64}`,
+      base64Data: base64
+    }
+
+    attachedImages.value.push(image)
+    emit('images-attached', attachedImages.value)
+  } catch (error) {
+    console.error('Failed to process image:', error)
+  }
+}
+
+// Convert file to base64
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = reader.result as string
+      // Extract base64 data (remove data:image/...;base64, prefix)
+      const base64 = result.split(',')[1]
+      resolve(base64)
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+// Remove image from attachments
+function removeImage(idx: number) {
+  attachedImages.value.splice(idx, 1)
+  emit('images-attached', attachedImages.value)
+}
+
+// Format file size
+function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`
+}
+
+// Handle Enter key
+function handleEnter(event: KeyboardEvent) {
+  if (!event.shiftKey) {
+    emit('send')
+  }
+}
+
+// Clear attachments (called from parent)
+function clearAttachments() {
+  attachedImages.value = []
+}
 
 defineExpose({
   messagesContainer,
-  messageInput
+  messageInput,
+  attachedImages,
+  clearAttachments
 })
 </script>
 
@@ -205,11 +346,87 @@ defineExpose({
 /* Input Area */
 .input-area {
   display: flex;
+  flex-direction: column;
   gap: 12px;
   padding: 16px;
   border-top: 1px solid var(--border-color);
   background: var(--card-bg);
   flex-shrink: 0;
+}
+
+/* Image Previews */
+.image-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.preview-item {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 8px;
+  border: 2px solid var(--border-color);
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 24px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.remove-btn:hover {
+  background: rgba(255, 0, 0, 0.8);
+}
+
+.image-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  font-size: 0.7rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Input Container */
+.input-container {
+  display: flex;
+  gap: 12px;
+  transition: all 0.2s;
+}
+
+.input-container.drag-over {
+  background: rgba(138, 107, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
 }
 
 .message-input {
@@ -246,6 +463,7 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
+  align-self: flex-end;
 }
 
 .btn-send:hover:not(:disabled) {
