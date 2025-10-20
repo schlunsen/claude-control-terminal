@@ -194,15 +194,18 @@ import TodoWriteBox from '~/components/agents/TodoWriteBox.vue'
 import ToolOverlaysContainer from '~/components/agents/ToolOverlaysContainer.vue'
 
 // Utilities
-import { formatTime, formatMessage, formatRelativeTime, truncatePath } from '~/utils/agents/messageFormatters'
-import { parseTodoWrite, formatTodosForTool, type TodoItem } from '~/utils/agents/todoParser'
-import { parseToolUse, getToolIcon } from '~/utils/agents/toolParser'
+import { formatTime, formatMessage } from '~/utils/agents/messageFormatters'
+import { type TodoItem } from '~/utils/agents/todoParser'
+import { getToolIcon } from '~/utils/agents/toolParser'
 
 // Composables
 import { useMessageScroll } from '~/composables/agents/useMessageScroll'
 import { useSessionState } from '~/composables/agents/useSessionState'
 import { useAgentProviders } from '~/composables/agents/useAgentProviders'
 import { useSessionActions } from '~/composables/agents/useSessionActions'
+import { useMessageHelpers } from '~/composables/agents/useMessageHelpers'
+import { useToolManagement } from '~/composables/agents/useToolManagement'
+import { useMessaging } from '~/composables/agents/useMessaging'
 
 // Existing overlays
 import TodoWriteOverlay from '~/components/TodoWriteOverlay.vue'
@@ -331,225 +334,56 @@ const {
   cleanupSessionData
 })
 
-const formatRelativeTime = (timestamp) => {
-  const date = new Date(timestamp)
-  const now = new Date()
-  const diffMs = now - date
-  const diffMins = Math.floor(diffMs / 60000)
-  const diffHours = Math.floor(diffMs / 3600000)
-  const diffDays = Math.floor(diffMs / 86400000)
+// Message helpers composable
+const {
+  formatRelativeTime,
+  parseTodoWrite,
+  parseToolUse,
+  formatTodosForTool,
+  truncatePath,
+  extractTextContent,
+  isCompleteSignal,
+  extractCostData,
+  extractToolName
+} = useMessageHelpers()
 
-  if (diffMins < 1) return 'just now'
-  if (diffMins < 60) return `${diffMins}m ago`
-  if (diffHours < 24) return `${diffHours}h ago`
-  if (diffDays < 7) return `${diffDays}d ago`
-  return date.toLocaleDateString()
-}
+// Tool management composable
+const {
+  updateSessionTodos,
+  updateSessionToolExecution,
+  clearSessionToolExecution,
+  addActiveTool,
+  completeActiveTool,
+  removeActiveTool
+} = useToolManagement({
+  sessionTodos,
+  sessionToolExecution,
+  activeTools
+})
 
-// Helper methods for parsing TodoWrite and tool execution data
-const parseTodoWrite = (content: string): TodoItem[] | null => {
-  if (!content || typeof content !== 'string') return null
-
-  try {
-    console.log('Parsing TodoWrite from content:', content)
-
-    // Pattern 1: Look for numbered lists (1. task, 2. task, etc.)
-    const numberedListMatch = content.match(/(?:\d+\.\s+)([^\n]+)/g)
-    if (numberedListMatch) {
-      console.log('Found numbered list matches:', numberedListMatch)
-      const todos: TodoItem[] = []
-      for (let i = 0; i < numberedListMatch.length; i++) {
-        const taskContent = numberedListMatch[i].replace(/^\d+\.\s+/, '').trim()
-        if (taskContent) {
-          todos.push({
-            content: taskContent,
-            status: i === 0 ? 'in_progress' : 'pending'
-          })
-        }
-      }
-      if (todos.length > 0) {
-        console.log('Successfully parsed todos from numbered list:', todos)
-        return todos
-      }
-    }
-
-    // Pattern 2: Look for checkmark-style lists (- task, * task, etc.)
-    const bulletListMatch = content.match(/[-*]\s+([^\n]+)/g)
-    if (bulletListMatch) {
-      console.log('Found bullet list matches:', bulletListMatch)
-      const todos: TodoItem[] = []
-      for (const match of bulletListMatch) {
-        const taskContent = match.replace(/^[-*]\s+/, '').trim()
-        if (taskContent) {
-          todos.push({
-            content: taskContent,
-            status: 'pending'
-          })
-        }
-      }
-      if (todos.length > 0) {
-        console.log('Successfully parsed todos from bullet list:', todos)
-        return todos
-      }
-    }
-
-    // Pattern 3: Look for explicit todo markers ("Todo:", "Task:", etc.)
-    const todoMarkerMatch = content.match(/(?:todo|task|items?):\s*([\s\S]*?)(?=\n\n|\n\w+:|$)/i)
-    if (todoMarkerMatch) {
-      const todoText = todoMarkerMatch[1].trim()
-      const items = todoText.split(/\n\s*\n/).filter(item => item.trim())
-      if (items.length > 0) {
-        const todos = items.map(item => ({
-          content: item.trim(),
-          status: 'pending'
-        }))
-        console.log('Successfully parsed todos from todo marker:', todos)
-        return todos
-      }
-    }
-
-    // Pattern 4: Look for task-related patterns (common task descriptions)
-    const taskPatterns = [
-      /(?:i'll create|let me create|creating|here are)\s+a\s+(?:todo|task|list):\s*([\s\S]*?)(?=\n\n|\n|$)/i,
-      /(?:tasks?:\s*\n)((?:\d+\.\s+[^\n]+\n)+)/i,
-      /(?:items?:\s*\n)((?:[-*]\s+[^\n]+\n)+)/i
-    ]
-
-    for (const pattern of taskPatterns) {
-      const match = content.match(pattern)
-      if (match) {
-        const taskContent = match[1] || match[0]
-        const lines = taskContent.split('\n').filter(line => line.trim())
-        const todos = lines.map(line => ({
-          content: line.trim().replace(/^\d+\.\s+/, '').replace(/^[-*]\s+/, ''),
-          status: 'pending'
-        })).filter(todo => todo.content)
-
-        if (todos.length > 0) {
-          console.log('Successfully parsed todos from task pattern:', todos)
-          return todos
-        }
-      }
-    }
-
-    console.log('No TodoWrite data found in content')
-    return null
-  } catch (e) {
-    console.warn('Failed to parse TodoWrite content:', e)
-    return null
-  }
-}
-
-const parseToolUse = (content: string): ToolExecution | null => {
-  if (!content || typeof content !== 'string') return null
-
-  try {
-    // Look for tool use patterns
-    const patterns = [
-      /Using (\w+)/g,
-      /(\w+)\s*\(/g, // Function calls
-      /Running (\w+)/g,
-      /Executing (\w+)/g
-    ]
-
-    for (const pattern of patterns) {
-      const matches = [...content.matchAll(pattern)]
-      if (matches.length > 0) {
-        const toolName = matches[0][1]
-
-        // Extract additional details based on tool type
-        let filePath, command, patternStr
-
-        if (toolName === 'Read' || toolName === 'Write' || toolName === 'Edit') {
-          const fileMatch = content.match(/(?:file|path):\s*([^\s\n]+)/i)
-          if (fileMatch) filePath = fileMatch[1]
-        } else if (toolName === 'Bash') {
-          const commandMatch = content.match(/(?:command|cmd):\s*([^\n]+)/i)
-          if (commandMatch) command = commandMatch[1].trim()
-        } else if (toolName === 'Search' || toolName === 'Grep') {
-          const patternMatch = content.match(/(?:pattern|search):\s*([^\n]+)/i)
-          if (patternMatch) patternStr = patternMatch[1].trim()
-        }
-
-        return {
-          toolName,
-          filePath,
-          command,
-          pattern: patternStr,
-          timestamp: new Date()
-        }
-      }
-    }
-
-    return null
-  } catch (e) {
-    console.warn('Failed to parse tool use:', e)
-    return null
-  }
-}
-
-// Update session data methods
-const updateSessionTodos = (sessionId: string, todos: TodoItem[]) => {
-  sessionTodos.value.set(sessionId, todos)
-}
-
-// Helper to format todos for TodoWrite tool (includes activeForm only when present)
-const formatTodosForTool = (todos: TodoItem[]): any[] => {
-  return todos.map(todo => ({
-    content: todo.content,
-    status: todo.status,
-    ...(todo.activeForm && { activeForm: todo.activeForm })
-  }))
-}
-
-const updateSessionToolExecution = (sessionId: string, toolExecution: ToolExecution | null) => {
-  sessionToolExecution.value.set(sessionId, toolExecution)
-}
-
-const clearSessionToolExecution = (sessionId: string) => {
-  sessionToolExecution.value.delete(sessionId)
-}
-
-// Tool overlay management
-const addActiveTool = (sessionId: string, toolUse: any) => {
-  const tools = activeTools.value.get(sessionId) || []
-  const activeTool: ActiveTool = {
-    id: toolUse.id,
-    name: toolUse.name,
-    input: toolUse.input,
-    status: 'running',
-    startTime: Date.now(),
-    sessionId
-  }
-  tools.push(activeTool)
-  activeTools.value.set(sessionId, tools)
-}
-
-const completeActiveTool = (sessionId: string, toolUseId: string, isError: boolean = false) => {
-  const tools = activeTools.value.get(sessionId) || []
-  const tool = tools.find(t => t.id === toolUseId)
-  if (tool) {
-    tool.status = isError ? 'error' : 'completed'
-    tool.endTime = Date.now()
-    activeTools.value.set(sessionId, [...tools])
-  }
-}
-
-const removeActiveTool = (sessionId: string, toolId: string) => {
-  const tools = activeTools.value.get(sessionId) || []
-  const filtered = tools.filter(t => t.id !== toolId)
-  activeTools.value.set(sessionId, filtered)
-}
-
-const truncatePath = (path: string): string => {
-  if (!path) return ''
-  if (path.length <= 50) return path
-
-  // Truncate from the middle, keeping the beginning and end
-  const start = path.substring(0, 25)
-  const end = path.substring(path.length - 20)
-  return `${start}...${end}`
-}
+// Messaging composable
+const {
+  sendMessage,
+  approvePermission,
+  denyPermission,
+  sendPermissionResponse,
+  deleteAllSessions,
+  killAllAgents
+} = useMessaging({
+  agentWs,
+  activeSessionId,
+  inputMessage,
+  isProcessing,
+  messages,
+  sessions,
+  sessionTodos,
+  todoHideTimers,
+  awaitingToolResults,
+  sessionPermissions,
+  sessionPermissionStats,
+  autoScrollIfNearBottom,
+  messagesContainer
+})
 
 // Watch for modal opening to load sessions
 watch(showResumeModal, (show) => {
@@ -583,225 +417,6 @@ watch(activeSessionTodos, (todos) => {
     todoHideTimers.value.set(activeSessionId.value, timer)
   }
 }, { deep: true })
-
-// Messaging
-const sendMessage = async () => {
-  if (!inputMessage.value.trim() || !activeSessionId.value) return
-
-  const message = inputMessage.value
-  inputMessage.value = ''
-
-  // Add user message to chat
-  if (!messages.value[activeSessionId.value]) {
-    messages.value[activeSessionId.value] = []
-  }
-
-  messages.value[activeSessionId.value].push({
-    id: crypto.randomUUID(),
-    role: 'user',
-    content: message,
-    timestamp: new Date()
-  })
-
-  isProcessing.value = true
-
-  // Clear previous todos when sending a new message (moving to new task)
-  const sessionId = activeSessionId.value
-  const existingTimer = todoHideTimers.value.get(sessionId)
-  if (existingTimer) {
-    clearTimeout(existingTimer)
-    todoHideTimers.value.delete(sessionId)
-  }
-  sessionTodos.value.delete(sessionId)
-
-  // Send to agent
-  agentWs.send({
-    type: 'send_prompt',
-    session_id: activeSessionId.value,
-    prompt: message
-  })
-}
-
-// Permission request functionality
-const approvePermission = (request) => {
-  sendPermissionResponse(request, true)
-}
-
-const denyPermission = (request, reason = '') => {
-  sendPermissionResponse(request, false, reason)
-}
-
-const sendPermissionResponse = (request, approved, reason = '') => {
-  try {
-    agentWs.send({
-      type: 'permission_response',
-      session_id: request.session_id,
-      request_id: request.request_id,
-      approved: approved,
-      reason: reason
-    })
-
-    // Update permission stats
-    const permStats = sessionPermissionStats.value.get(request.session_id) || { approved: 0, denied: 0, total: 0 }
-    if (approved) {
-      permStats.approved++
-    } else {
-      permStats.denied++
-    }
-    sessionPermissionStats.value.set(request.session_id, permStats)
-
-    // Remove from session-specific permissions
-    const sessionPerms = sessionPermissions.value.get(request.session_id) || []
-    sessionPermissions.value.set(
-      request.session_id,
-      sessionPerms.filter(p => p.request_id !== request.request_id)
-    )
-
-    // Add a system message to show the decision (to the correct session)
-    if (!messages.value[request.session_id]) {
-      messages.value[request.session_id] = []
-    }
-
-    const decisionText = approved ? '✅ Approved' : '❌ Denied'
-    const decisionMessage = reason ? `${decisionText} (Reason: ${reason})` : decisionText
-
-    messages.value[request.session_id].push({
-      id: crypto.randomUUID(),
-      role: 'system',
-      content: `Permission request for "${request.description}" ${decisionMessage}`,
-      timestamp: new Date(),
-      isPermissionDecision: true
-    })
-
-    // Auto-scroll to bottom only if viewing this session
-    if (request.session_id === activeSessionId.value) {
-      autoScrollIfNearBottom(messagesContainer.value)
-    }
-
-  } catch (error) {
-    console.error('Failed to send permission response:', error)
-    alert('Failed to send permission response. Please try again.')
-  }
-}
-
-// Delete all sessions functionality
-const deleteAllSessions = async () => {
-  if (!agentWs.connected || sessions.value.length === 0) return
-
-  if (!confirm('Are you sure you want to delete ALL sessions? This will permanently delete all session data from the database. This action cannot be undone.')) {
-    return
-  }
-
-  try {
-    agentWs.send({
-      type: 'delete_all_sessions'
-    })
-  } catch (error) {
-    console.error('Failed to delete all sessions:', error)
-    alert('Failed to delete all sessions. Please try again.')
-  }
-}
-
-// Kill switch functionality
-const killAllAgents = async () => {
-  if (!agentWs.connected || sessions.value.length === 0) return
-
-  if (!confirm('Are you sure you want to kill all active agents? This will end all sessions immediately.')) {
-    return
-  }
-
-  try {
-    agentWs.send({
-      type: 'kill_all_agents'
-    })
-  } catch (error) {
-    console.error('Failed to kill all agents:', error)
-    alert('Failed to kill all agents. Please try again.')
-  }
-}
-
-// Helper function to extract text content from nested content object
-const extractTextContent = (content: any): string => {
-  if (!content) return ''
-
-  // If content is already a string, return it
-  if (typeof content === 'string') return content
-
-  // If content is an object with nested structure
-  if (typeof content === 'object') {
-    // Handle assistant messages with text array
-    if (content.type === 'assistant') {
-      // Check if text array exists and is not null/empty
-      if (Array.isArray(content.text) && content.text.length > 0) {
-        return content.text.join('\n')
-      }
-      // Empty or null text array - no content to display
-      return ''
-    }
-
-    // Handle user messages
-    if (content.type === 'user' && content.content) {
-      return String(content.content)
-    }
-
-    // Handle result messages (completion signal - no visible content)
-    if (content.type === 'result') {
-      return ''
-    }
-
-    // Handle system messages
-    if (content.type === 'system') {
-      return `SystemMessage: ${content.subtype || 'unknown'}`
-    }
-
-    // Fallback: stringify the object
-    return JSON.stringify(content)
-  }
-
-  return String(content)
-}
-
-// Helper to check if content is complete signal
-const isCompleteSignal = (content: any): boolean => {
-  return typeof content === 'object' && content.type === 'result'
-}
-
-// Helper to extract cost/usage data from result messages
-const extractCostData = (content: any) => {
-  if (typeof content === 'object' && content.type === 'result') {
-    return {
-      costUSD: content.cost_usd || 0,
-      numTurns: content.num_turns || 0,
-      durationMs: content.duration_ms || 0,
-      usage: content.usage || null
-    }
-  }
-  return null
-}
-
-// Helper to extract tool name from tool_uses JSON
-const extractToolName = (toolUses: any): string | undefined => {
-  if (!toolUses) return undefined
-
-  try {
-    // Parse if it's a JSON string
-    const parsed = typeof toolUses === 'string' ? JSON.parse(toolUses) : toolUses
-
-    // If it's an array, get the first tool
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed[0].name || parsed[0].type
-    }
-
-    // If it's a single object
-    if (parsed.name || parsed.type) {
-      return parsed.name || parsed.type
-    }
-  } catch (e) {
-    console.warn('Failed to parse tool_uses:', e)
-  }
-
-  return undefined
-}
 
 // WebSocket event handlers
 agentWs.on('onSessionCreated', (data) => {
@@ -1287,6 +902,7 @@ agentWs.on('onAgentsKilled', (data) => {
   // Show success message
   alert(`Successfully killed ${data.killed_count} agents`)
 })
+
 
 // Load existing sessions on mount
 onMounted(() => {
