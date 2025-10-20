@@ -31,20 +31,25 @@ interface WebSocketHandlerParams {
   sessionToolStats: Ref<Map<string, Record<string, number>>>
   sessionPermissionStats: Ref<Map<string, { approved: number; denied: number; total: number }>>
 
-  // Helper functions
+  // Helper functions from useMessageHelpers
+  parseTodoWrite: (content: string) => TodoItem[] | null
+  parseToolUse: (tool: string) => ToolExecution | null
+  extractToolName: (toolUses: any) => string | undefined
+  isCompleteSignal: (content: any) => boolean
+  extractCostData: (content: any) => any
+  extractTextContent: (content: any) => string
+
+  // Helper functions from useToolManagement
   addActiveTool: (sessionId: string, toolUse: any) => void
   completeActiveTool: (sessionId: string, toolUseId: string, isError: boolean) => void
   clearSessionToolExecution: (sessionId: string) => void
   updateSessionTodos: (sessionId: string, todos: TodoItem[]) => void
-  updateSessionToolExecution: (sessionId: string, toolExecution: ToolExecution) => void
-  parseTodoWrite: (content: string) => TodoItem[] | null
-  parseToolUse: (tool: string) => ToolExecution | undefined
-  extractToolName: (toolUses: string) => string | undefined
-  isCompleteSignal: (content: any) => boolean
-  extractCostData: (content: any) => any
-  extractTextContent: (content: any) => string
+  updateSessionToolExecution: (sessionId: string, toolExecution: ToolExecution | null) => void
+
+  // Other helper functions
   autoScrollIfNearBottom: (container: any) => void
   focusMessageInput: () => void
+  messagesContainer: any
 }
 
 export function useWebSocketHandlers(params: WebSocketHandlerParams) {
@@ -64,25 +69,26 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     activeTools,
     sessionToolStats,
     sessionPermissionStats,
-    addActiveTool,
-    completeActiveTool,
-    clearSessionToolExecution,
-    updateSessionTodos,
-    updateSessionToolExecution,
     parseTodoWrite,
     parseToolUse,
     extractToolName,
     isCompleteSignal,
     extractCostData,
     extractTextContent,
+    addActiveTool,
+    completeActiveTool,
+    clearSessionToolExecution,
+    updateSessionTodos,
+    updateSessionToolExecution,
     autoScrollIfNearBottom,
-    focusMessageInput
+    focusMessageInput,
+    messagesContainer
   } = params
 
   // Setup all WebSocket event handlers
   const setupHandlers = () => {
-    // Session created
-    agentWs.on('onSessionCreated', (data: any) => {
+    // WebSocket event handlers
+    agentWs.on('onSessionCreated', (data) => {
       sessions.value.push(data.session)
       activeSessionId.value = data.session_id
       messages.value[data.session_id] = []
@@ -94,313 +100,480 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       focusMessageInput()
     })
 
-    // Agent message received
-    agentWs.on('agent_message', (data: any) => {
-      const sessionId = data.session_id
+    agentWs.on('onAgentMessage', (data) => {
+      console.log('📨 Received agent message:', data)
 
-      console.log('Agent message:', data)
+      if (!messages.value[data.session_id]) {
+        messages.value[data.session_id] = []
+      }
 
-      if (data.content) {
-        if (!messages.value[sessionId]) {
-          messages.value[sessionId] = []
-        }
+      // Check if this is a completion signal (result message)
+      const isComplete = isCompleteSignal(data.content)
 
-        // Add agent message
-        messages.value[sessionId].push({
-          id: crypto.randomUUID(),
-          role: 'assistant',
-          content: data.content,
-          timestamp: new Date(),
-          type: data.type
+      // Extract cost data from result messages
+      const costData = extractCostData(data.content)
+
+      // Extract text content from nested object
+      const textContent = extractTextContent(data.content)
+
+      console.log('💬 Extracted:', { isComplete, costData, textContent: textContent.substring(0, 50) })
+
+      // Process tool uses (when Claude starts using a tool)
+      if (data.content && data.content.tools && Array.isArray(data.content.tools)) {
+        data.content.tools.forEach((toolUse: any) => {
+          console.log('🔧 Tool use detected:', toolUse.name)
+          addActiveTool(data.session_id, toolUse)
         })
       }
 
-      // Update session in list
-      const session = sessions.value.find(s => s.id === sessionId)
+      // Process tool results (when tool execution completes)
+      if (data.content && data.content.tool_results && Array.isArray(data.content.tool_results)) {
+        data.content.tool_results.forEach((toolResult: any) => {
+          console.log('✅ Tool result received:', toolResult.tool_use_id)
+          completeActiveTool(data.session_id, toolResult.tool_use_id, toolResult.is_error || false)
+        })
+      }
+
+      // Update session status and metadata
+      const session = sessions.value.find(s => s.id === data.session_id)
       if (session) {
-        session.message_count = messages.value[sessionId]?.length || 0
+        // Update git branch from metadata
+        if (data.metadata && data.metadata.git_branch) {
+          session.git_branch = data.metadata.git_branch
+          console.log('🌿 Updated git branch:', session.git_branch)
+        }
+
+        // Update costs from result message
+        if (costData) {
+          session.cost_usd = (session.cost_usd || 0) + costData.costUSD
+          session.num_turns = costData.numTurns
+          session.duration_ms = costData.durationMs
+          session.usage = costData.usage
+          console.log('💰 Updated session cost:', session.cost_usd)
+        }
+
+        // Set status: idle when complete, processing when receiving content
+        if (isComplete) {
+          session.status = 'idle'
+          session.message_count = (session.message_count || 0) + 1
+        } else if (textContent) {
+          session.status = 'processing'
+        }
       }
 
-      // Hide tool execution overlay when assistant message arrives
-      sessionToolExecution.value.set(sessionId, null)
+      // Clear tool execution when we receive a message
+      clearSessionToolExecution(data.session_id)
 
-      // Auto-scroll if user is near bottom
-      if (isUserNearBottom.value) {
-        scrollToBottom(null, true)
-      }
-    })
-
-    // Agent thinking
-    agentWs.on('agent_thinking', (data: any) => {
-      console.log('Agent thinking:', data)
-      isThinking.value = data.thinking
-    })
-
-    // Agent tool use
-    agentWs.on('agent_tool_use', (data: any) => {
-      const sessionId = data.session_id
-      console.log('Agent tool use:', data)
-
-      // Track tool statistics
-      if (!sessionToolStats.value.has(sessionId)) {
-        sessionToolStats.value.set(sessionId, {})
-      }
-      const stats = sessionToolStats.value.get(sessionId)!
-      stats[data.tool_name] = (stats[data.tool_name] || 0) + 1
-
-      // Handle TodoWrite specially
-      if (data.tool_name === 'TodoWrite' && data.input?.todos) {
-        const todos = parseTodoWrite(data.input.todos)
-        sessionTodos.value.set(sessionId, todos)
-
-        // Clear any existing hide timer
-        const existingTimer = todoHideTimers.value.get(sessionId)
+      // Clear todos when message completes (agent moving to next task)
+      if (isComplete) {
+        const existingTimer = todoHideTimers.value.get(data.session_id)
         if (existingTimer) {
           clearTimeout(existingTimer)
+          todoHideTimers.value.delete(data.session_id)
+        }
+        sessionTodos.value.delete(data.session_id)
+
+        // Reset processing state
+        isProcessing.value = false
+        isThinking.value = false
+
+        // Focus the input after Claude completes the response
+        if (data.session_id === activeSessionId.value) {
+          focusMessageInput()
         }
 
-        // Check if all todos are completed
-        const allCompleted = todos.every(t => t.status === 'completed')
-        if (allCompleted && todos.length > 0) {
-          // Hide after 3 seconds
-          const timer = setTimeout(() => {
-            sessionTodos.value.set(sessionId, [])
-            todoHideTimers.value.delete(sessionId)
-          }, 3000)
-          todoHideTimers.value.set(sessionId, timer)
-        }
-      } else {
-        // For other tools, show execution overlay
-        const toolExecution: ToolExecution = {
-          toolName: data.tool_name,
-          timestamp: new Date()
-        }
+        // Don't create a UI message for result/completion
+        console.log('✅ Message complete (result received)')
+        return
+      }
 
-        // Extract relevant parameters based on tool
-        if (data.input) {
-          if (data.tool_name === 'Read' || data.tool_name === 'Write' || data.tool_name === 'Edit') {
-            toolExecution.filePath = data.input.file_path
-          } else if (data.tool_name === 'Bash') {
-            toolExecution.command = data.input.command
-          } else if (data.tool_name === 'Grep') {
-            toolExecution.pattern = data.input.pattern
+      // Handle user messages with tool results differently
+      if (data.content && data.content.type === 'user' && data.content.tool_results && Array.isArray(data.content.tool_results)) {
+        // Format tool results as readable messages
+        const sessionTools = activeTools.value.get(data.session_id) || []
+        const formattedTools: string[] = []
+
+        data.content.tool_results.forEach((toolResult: any) => {
+          // Find the original tool use by tool_use_id
+          const tool = sessionTools.find(t => t.id === toolResult.tool_use_id)
+
+          if (tool && tool.name !== 'TodoWrite') {
+            // Format based on tool type
+            let formatted = ''
+
+            switch (tool.name) {
+              case 'Read':
+                formatted = `Read(${tool.input.file_path || ''})`
+                break
+              case 'Write':
+                formatted = `Write(${tool.input.file_path || ''})`
+                break
+              case 'Edit':
+                formatted = `Edit(${tool.input.file_path || ''})`
+                break
+              case 'Bash':
+                const cmd = tool.input.command || ''
+                formatted = `Bash(${cmd.length > 50 ? cmd.substring(0, 50) + '...' : cmd})`
+                break
+              case 'Glob':
+                formatted = `Glob(${tool.input.pattern || ''})`
+                break
+              case 'Grep':
+                formatted = `Grep(${tool.input.pattern || ''})`
+                break
+              default:
+                formatted = `${tool.name}()`
+            }
+
+            formattedTools.push(formatted)
           }
+        })
+
+        // Only create a message if we have tools to display
+        if (formattedTools.length > 0) {
+          const toolMessage = {
+            id: `msg-${data.session_id}-${Date.now()}`,
+            role: 'assistant',
+            content: formattedTools.join(', '),
+            timestamp: new Date(),
+            isToolResult: true
+          }
+
+          messages.value[data.session_id].push(toolMessage)
+          console.log('🔧 Created tool result message:', toolMessage.content)
         }
 
-        sessionToolExecution.value.set(sessionId, toolExecution)
+        return
       }
 
-      // Track active tools for overlays
-      if (!activeTools.value.has(sessionId)) {
-        activeTools.value.set(sessionId, [])
+      // Skip empty content and system messages (they don't need UI display)
+      if (!textContent || textContent.includes('SystemMessage')) {
+        console.log('⏭️  Skipping empty/system message')
+        return
       }
 
-      const tools = activeTools.value.get(sessionId)!
-      const toolId = data.tool_use_id || crypto.randomUUID()
-
-      tools.push({
-        id: toolId,
-        name: data.tool_name,
-        input: data.input,
-        timestamp: new Date()
-      })
-
-      // Keep only last 5 tools
-      if (tools.length > 5) {
-        tools.shift()
+      // Check if we're awaiting tool results (after permission approval)
+      const isToolResult = awaitingToolResults.value.has(data.session_id)
+      if (isToolResult) {
+        awaitingToolResults.value.delete(data.session_id)
       }
 
-      // Auto-scroll if user is near bottom
-      if (isUserNearBottom.value) {
-        scrollToBottom(null, true)
+      // Create or update assistant message
+      // Since backend sends complete messages (not character-by-character streaming),
+      // we just create a new message for each response
+      const newMessage = {
+        id: `msg-${data.session_id}-${Date.now()}`,
+        role: 'assistant',
+        content: textContent,
+        timestamp: new Date(),
+        streaming: false,
+        isToolResult: isToolResult
+      }
+
+      messages.value[data.session_id].push(newMessage)
+      console.log('✨ Created new message:', newMessage.id)
+
+      // Reset processing state when we receive content
+      isProcessing.value = false
+      isThinking.value = false
+
+      // Auto-scroll to bottom if user is near bottom
+      autoScrollIfNearBottom(messagesContainer.value)
+    })
+
+    agentWs.on('onAgentThinking', (data) => {
+      if (data.session_id === activeSessionId.value) {
+        isThinking.value = data.thinking
+        // When thinking stops, ensure processing is also reset
+        if (!data.thinking) {
+          isProcessing.value = false
+        }
+      }
+
+      // Update session status based on thinking state
+      const session = sessions.value.find(s => s.id === data.session_id)
+      if (session) {
+        session.status = data.thinking ? 'processing' : 'idle'
       }
     })
 
-    // Permission request
-    agentWs.on('permission_request', (data: any) => {
-      const sessionId = data.session_id
-      console.log('Permission request:', data)
+    agentWs.on('onAgentToolUse', (data) => {
+      // Update session status to processing when tool is being used
+      const session = sessions.value.find(s => s.id === data.session_id)
+      if (session) {
+        session.status = 'processing'
+      }
 
-      // Track permission statistics
-      if (!sessionPermissionStats.value.has(sessionId)) {
-        sessionPermissionStats.value.set(sessionId, {
-          approved: 0,
-          denied: 0,
-          total: 0
+      // Track tool usage for metrics
+      const toolStats = sessionToolStats.value.get(data.session_id) || {}
+      toolStats[data.tool] = (toolStats[data.tool] || 0) + 1
+      sessionToolStats.value.set(data.session_id, toolStats)
+
+      // Extract tool details from parameters for display
+      let toolDetail = ''
+      if (data.parameters) {
+        const params = typeof data.parameters === 'string' ? JSON.parse(data.parameters) : data.parameters
+        if (data.tool === 'Read' || data.tool === 'Write' || data.tool === 'Edit') {
+          toolDetail = params.file_path
+        } else if (data.tool === 'Bash') {
+          toolDetail = params.command
+        } else if (data.tool === 'Glob') {
+          toolDetail = params.pattern
+        } else if (data.tool === 'Grep') {
+          toolDetail = params.pattern
+        }
+      }
+
+      // Update tool execution display
+      if (data.session_id === activeSessionId.value) {
+        sessionToolExecution.value.set(data.session_id, {
+          toolName: data.tool,
+          filePath: data.tool === 'Read' || data.tool === 'Write' || data.tool === 'Edit' ? toolDetail : undefined,
+          command: data.tool === 'Bash' ? toolDetail : undefined,
+          pattern: data.tool === 'Glob' || data.tool === 'Grep' ? toolDetail : undefined,
+          detail: toolDetail
         })
       }
-      const permStats = sessionPermissionStats.value.get(sessionId)!
-      permStats.total++
 
-      if (!sessionPermissions.value.has(sessionId)) {
-        sessionPermissions.value.set(sessionId, [])
+      if (!messages.value[data.session_id]) return
+
+      const lastMessage = messages.value[data.session_id][messages.value[data.session_id].length - 1]
+      if (lastMessage && lastMessage.role === 'assistant') {
+        lastMessage.toolUse = data.tool
       }
 
-      const permissions = sessionPermissions.value.get(sessionId)!
-      permissions.push({
-        id: data.permission_id,
-        tool_name: data.tool_name,
-        tool_input: data.tool_input,
-        timestamp: new Date(),
-        status: 'pending'
-      })
+      // Handle TodoWrite specifically
+      if (data.tool && data.tool.includes('TodoWrite')) {
+        console.log('TodoWrite tool used with data:', data)
 
-      awaitingToolResults.value.add(sessionId)
+        // Try to extract todos from the data.input property (for new format)
+        let todos: TodoItem[] | null = null
 
-      // Auto-scroll if user is near bottom
-      if (isUserNearBottom.value) {
-        scrollToBottom(null, true)
-      }
-    })
+        // If data has input with todos (new enhanced format), use that
+        if (data.input && typeof data.input === 'object' && data.input.todos) {
+          todos = data.input.todos
+          console.log('Extracted todos from data.input:', todos)
+        } else {
+          // Try legacy parsing from tool string representation
+          const toolStr = String(data.tool || '')
+          todos = parseTodoWrite(toolStr)
+          console.log('Parsed todos from legacy tool string:', todos)
+        }
 
-    // Permission acknowledged
-    agentWs.on('permission_acknowledged', (data: any) => {
-      const sessionId = data.session_id
-      console.log('Permission acknowledged:', data)
+        if (todos && Array.isArray(todos)) {
+          console.log('Updating session', data.session_id, 'with todos:', todos)
+          updateSessionTodos(data.session_id, todos)
 
-      const permissions = sessionPermissions.value.get(sessionId)
-      if (permissions) {
-        const permission = permissions.find(p => p.id === data.permission_id)
-        if (permission) {
-          permission.status = data.approved ? 'approved' : 'denied'
-
-          // Update permission statistics
-          const permStats = sessionPermissionStats.value.get(sessionId)
-          if (permStats) {
-            if (data.approved) {
-              permStats.approved++
-            } else {
-              permStats.denied++
-            }
+          // Set up auto-hide timer if all todos are completed
+          const allCompleted = todos.every(todo => todo.status === 'completed')
+          if (allCompleted) {
+            console.log('All todos completed, setting auto-hide timer for 5 seconds')
+            setTimeout(() => {
+              // Clear todos after delay, only if all are still completed
+              const currentTodos = sessionTodos.value.get(data.session_id)
+              if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
+                sessionTodos.value.delete(data.session_id)
+                console.log('Auto-hiding todos for session', data.session_id)
+              }
+            }, 5000)
           }
         }
+      } else {
+        // Parse tool execution from the tool use data (for non-TodoWrite tools)
+        const toolExecution = parseToolUse(data.tool || '')
+        if (toolExecution) {
+          updateSessionToolExecution(data.session_id, toolExecution)
+        }
       }
-
-      awaitingToolResults.value.delete(sessionId)
     })
 
-    // Error
-    agentWs.on('error', (data: any) => {
-      console.error('Agent error:', data)
+    agentWs.on('onPermissionRequest', (data) => {
+      // Track permission request for metrics
+      const permStats = sessionPermissionStats.value.get(data.session_id) || { approved: 0, denied: 0, total: 0 }
+      permStats.total++
+      sessionPermissionStats.value.set(data.session_id, permStats)
 
-      const sessionId = data.session_id || activeSessionId.value
+      // Add to session-specific permissions map
+      const sessionPerms = sessionPermissions.value.get(data.session_id) || []
+      sessionPerms.push({
+        ...data,
+        timestamp: new Date()
+      })
+      sessionPermissions.value.set(data.session_id, sessionPerms)
+    })
 
-      if (sessionId && messages.value[sessionId]) {
-        messages.value[sessionId].push({
+    agentWs.on('onPermissionAcknowledged', (data) => {
+      if (data.session_id === activeSessionId.value) {
+        // Add a status message showing execution started
+        if (!messages.value[data.session_id]) {
+          messages.value[data.session_id] = []
+        }
+
+        const statusText = data.approved ?
+          `⚡ Executing ${data.tool} command...` :
+          `🚫 ${data.tool} command denied`
+
+        messages.value[data.session_id].push({
           id: crypto.randomUUID(),
-          role: 'error',
-          content: data.message || 'An error occurred',
+          role: 'system',
+          content: statusText,
+          timestamp: new Date(),
+          isExecutionStatus: true
+        })
+
+        // If approved, mark that we're awaiting tool results (should appear as new message)
+        if (data.approved) {
+          awaitingToolResults.value.add(data.session_id)
+
+          // Mark the last assistant message as complete (not streaming) so new messages
+          // after tool execution don't get appended to it
+          const lastMessage = messages.value[data.session_id].findLast(m => m.role === 'assistant')
+          if (lastMessage && lastMessage.streaming) {
+            lastMessage.streaming = false
+          }
+        }
+
+        // Auto-scroll to bottom if user is near bottom
+        autoScrollIfNearBottom(messagesContainer.value)
+      }
+    })
+
+    agentWs.on('onError', (data) => {
+      console.error('Agent error:', data.message)
+      // Always reset on error
+      isProcessing.value = false
+      isThinking.value = false
+
+      // Clear awaiting tool results flag on error
+      if (data.session_id) {
+        awaitingToolResults.value.delete(data.session_id)
+      }
+
+      // Show error message to user
+      if (data.session_id && messages.value[data.session_id]) {
+        messages.value[data.session_id].push({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: `⚠️ Error: ${data.message}`,
           timestamp: new Date(),
           isError: true
         })
       }
 
-      isProcessing.value = false
-      isThinking.value = false
-
-      // Auto-scroll if user is near bottom
-      if (isUserNearBottom.value) {
-        scrollToBottom(null, true)
+      // Focus input after error so user can retry
+      if (data.session_id === activeSessionId.value) {
+        focusMessageInput()
       }
     })
 
-    // Sessions list
-    agentWs.on('sessions_list', (data: any) => {
-      console.log('Sessions list:', data)
-
-      if (data.sessions) {
-        // Update sessions with latest data from server
-        sessions.value = data.sessions.map((s: any) => ({
-          ...s,
-          // Preserve existing UI state if session already exists
-          ...(sessions.value.find(existing => existing.id === s.id) || {})
-        }))
-
-        // Initialize messages for sessions that don't have any
-        data.sessions.forEach((session: any) => {
-          if (!messages.value[session.id]) {
-            messages.value[session.id] = []
-          }
-        })
-      }
+    agentWs.on('onSessionsList', (data) => {
+      sessions.value = data.sessions
     })
 
-    // Session deleted
-    agentWs.on('session_deleted', (data: any) => {
-      console.log('Session deleted:', data)
-
-      // Server has confirmed deletion, update local state
-      sessions.value = sessions.value.filter(s => s.id !== data.session_id)
-      delete messages.value[data.session_id]
-      messagesLoaded.value.delete(data.session_id)
-
-      if (activeSessionId.value === data.session_id) {
-        activeSessionId.value = null
-      }
+    agentWs.on('onSessionDeleted', (data) => {
+      console.log('🗑️ Session deleted:', data.session_id)
+      // Session already removed from local state in deleteSession (optimistic update)
+      // Just log confirmation
     })
 
-    // All sessions deleted
-    agentWs.on('all_sessions_deleted', () => {
-      console.log('All sessions deleted')
+    agentWs.on('onAllSessionsDeleted', (data) => {
+      console.log('🗑️ All sessions deleted, count:', data.count)
+
+      // Clear all sessions and messages
       sessions.value = []
       messages.value = {}
       messagesLoaded.value.clear()
       activeSessionId.value = null
+      awaitingToolResults.value.clear()
+
+      // Clear all pending timers
+      todoHideTimers.value.forEach((timer) => clearTimeout(timer))
+      todoHideTimers.value.clear()
+
+      // Clear all live agents session data
+      sessionTodos.value.clear()
+      sessionToolExecution.value.clear()
+      sessionPermissions.value.clear()
+
+      // Clear all session metrics
+      sessionToolStats.value.clear()
+      sessionPermissionStats.value.clear()
+
+      // Show success message
+      alert(`Successfully deleted ${data.count} sessions from the database`)
     })
 
-    // Messages loaded
-    agentWs.on('messages_loaded', (data: any) => {
-      console.log('Messages loaded:', data)
+    agentWs.on('onMessagesLoaded', (data) => {
+      console.log('📥 Messages loaded:', data)
 
-      if (data.messages && data.session_id) {
-        const sessionId = data.session_id
+      if (!data.session_id || !data.messages) return
 
-        // Convert historical messages to chat format
-        const historicalMessages = data.messages.map((msg: any) => ({
-          id: crypto.randomUUID(),
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.timestamp),
-          isHistorical: true
-        }))
+      // Debug: log sequence numbers
+      console.log('Message sequences from DB:', data.messages.map((m: any) => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
 
-        // Replace messages for this session
-        messages.value[sessionId] = historicalMessages
-        messagesLoaded.value.add(sessionId)
+      // Convert DB messages to UI message format
+      const uiMessages = data.messages.map((dbMsg: any) => ({
+        id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
+        role: dbMsg.role,
+        content: dbMsg.content,
+        timestamp: new Date(dbMsg.timestamp),
+        sequence: dbMsg.sequence,
+        isHistorical: true,
+        toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
+        thinkingContent: dbMsg.thinking_content || undefined
+      }))
 
-        // Auto-scroll to bottom after loading
-        scrollToBottom(null, false)
-      }
-    })
-
-    // Agents killed
-    agentWs.on('agents_killed', (data: any) => {
-      console.log('Agents killed:', data)
-
-      // Update all sessions to ended status
-      sessions.value.forEach(session => {
-        if (session.status === 'active') {
-          session.status = 'ended'
+      // Sort messages by sequence number first, then by timestamp for stable ordering
+      // This handles cases where multiple messages have the same sequence number
+      uiMessages.sort((a, b) => {
+        if (a.sequence !== b.sequence) {
+          return a.sequence - b.sequence
         }
+        // If sequence numbers are equal, sort by timestamp
+        return a.timestamp.getTime() - b.timestamp.getTime()
       })
 
-      isProcessing.value = false
-      isThinking.value = false
+      console.log('Sorted message sequences:', uiMessages.map(m => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
+
+      // Set or prepend messages for the session
+      if (!messages.value[data.session_id]) {
+        messages.value[data.session_id] = []
+      }
+
+      // Prepend historical messages (now sorted by sequence, oldest first)
+      messages.value[data.session_id] = [...uiMessages, ...messages.value[data.session_id]]
+
+      console.log(`📥 Loaded ${uiMessages.length} historical messages for session ${data.session_id}`)
     })
-  }
 
-  // Initialize handlers when WebSocket connects
-  const initializeHandlers = () => {
-    if (agentWs.connected) {
-      setupHandlers()
+    agentWs.on('onAgentsKilled', (data) => {
 
-      // Request list of sessions
-      agentWs.send({ type: 'list_sessions' })
-    }
+      // Clear all sessions and messages
+      sessions.value = []
+      messages.value = {}
+      messagesLoaded.value.clear()  // Clear loaded messages tracking
+      activeSessionId.value = null
+      awaitingToolResults.value.clear()  // Clear all flags
+
+      // Clear all pending timers
+      todoHideTimers.value.forEach((timer) => clearTimeout(timer))
+      todoHideTimers.value.clear()
+
+      // Clear all live agents session data
+      sessionTodos.value.clear()
+      sessionToolExecution.value.clear()
+      sessionPermissions.value.clear()  // Clear all session permissions
+
+      // Clear all session metrics
+      sessionToolStats.value.clear()
+      sessionPermissionStats.value.clear()
+
+      // Show success message
+      alert(`Successfully killed ${data.killed_count} agents`)
+    })
   }
 
   return {
-    setupHandlers,
-    initializeHandlers
+    setupHandlers
   }
 }
