@@ -15,7 +15,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/pterm/pterm v0.12.81
-	github.com/schlunsen/claude-agent-sdk-go v0.2.3
+	github.com/schlunsen/claude-agent-sdk-go v0.2.4
 	github.com/spf13/cobra v1.10.1
 )
 
@@ -54,5 +54,3 @@ require (
 	golang.org/x/term v0.36.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 )
-
-replace github.com/schlunsen/claude-agent-sdk-go => /Users/schlunsen/projects/claude-agent-sdk-go
