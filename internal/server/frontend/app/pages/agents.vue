@@ -202,6 +202,7 @@ import { parseToolUse, getToolIcon } from '~/utils/agents/toolParser'
 import { useMessageScroll } from '~/composables/agents/useMessageScroll'
 import { useSessionState } from '~/composables/agents/useSessionState'
 import { useAgentProviders } from '~/composables/agents/useAgentProviders'
+import { useSessionActions } from '~/composables/agents/useSessionActions'
 
 // Existing overlays
 import TodoWriteOverlay from '~/components/TodoWriteOverlay.vue'
@@ -268,350 +269,67 @@ const {
 // Auto-scroll composable
 const { isUserNearBottom, handleScroll, scrollToBottom, autoScrollIfNearBottom } = useMessageScroll()
 
-// Session management
-const createNewSession = async () => {
-  if (!agentWs.connected) return
+// Helper functions needed by session actions
+const cleanupSessionData = (sessionId: string) => {
+  sessionTodos.value.delete(sessionId)
+  sessionToolExecution.value.delete(sessionId)
+  activeTools.value.delete(sessionId)
+}
 
-  // Reset form to defaults
-  sessionForm.value = {
-    workingDirectory: '',
-    permissionMode: 'default',
-    modelProvider: 'anthropic',
-    model: 'claude-sonnet-4.5-20250514',
-    systemPrompt: '',
-    promptMode: 'agent',
-    selectedAgent: '',
-    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
-  }
-
-  // Fetch current working directory
-  try {
-    const response = await fetch('/api/config/cwd')
-    if (response.ok) {
-      const data = await response.json()
-      if (data.cwd) {
-        sessionForm.value.workingDirectory = data.cwd
-        console.log('Auto-populated working directory:', data.cwd)
-        // Load agents from this directory
-        await loadAvailableAgents()
-      }
+const focusMessageInput = () => {
+  nextTick(() => {
+    if (messageInput.value && !messageInput.value.disabled) {
+      messageInput.value.focus()
     }
-  } catch (error) {
-    console.error('Error fetching current working directory:', error)
-  }
-
-  showCreateSessionModal.value = true
-}
-
-const createSessionWithOptions = async () => {
-  if (!agentWs.connected || !sessionForm.value.workingDirectory) return
-
-  creatingSession.value = true
-
-  try {
-    const sessionId = crypto.randomUUID()
-
-    // Find the selected provider to get base_url
-    const selectedProvider = availableProviders.value.find(p => p.id === sessionForm.value.modelProvider)
-
-    const options: any = {
-      tools: sessionForm.value.tools,
-      working_directory: sessionForm.value.workingDirectory,
-      permission_mode: sessionForm.value.permissionMode,
-      provider: sessionForm.value.modelProvider,
-      model: sessionForm.value.model
-    }
-
-    // Add base_url if the provider has one (for non-default Anthropic providers)
-    if (selectedProvider?.base_url) {
-      options.base_url = selectedProvider.base_url
-    }
-
-    // Use agent_name if agent mode is selected, otherwise use system_prompt
-    if (sessionForm.value.promptMode === 'agent' && sessionForm.value.selectedAgent) {
-      options.agent_name = sessionForm.value.selectedAgent
-    } else {
-      options.system_prompt = sessionForm.value.systemPrompt || 'You are a helpful AI assistant.'
-    }
-
-    console.log('Creating session with options:', options)
-
-    agentWs.send({
-      type: 'create_session',
-      session_id: sessionId,
-      options
-    })
-
-    showCreateSessionModal.value = false
-  } catch (error) {
-    console.error('Failed to create session:', error)
-    alert('Failed to create session. Please try again.')
-  } finally {
-    creatingSession.value = false
-  }
-}
-
-const loadAvailableAgents = async () => {
-  loadingAgents.value = true
-  try {
-    const response = await fetch('/api/agents')
-    if (!response.ok) throw new Error(`Failed to fetch agents: ${response.status}`)
-    const data = await response.json()
-    availableAgents.value = data.agents ? Object.values(data.agents) : []
-    console.log(`Loaded ${availableAgents.value.length} agents from project`, availableAgents.value)
-  } catch (error) {
-    console.error('Error loading agents:', error)
-    availableAgents.value = []
-  } finally {
-    loadingAgents.value = false
-  }
-}
-
-// Load available providers from backend
-const loadProviders = async () => {
-  loadingProviders.value = true
-  try {
-    const response = await fetch('/api/providers')
-    if (!response.ok) throw new Error(`Failed to fetch providers: ${response.status}`)
-    const data = await response.json()
-    availableProviders.value = data.providers || []
-    currentProvider.value = data.current
-
-    // Update form defaults based on current provider
-    if (currentProvider.value) {
-      const provider = availableProviders.value.find(p => p.id === currentProvider.value.provider_id)
-      if (provider) {
-        sessionForm.value.modelProvider = provider.id
-        if (currentProvider.value.model_name) {
-          sessionForm.value.model = currentProvider.value.model_name
-        } else if (provider.default_model) {
-          sessionForm.value.model = provider.default_model
-        }
-      }
-    }
-
-    console.log(`Loaded ${availableProviders.value.length} providers`, availableProviders.value)
-  } catch (error) {
-    console.error('Error loading providers:', error)
-    availableProviders.value = []
-  } finally {
-    loadingProviders.value = false
-  }
-}
-
-// Reload agents (agents auto-load from cwd)
-const handleWorkingDirectoryChange = async () => {
-  if (sessionForm.value.workingDirectory) {
-    await loadAvailableAgents()
-    // Clear selected agent when working directory changes
-    sessionForm.value.selectedAgent = ''
-    selectedAgentPreview.value = null
-  }
-}
-
-// Auto-scroll helpers
-// Scroll functions are now provided by useMessageScroll() composable
-
-const loadSelectedAgent = async () => {
-  if (!sessionForm.value.selectedAgent) {
-    selectedAgentPreview.value = null
-    return
-  }
-
-  try {
-    const response = await fetch(`/api/agents/${sessionForm.value.selectedAgent}`)
-    if (!response.ok) throw new Error('Failed to fetch agent')
-    const data = await response.json()
-    selectedAgentPreview.value = data.agent
-    console.log(`Loaded agent: ${sessionForm.value.selectedAgent}`, data.agent)
-  } catch (error) {
-    console.error('Error loading agent:', error)
-    selectedAgentPreview.value = null
-  }
-}
-
-const selectSession = (sessionId) => {
-  activeSessionId.value = sessionId
-
-  // Load historical messages if not already loaded
-  // Only load if we haven't loaded this session before (prevents loading for new sessions)
-  if (!messagesLoaded.value.has(sessionId)) {
-    console.log(`Loading messages for session ${sessionId}`)
-    agentWs.send({
-      type: 'load_messages',
-      session_id: sessionId,
-      limit: 100,
-      offset: 0
-    })
-    // Mark as loaded (even if empty) to prevent re-loading
-    messagesLoaded.value.add(sessionId)
-  }
-
-  // Reset scroll state and scroll to bottom when switching sessions
-  isUserNearBottom.value = true
-  scrollToBottom(messagesContainer.value, false)
-
-  // Focus the input when switching to a session
-  focusMessageInput()
-}
-
-const endSession = async (sessionId) => {
-  if (!agentWs.connected) return
-
-  agentWs.send({
-    type: 'end_session',
-    session_id: sessionId
   })
-
-  // Remove from local state
-  sessions.value = sessions.value.filter(s => s.id !== sessionId)
-  delete messages.value[sessionId]
-  messagesLoaded.value.delete(sessionId)  // Clean up loaded tracking
-  awaitingToolResults.value.delete(sessionId)  // Clean up flag
-
-  // Clean up any pending timers
-  const existingTimer = todoHideTimers.value.get(sessionId)
-  if (existingTimer) {
-    clearTimeout(existingTimer)
-    todoHideTimers.value.delete(sessionId)
-  }
-
-  // Clean up live agents session data
-  cleanupSessionData(sessionId)
-
-  // Clean up session permissions
-  sessionPermissions.value.delete(sessionId)
-
-  // Clean up session metrics
-  sessionToolStats.value.delete(sessionId)
-  sessionPermissionStats.value.delete(sessionId)
-
-  if (activeSessionId.value === sessionId) {
-    activeSessionId.value = null
-  }
 }
 
-const deleteSession = async (sessionId) => {
-  if (!agentWs.connected) return
-
-  // Confirm deletion
-  if (!confirm('Are you sure you want to delete this session? This action cannot be undone.')) {
-    return
-  }
-
-  agentWs.send({
-    type: 'delete_session',
-    session_id: sessionId
-  })
-
-  // Remove from local state immediately (optimistic update)
-  sessions.value = sessions.value.filter(s => s.id !== sessionId)
-  delete messages.value[sessionId]
-  messagesLoaded.value.delete(sessionId)
-  awaitingToolResults.value.delete(sessionId)
-
-  // Clean up any pending timers
-  const existingTimer = todoHideTimers.value.get(sessionId)
-  if (existingTimer) {
-    clearTimeout(existingTimer)
-    todoHideTimers.value.delete(sessionId)
-  }
-
-  // Clean up live agents session data
-  cleanupSessionData(sessionId)
-
-  // Clean up session permissions
-  sessionPermissions.value.delete(sessionId)
-
-  // Clean up session metrics
-  sessionToolStats.value.delete(sessionId)
-  sessionPermissionStats.value.delete(sessionId)
-
-  if (activeSessionId.value === sessionId) {
-    activeSessionId.value = null
-  }
-}
-
-// Resume session functionality
-const loadAvailableSessions = async () => {
-  loadingSessions.value = true
-  try {
-    const response = await $fetch('/api/prompts/sessions')
-    availableSessions.value = response.sessions || []
-  } catch (error) {
-    console.error('Failed to load sessions:', error)
-    availableSessions.value = []
-  } finally {
-    loadingSessions.value = false
-  }
-}
-
-const openResumeModal = () => {
-  showResumeModal.value = true
-}
-
-const selectSessionForResume = async (session) => {
-  selectedResumeSession.value = session
-
-  // Prefill the form with the session's data
-  resumeForm.value = {
-    workingDirectory: session.working_directory || '',
-    permissionMode: 'default',
-    systemPrompt: '',
-    tools: ['Read', 'Write', 'Edit', 'Bash', 'Search', 'TodoWrite']
-  }
-}
-
-const resumeSessionWithOptions = async () => {
-  try {
-    if (!selectedResumeSession.value) return
-
-    resumingSession.value = true
-
-    // Fetch resume data from the backend
-    const resumeData = await $fetch(`/api/sessions/${selectedResumeSession.value.conversation_id}/resume-data`)
-
-    // Create new agent session with history context and options
-    const sessionId = crypto.randomUUID()
-
-    agentWs.send({
-      type: 'create_session',
-      session_id: sessionId,
-      options: {
-        tools: resumeForm.value.tools,
-        system_prompt: resumeForm.value.systemPrompt || 'You are a helpful AI assistant.',
-        working_directory: resumeForm.value.workingDirectory || resumeData.working_directory,
-        permission_mode: resumeForm.value.permissionMode,
-        conversation_history: resumeData.context,
-        original_conversation_id: resumeData.conversation_id
-      }
-    })
-
-    // Close the modal and reset selection
-    showResumeModal.value = false
-    selectedResumeSession.value = null
-
-    // Add historical messages to the chat
-    if (resumeData.messages && resumeData.messages.length > 0) {
-      messages.value[sessionId] = []
-      resumeData.messages.forEach(msg => {
-        messages.value[sessionId].push({
-          id: crypto.randomUUID(),
-          role: 'user',
-          content: msg.message,
-          timestamp: new Date(msg.submitted_at),
-          isHistorical: true
-        })
-      })
-    }
-
-  } catch (error) {
-    console.error('Failed to resume session:', error)
-    alert('Failed to resume session. Please try again.')
-  } finally {
-    resumingSession.value = false
-  }
-}
+// Session actions composable
+const {
+  createNewSession,
+  createSessionWithOptions,
+  loadAvailableAgents,
+  loadProviders,
+  handleWorkingDirectoryChange,
+  loadSelectedAgent,
+  selectSession,
+  endSession,
+  deleteSession,
+  loadAvailableSessions,
+  openResumeModal,
+  selectSessionForResume,
+  resumeSessionWithOptions
+} = useSessionActions({
+  agentWs,
+  sessions,
+  activeSessionId,
+  messages,
+  messagesLoaded,
+  showCreateSessionModal,
+  showResumeModal,
+  selectedResumeSession,
+  availableSessions,
+  loadingSessions,
+  creatingSession,
+  resumingSession,
+  sessionPermissions,
+  awaitingToolResults,
+  todoHideTimers,
+  sessionToolStats,
+  sessionPermissionStats,
+  isUserNearBottom,
+  sessionForm,
+  resumeForm,
+  availableAgents,
+  selectedAgentPreview,
+  loadingAgents,
+  availableProviders,
+  currentProvider,
+  loadingProviders,
+  scrollToBottom,
+  focusMessageInput,
+  cleanupSessionData
+})
 
 const formatRelativeTime = (timestamp) => {
   const date = new Date(timestamp)
@@ -823,12 +541,6 @@ const removeActiveTool = (sessionId: string, toolId: string) => {
   activeTools.value.set(sessionId, filtered)
 }
 
-const cleanupSessionData = (sessionId: string) => {
-  sessionTodos.value.delete(sessionId)
-  sessionToolExecution.value.delete(sessionId)
-  activeTools.value.delete(sessionId)
-}
-
 const truncatePath = (path: string): string => {
   if (!path) return ''
   if (path.length <= 50) return path
@@ -907,15 +619,6 @@ const sendMessage = async () => {
     type: 'send_prompt',
     session_id: activeSessionId.value,
     prompt: message
-  })
-}
-
-// Helper function to focus message input
-const focusMessageInput = () => {
-  nextTick(() => {
-    if (messageInput.value && !messageInput.value.disabled) {
-      messageInput.value.focus()
-    }
   })
 }
 
