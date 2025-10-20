@@ -154,8 +154,23 @@ const defaultCharacter: CharacterInfo = {
 }
 
 /**
- * Get character avatar information for a session name
- * @param sessionName - The session name to look up (case-insensitive)
+ * Simple hash function to convert a string to a number
+ * @param str - The string to hash
+ * @returns A numeric hash value
+ */
+function simpleHash(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash // Convert to 32-bit integer
+  }
+  return Math.abs(hash)
+}
+
+/**
+ * Get character avatar information for a session name or ID
+ * @param sessionName - The session name/ID to look up
  * @returns Character information including name, avatar path, and color
  */
 export function useCharacterAvatar(sessionName?: string | null): CharacterInfo {
@@ -166,8 +181,20 @@ export function useCharacterAvatar(sessionName?: string | null): CharacterInfo {
   // Normalize session name (lowercase, trim whitespace)
   const normalizedName = sessionName.toLowerCase().trim()
 
-  // Return character info or default
-  return characterMap[normalizedName] || defaultCharacter
+  // First, try direct character name lookup
+  if (characterMap[normalizedName]) {
+    return characterMap[normalizedName]
+  }
+
+  // If not found, use hash to map session ID to a character
+  const characters = Object.values(characterMap).filter(
+    (char, index, self) => self.findIndex(c => c.name === char.name) === index
+  )
+
+  const hash = simpleHash(sessionName)
+  const index = hash % characters.length
+
+  return characters[index]
 }
 
 /**

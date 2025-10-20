@@ -98,9 +98,15 @@
             @click="selectSession(session.id)"
           >
             <div class="session-status-dot" :class="session.status"></div>
+            <img
+              :src="useCharacterAvatar(session.id).avatar"
+              :alt="useCharacterAvatar(session.id).name"
+              class="session-avatar"
+            />
             <div class="session-info">
-              <div class="session-name">Session {{ session.id.slice(0, 8) }}</div>
+              <div class="session-name">{{ useCharacterAvatar(session.id).name }}</div>
               <div class="session-meta">
+                <span class="session-id">{{ session.id.slice(0, 8) }}</span>
                 <span class="session-status" :class="session.status">{{ session.status }}</span>
                 <span class="session-messages">{{ session.message_count }} messages</span>
                 <span v-if="session.cost_usd && session.cost_usd > 0" class="session-cost">${{ session.cost_usd.toFixed(4) }}</span>
@@ -2559,6 +2565,17 @@ watch(activeMessages, () => {
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
 }
 
+.session-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 12px;
+  border: 2px solid var(--border-color);
+  background: var(--bg-primary);
+  flex-shrink: 0;
+}
+
 .session-info {
   flex: 1;
   overflow: hidden;
@@ -2576,6 +2593,12 @@ watch(activeMessages, () => {
   font-size: 0.8rem;
   opacity: 0.8;
   flex-wrap: wrap;
+}
+
+.session-id {
+  color: var(--text-muted);
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.75rem;
 }
 
 .session-messages {

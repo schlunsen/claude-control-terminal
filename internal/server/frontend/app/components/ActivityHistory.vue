@@ -39,7 +39,7 @@
             <path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>
           </svg>
           <span class="trigger-text">
-            {{ selectedSession || 'All Sessions' }}
+            {{ selectedSession ? useCharacterAvatar(selectedSession).name : 'All Sessions' }}
           </span>
         </div>
         <svg class="trigger-chevron" :class="{ open: isSessionDropdownOpen }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -70,9 +70,9 @@
             class="session-avatar"
           />
           <div class="session-info">
-            <span class="session-name">{{ session.name }}</span>
+            <span class="session-name">{{ useCharacterAvatar(session.name).name }}</span>
             <div class="session-meta">
-              <span v-if="session.id" class="session-id">{{ session.id }}</span>
+              <span class="session-id">{{ session.name }}</span>
               <span v-if="session.startTime" class="session-time">{{ formatSessionTime(session.startTime) }}</span>
             </div>
           </div>

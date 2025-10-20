@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - Character Avatar Enhancement & Session Management - 2025-10-20
+
+### Added
+- Deterministic character avatar assignment for session IDs using hash-based mapping
+- Character avatars now displayed in session selector on agents page for visual identification
+- Session start time tracking and display in dropdown selectors with relative timestamps
+- Enhanced session metadata showing both character name and session ID for better clarity
+
+### Changed
+- Session selector dropdown now shows character names instead of raw session IDs for better UX
+- Character avatar composable enhanced with fallback logic: direct lookup first, then hash-based assignment
+- Sessions now sorted by most recent first in activity history and selector dropdowns
+- Activity history displays character names as primary label with session ID as metadata
+
+### Improved
+- Consistent visual identification across all session displays (agents page, activity history, dropdowns)
+- Better user experience with memorable character-based session naming system
+- Enhanced session management with character avatars providing visual cues throughout UI
+
 ## [0.5.8] - Multi-Provider Support & UI Enhancements - 2025-10-20
 
 ### Added
@@ -717,6 +736,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.5.9]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.7...v0.5.8
 [0.5.7]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.6...v0.5.7
 [0.5.6]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.5...v0.5.6
