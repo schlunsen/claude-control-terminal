@@ -1819,7 +1819,7 @@ agentWs.on('onAgentMessage', (data) => {
     if (formattedTools.length > 0) {
       const toolMessage = {
         id: `msg-${data.session_id}-${Date.now()}`,
-        role: 'user',
+        role: 'assistant',
         content: formattedTools.join(', '),
         timestamp: new Date(),
         isToolResult: true
