@@ -91,12 +91,12 @@ const avatar = useCharacterAvatar(props.session.id)
 }
 
 .session-item:hover {
-  background: var(--color-bg-secondary);
+  background: var(--bg-secondary);
 }
 
 .session-item.active {
-  background: var(--color-primary-alpha);
-  border-left: 3px solid var(--color-primary);
+  background: rgba(139, 92, 246, 0.15);
+  border-left: 3px solid var(--accent-purple);
 }
 
 .session-item.ended {
@@ -111,12 +111,12 @@ const avatar = useCharacterAvatar(props.session.id)
 }
 
 .session-status-dot.active {
-  background: var(--color-success);
-  box-shadow: 0 0 8px var(--color-success);
+  background: #28a745;
+  box-shadow: 0 0 8px #28a745;
 }
 
 .session-status-dot.ended {
-  background: var(--color-text-tertiary);
+  background: var(--text-secondary);
 }
 
 .session-avatar {
@@ -137,7 +137,7 @@ const avatar = useCharacterAvatar(props.session.id)
 
 .session-name {
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-size: 0.875rem;
   white-space: nowrap;
   overflow: hidden;
@@ -148,7 +148,7 @@ const avatar = useCharacterAvatar(props.session.id)
   display: flex;
   gap: 0.5rem;
   font-size: 0.75rem;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   flex-wrap: wrap;
 }
 
@@ -161,11 +161,11 @@ const avatar = useCharacterAvatar(props.session.id)
 }
 
 .session-status.active {
-  color: var(--color-success);
+  color: #28a745;
 }
 
 .session-cost {
-  color: var(--color-warning);
+  color: #ffc107;
   font-weight: 600;
 }
 
@@ -185,7 +185,7 @@ const avatar = useCharacterAvatar(props.session.id)
   padding: 0.25rem;
   border: none;
   background: transparent;
-  color: var(--color-text-tertiary);
+  color: var(--text-secondary);
   cursor: pointer;
   border-radius: 0.25rem;
   transition: all 0.2s;
@@ -195,12 +195,12 @@ const avatar = useCharacterAvatar(props.session.id)
 }
 
 .btn-end-session:hover {
-  background: var(--color-error-alpha);
-  color: var(--color-error);
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
 }
 
 .btn-delete-session:hover {
-  background: var(--color-error-alpha);
-  color: var(--color-error);
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
 }
 </style>
