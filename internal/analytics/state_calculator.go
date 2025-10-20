@@ -17,6 +17,29 @@ type Message struct {
 	ToolResults []interface{}        `json:"toolResults,omitempty"`
 }
 
+// isToolUse checks if a message is actually a tool use by Claude (not a real user message)
+func (m *Message) isToolUse() bool {
+	// Tool uses come through as "user" role messages but contain tool_result content
+	if m.Role != "user" {
+		return false
+	}
+
+	// Check if content is an array with tool_result type
+	if contentArray, ok := m.Content.([]interface{}); ok {
+		for _, item := range contentArray {
+			if contentMap, ok := item.(map[string]interface{}); ok {
+				if msgType, ok := contentMap["type"].(string); ok {
+					if msgType == "tool_result" || msgType == "tool_use" {
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	return false
+}
+
 // RunningProcess represents an active Claude process
 type RunningProcess struct {
 	PID              string
