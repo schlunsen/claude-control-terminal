@@ -2180,16 +2180,18 @@ watch(activeMessages, () => {
 
 <style scoped>
 .agents-page {
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  overflow: hidden;
 }
 
 .header {
   padding: 20px 24px;
   border-bottom: 1px solid var(--border-color);
   background: var(--card-bg);
+  flex-shrink: 0;
 }
 
 .header-content {
@@ -2283,6 +2285,7 @@ watch(activeMessages, () => {
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
 }
 
 /* Sessions Sidebar */
@@ -2292,11 +2295,14 @@ watch(activeMessages, () => {
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .sidebar-header {
   padding: 16px;
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .sidebar-header h3 {
@@ -2313,6 +2319,7 @@ watch(activeMessages, () => {
   padding: 12px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-primary);
+  flex-shrink: 0;
 }
 
 .filter-tab {
@@ -2390,6 +2397,7 @@ watch(activeMessages, () => {
   flex: 1;
   overflow-y: auto;
   padding: 8px;
+  min-height: 0;
 }
 
 .no-sessions {
@@ -3504,6 +3512,7 @@ watch(activeMessages, () => {
   border-top: 1px solid var(--border-color);
   max-height: 200px;
   overflow-y: auto;
+  flex-shrink: 0;
 }
 
 .permission-request {
@@ -3731,6 +3740,7 @@ watch(activeMessages, () => {
   box-shadow: 0 4px 16px rgba(33, 150, 243, 0.25);
   position: relative;
   z-index: 50;
+  flex-shrink: 0;
 }
 
 .tool-execution-content {

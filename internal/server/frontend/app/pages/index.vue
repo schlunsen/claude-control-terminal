@@ -133,7 +133,8 @@ onMounted(() => {
 .frontpage {
   padding: 20px;
   background: var(--bg-primary);
-  min-height: calc(100vh - 60px);
+  height: 100%;
+  overflow-y: auto;
   transition: background-color 0.3s ease;
 }
 

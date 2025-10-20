@@ -101,13 +101,15 @@ onUnmounted(() => {
 
 <style scoped>
 #app {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-primary);
+  overflow: hidden;
 }
 
 .navbar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 1000;
   background: var(--bg-secondary);
   backdrop-filter: blur(10px);
@@ -212,13 +214,16 @@ onUnmounted(() => {
 
 .app-layout {
   display: flex;
-  min-height: calc(100vh - 80px);
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
 }
 
 .main-content {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   transition: all 0.3s ease;
+  min-height: 0;
 }
 
 .main-content-expanded {
