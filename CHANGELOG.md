@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.11] - Image Support & Agent UI Enhancements - 2025-10-20
+
+### Added
+- Image support in agent chat with drag-and-drop and paste functionality for visual asset sharing
+- Lightbox viewer for full-screen image viewing with zoom and navigation controls
+- Image gallery support in agent conversations for better visual context
+
+### Changed
+- Improved agent session creation preserving provider/model settings from TUI configuration
+- Complete modularization of agents.vue component achieving 83% size reduction for better performance
+- Enhanced UI responsiveness and maintainability through component refactoring
+
+### Fixed
+- Provider and model selection now correctly persists when creating new agent sessions from TUI
+- Session creation workflow now respects TUI-configured settings instead of reverting to defaults
+
 ## [0.5.10] - Maintenance Release - 2025-10-20
 
 ### Changed
@@ -742,6 +758,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.5.11]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.8...v0.5.9
 [0.5.8]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.7...v0.5.8
