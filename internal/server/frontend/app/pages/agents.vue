@@ -3465,21 +3465,24 @@ watch(activeMessages, () => {
 
 .tools-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
 .tool-checkbox {
   position: relative;
-  display: flex;
+  display: flex !important;
+  flex-direction: row !important;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 10px 14px;
   background: var(--bg-secondary);
   border: 2px solid var(--border-color);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .tool-checkbox:hover {
@@ -3498,7 +3501,9 @@ watch(activeMessages, () => {
 
 .checkbox-custom {
   position: relative;
-  display: inline-block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 20px;
   height: 20px;
   background: var(--bg-primary);
@@ -3512,8 +3517,8 @@ watch(activeMessages, () => {
   content: '';
   position: absolute;
   display: none;
-  left: 6px;
-  top: 2px;
+  left: 5px;
+  top: 1px;
   width: 5px;
   height: 10px;
   border: solid white;
@@ -3539,6 +3544,10 @@ watch(activeMessages, () => {
   font-weight: 500;
   color: var(--text-primary);
   user-select: none;
+  line-height: 20px;
+  display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .modal-actions {
@@ -4064,7 +4073,8 @@ watch(activeMessages, () => {
   }
 
   .tools-grid {
-    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
   }
 
   .modal-actions {
