@@ -164,7 +164,7 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 
 	// Create provider model name input
 	modelInput := textinput.New()
-	modelInput.Placeholder = "e.g., claude-3-5-sonnet-20241022"
+	modelInput.Placeholder = "e.g., claude-sonnet-4.5-20250514"
 	modelInput.CharLimit = 100
 	modelInput.Width = 60
 

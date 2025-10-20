@@ -73,6 +73,10 @@ type SessionOptions struct {
 	MaxTokens        *int     `json:"max_tokens,omitempty"`
 	Temperature      *float64 `json:"temperature,omitempty"`
 	PermissionMode   *string  `json:"permission_mode,omitempty"`
+	Provider         *string  `json:"provider,omitempty"`  // Provider ID (e.g., "glm", "deepseek")
+	Model            *string  `json:"model,omitempty"`     // Model name
+	BaseURL          *string  `json:"base_url,omitempty"`  // API base URL for custom providers
+	APIKey           *string  `json:"api_key,omitempty"`   // API key for the provider
 }
 
 // Session represents an agent conversation session

@@ -217,7 +217,7 @@ The unified server is configured via `~/.claude/analytics/config.json`:
     "enabled": true
   },
   "agent": {
-    "model": "claude-3-5-sonnet-latest",
+    "model": "claude-sonnet-4-5-20250929",
     "max_concurrent_sessions": 10
   }
 }
@@ -396,6 +396,10 @@ curl https://localhost:3333/api/data -k
       "http://127.0.0.1:3333",
       "https://127.0.0.1:3333"
     ]
+  },
+  "agent": {
+    "model": "claude-sonnet-4-5-20250929",
+    "max_concurrent_sessions": 10
   }
 }
 ```

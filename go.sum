@@ -108,6 +108,8 @@ github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee h1:8Iv5m6xEo1NR1Avp
 github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee/go.mod h1:qwtSXrKuJh/zsFQ12yEE89xfCrGKK63Rr7ctU/uCo4g=
 github.com/schlunsen/claude-agent-sdk-go v0.2.2 h1:3+vsKi8uL4/Hdyz2Sp0ENXWoNV5fHd6nSR3tIwrMVPI=
 github.com/schlunsen/claude-agent-sdk-go v0.2.2/go.mod h1:sSud0rqSWsZbAYmJj1uv6wMEb+ck5XOZCUpb5iA6lXo=
+github.com/schlunsen/claude-agent-sdk-go v0.2.3 h1:l8RlQByyBerlByDVVoo+7l7OPcEPwM1QkrE+PNEihjA=
+github.com/schlunsen/claude-agent-sdk-go v0.2.3/go.mod h1:sSud0rqSWsZbAYmJj1uv6wMEb+ck5XOZCUpb5iA6lXo=
 github.com/sergi/go-diff v1.2.0 h1:XU+rvMAioB0UC3q1MFrIQy4Vo5/4VsRDQQXHsEya6xQ=
 github.com/sergi/go-diff v1.2.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
 github.com/spf13/cobra v1.10.1 h1:lJeBwCfmrnXthfAupyUTzJ/J4Nc1RsHC/mSRU2dll/s=

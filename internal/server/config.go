@@ -187,7 +187,7 @@ func (cm *ConfigManager) getDefaultConfig() *Config {
 			},
 		},
 		Agent: AgentSettings{
-			Model:                 "claude-3-5-sonnet-latest",
+			Model:                 "sonnet",
 			MaxConcurrentSessions: 10,
 		},
 	}

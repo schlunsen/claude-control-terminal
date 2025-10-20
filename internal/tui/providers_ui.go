@@ -60,22 +60,7 @@ func (m Model) handleProvidersListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		selectedProvider := providersList[m.providersCursor]
 		m.selectedProviderID = selectedProvider.ID
 
-		// Special handling for Claude (default) - no API key needed
-		if selectedProvider.ID == "claude" {
-			// Create a minimal configuration
-			config := &database.ProviderConfig{
-				ProviderID: "claude",
-				APIKey:     "", // No API key needed for default
-				CustomURL:  "",
-			}
-
-			// Save and generate script immediately
-			m.screen = ScreenProviderSaving
-			m.providerSaving = true
-			return m, saveProviderCmd(m.dbRepo, config)
-		}
-
-		// For other providers, move to input screen
+		// For all providers including Claude, move to input/model selection screen
 		m.screen = ScreenProviderInput
 
 		// Check if this is custom provider
@@ -113,11 +98,23 @@ func (m Model) handleProvidersListScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.providerAPIKeyInput.SetValue("")
 				m.providerCustomURL.SetValue("")
 				m.providerModelInput.SetValue("")
-				m.providerModelCursor = 0
+
+				// For Claude provider, default to first model (Sonnet 4.5) instead of "No model"
+				if selectedProvider.ID == "claude" && len(selectedProvider.Models) > 0 {
+					m.providerModelCursor = 1 // First model (index 0 is "No model")
+				} else {
+					m.providerModelCursor = 0
+				}
 			}
 		}
 
-		m.providerAPIKeyInput.Focus()
+		// For Claude, don't focus API key input (since it's optional)
+		// User can directly navigate models
+		if selectedProvider.ID == "claude" {
+			m.providerAPIKeyInput.Blur()
+		} else {
+			m.providerAPIKeyInput.Focus()
+		}
 		m.providerError = nil
 
 		return m, textinput.Blink
@@ -212,7 +209,9 @@ func (m Model) handleProviderInputScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		// Save provider configuration
 		apiKey := strings.TrimSpace(m.providerAPIKeyInput.Value())
-		if apiKey == "" {
+
+		// API key is only required for non-Claude providers
+		if apiKey == "" && provider.ID != "claude" {
 			m.providerError = fmt.Errorf("API key is required")
 			return m, nil
 		}
@@ -465,8 +464,12 @@ func (m Model) viewProviderInputScreen() string {
 		}
 	} else {
 		// Full mode - show all fields
-		// API Key input
-		b.WriteString(SubtitleStyle.Render("API Key:") + "\n")
+		// API Key input (optional for Claude)
+		if provider.ID == "claude" {
+			b.WriteString(SubtitleStyle.Render("API Key: ") + StatusInfoStyle.Render("(optional - uses ANTHROPIC_API_KEY from environment)") + "\n")
+		} else {
+			b.WriteString(SubtitleStyle.Render("API Key:") + "\n")
+		}
 		if m.providerAPIKeyInput.Focused() {
 			b.WriteString(InputFocusedStyle.Render(m.providerAPIKeyInput.View()) + "\n\n")
 		} else {

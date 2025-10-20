@@ -40,6 +40,78 @@
         </div>
       </section>
 
+      <!-- AI Provider Configuration -->
+      <section class="section" v-if="systemInfo.provider?.enabled">
+        <h2 class="section-title">AI Provider Configuration</h2>
+        <div class="performance-grid">
+          <div class="performance-card">
+            <h3>Provider Settings</h3>
+            <div class="metric-row">
+              <span>Provider</span>
+              <span class="metric-value">{{ systemInfo.provider?.provider || 'N/A' }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Model</span>
+              <span class="metric-value">{{ systemInfo.provider?.model || 'N/A' }}</span>
+            </div>
+          </div>
+
+          <div class="performance-card" v-if="systemInfo.agent?.enabled">
+            <h3>Agent Settings</h3>
+            <div class="metric-row">
+              <span>Max Concurrent Sessions</span>
+              <span class="metric-value">{{ systemInfo.agent?.max_sessions || 0 }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Session Retention (days)</span>
+              <span class="metric-value">{{ systemInfo.agent?.session_retention || 0 }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Cleanup Enabled</span>
+              <span class="metric-value">{{ systemInfo.agent?.cleanup_enabled ? 'Yes' : 'No' }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Cleanup Interval (hours)</span>
+              <span class="metric-value">{{ systemInfo.agent?.cleanup_interval || 0 }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Legacy Agent Configuration (shown only if provider not configured) -->
+      <section class="section" v-if="!systemInfo.provider?.enabled && systemInfo.agent?.enabled">
+        <h2 class="section-title">Agent Configuration</h2>
+        <div class="performance-grid">
+          <div class="performance-card">
+            <h3>Agent Settings</h3>
+            <div class="metric-row">
+              <span>Model</span>
+              <span class="metric-value">{{ systemInfo.agent?.model || 'N/A' }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Max Concurrent Sessions</span>
+              <span class="metric-value">{{ systemInfo.agent?.max_sessions || 0 }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Session Retention (days)</span>
+              <span class="metric-value">{{ systemInfo.agent?.session_retention || 0 }}</span>
+            </div>
+          </div>
+
+          <div class="performance-card">
+            <h3>Cleanup Settings</h3>
+            <div class="metric-row">
+              <span>Cleanup Enabled</span>
+              <span class="metric-value">{{ systemInfo.agent?.cleanup_enabled ? 'Yes' : 'No' }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Cleanup Interval (hours)</span>
+              <span class="metric-value">{{ systemInfo.agent?.cleanup_interval || 0 }}</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Performance Metrics -->
       <section class="section">
         <h2 class="section-title">Performance</h2>
@@ -59,19 +131,19 @@
           <div class="performance-card">
             <h3>System Resources</h3>
             <div class="metric-row">
-              <span>Memory Usage</span>
-              <span class="metric-value">45 MB</span>
+              <span>WebSocket Clients</span>
+              <span class="metric-value">{{ systemInfo.websocket?.clients || 0 }}</span>
             </div>
             <div class="metric-row">
-              <span>CPU Usage</span>
-              <span class="metric-value">12%</span>
+              <span>Server Port</span>
+              <span class="metric-value">{{ systemInfo.server?.port || 3333 }}</span>
             </div>
             <div class="metric-row">
               <span>Database Size</span>
               <div class="metric-with-action">
                 <span class="metric-value">{{ dbStats.db_size_human || 'Loading...' }}</span>
-                <button 
-                  class="purge-btn" 
+                <button
+                  class="purge-btn"
                   @click="confirmPurgeDatabase"
                   :disabled="isPurging"
                   title="Purge all database data permanently"
@@ -79,6 +151,22 @@
                   {{ isPurging ? 'Purging...' : 'Purge' }}
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div class="performance-card">
+            <h3>Server Configuration</h3>
+            <div class="metric-row">
+              <span>TLS Enabled</span>
+              <span class="metric-value">{{ systemInfo.server?.tls ? 'Yes' : 'No' }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Auth Enabled</span>
+              <span class="metric-value">{{ systemInfo.server?.auth ? 'Yes' : 'No' }}</span>
+            </div>
+            <div class="metric-row">
+              <span>Hostname</span>
+              <span class="metric-value">{{ systemInfo.system?.hostname || 'Unknown' }}</span>
             </div>
           </div>
         </div>
@@ -107,6 +195,14 @@ const stats = ref<Stats>({
 
 const dbStats = ref<any>({
   db_size_human: 'Loading...'
+})
+
+const systemInfo = ref<any>({
+  system: {},
+  server: {},
+  agent: {},
+  websocket: {},
+  database: {}
 })
 
 const startTime = ref(Date.now())
@@ -140,6 +236,18 @@ async function loadDbStats() {
     }
   } catch (error) {
     // Error loading database stats
+  }
+}
+
+// Load system info
+async function loadSystemInfo() {
+  try {
+    const { data } = await useFetch<any>('/api/system-info')
+    if (data.value) {
+      systemInfo.value = data.value
+    }
+  } catch (error) {
+    // Error loading system info
   }
 }
 
@@ -206,6 +314,10 @@ async function purgeDatabase() {
 onMounted(() => {
   loadStats()
   loadDbStats()
+  loadSystemInfo()
+
+  // Refresh system info every 5 seconds
+  setInterval(loadSystemInfo, 5000)
 })
 </script>
 
