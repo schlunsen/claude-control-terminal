@@ -550,11 +550,11 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	session.Status = SessionStatusProcessing
 	session.UpdatedAt = time.Now()
 	session.MessageCount++
-	currentMsgCount := session.MessageCount
+	userMsgSequence := session.MessageCount
 	sm.mu.Unlock()
 
 	// Save user prompt message to database
-	if err := sm.saveMessageToDB(session.ID, currentMsgCount-1, "user", prompt, "", nil); err != nil {
+	if err := sm.saveMessageToDB(session.ID, userMsgSequence, "user", prompt, "", nil); err != nil {
 		logging.Error("Failed to save user message to database: %v", err)
 	}
 
@@ -806,7 +806,7 @@ func (sm *SessionManager) SendPromptWithContent(sessionID uuid.UUID, content []C
 	session.Status = SessionStatusProcessing
 	session.UpdatedAt = time.Now()
 	session.MessageCount++
-	currentMsgCount := session.MessageCount
+	userMsgSequence := session.MessageCount
 	sm.mu.Unlock()
 
 	// Convert content blocks to JSON string for database storage
@@ -817,7 +817,7 @@ func (sm *SessionManager) SendPromptWithContent(sessionID uuid.UUID, content []C
 	}
 
 	// Save user prompt message to database (with structured content)
-	if err := sm.saveMessageToDB(session.ID, currentMsgCount-1, "user", string(contentJSON), "", nil); err != nil {
+	if err := sm.saveMessageToDB(session.ID, userMsgSequence, "user", string(contentJSON), "", nil); err != nil {
 		logging.Error("Failed to save user message to database: %v", err)
 	}
 
@@ -1057,8 +1057,14 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 				logging.Debug("Session %s: Failed to refresh git branch: %v", session.ID, err)
 			}
 
-			// Save message to database based on type
-			sm.persistSDKMessage(session.ID, messageCount, msg)
+			// Increment session message count atomically and get sequence number
+			sm.mu.Lock()
+			session.MessageCount++
+			sequenceNum := session.MessageCount
+			sm.mu.Unlock()
+
+			// Save message to database based on type with proper sequence number
+			sm.persistSDKMessage(session.ID, sequenceNum, msg)
 
 			select {
 			case session.responseChan <- msg:

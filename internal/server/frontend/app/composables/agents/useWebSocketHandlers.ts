@@ -511,17 +511,19 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Debug: log sequence numbers
       console.log('Message sequences from DB:', data.messages.map((m: any) => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
 
-      // Convert DB messages to UI message format
-      const uiMessages = data.messages.map((dbMsg: any) => ({
-        id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
-        role: dbMsg.role,
-        content: dbMsg.content,
-        timestamp: new Date(dbMsg.timestamp),
-        sequence: dbMsg.sequence,
-        isHistorical: true,
-        toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
-        thinkingContent: dbMsg.thinking_content || undefined
-      }))
+      // Convert DB messages to UI message format, filtering out system messages
+      const uiMessages = data.messages
+        .filter((dbMsg: any) => dbMsg.role !== 'system')
+        .map((dbMsg: any) => ({
+          id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
+          role: dbMsg.role,
+          content: dbMsg.content,
+          timestamp: new Date(dbMsg.timestamp),
+          sequence: dbMsg.sequence,
+          isHistorical: true,
+          toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
+          thinkingContent: dbMsg.thinking_content || undefined
+        }))
 
       // Sort messages by sequence number first, then by timestamp for stable ordering
       // This handles cases where multiple messages have the same sequence number

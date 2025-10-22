@@ -134,6 +134,7 @@
         <MetricsSidebar
           :show="!!activeSessionId"
           :session="activeSession"
+          :message-count="activeMessages.length"
           :tool-executions="sessionToolStats.get(activeSessionId)"
           :permission-stats="sessionPermissionStats.get(activeSessionId)"
         />

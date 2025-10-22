@@ -46,46 +46,108 @@
       <!-- Input Area -->
       <div class="input-area">
         <!-- Image Preview Area -->
-        <div v-if="attachedImages.length > 0" class="image-previews">
-          <div
-            v-for="(img, idx) in attachedImages"
-            :key="idx"
-            class="preview-item"
-          >
-            <img :src="img.dataUrl" :alt="`Preview ${idx + 1}`" class="preview-image" />
-            <button @click="removeImage(idx)" class="remove-btn" type="button">
-              ×
-            </button>
-            <span class="image-info">{{ img.fileName }} ({{ formatSize(img.size) }})</span>
+        <transition name="preview-slide">
+          <div v-if="attachedImages.length > 0" class="image-previews">
+            <div class="preview-header">
+              <span class="preview-count">{{ attachedImages.length }} image{{ attachedImages.length > 1 ? 's' : '' }} attached</span>
+              <button @click="clearAllImages" class="clear-all-btn" type="button">
+                Clear All
+              </button>
+            </div>
+            <div class="preview-grid">
+              <transition-group name="preview-item">
+                <div
+                  v-for="(img, idx) in attachedImages"
+                  :key="`img-${idx}`"
+                  class="preview-item"
+                >
+                  <img :src="img.dataUrl" :alt="`Preview ${idx + 1}`" class="preview-image" />
+                  <button @click="removeImage(idx)" class="remove-btn" type="button" title="Remove image">
+                    ×
+                  </button>
+                  <span class="image-info">{{ truncateFileName(img.fileName) }} ({{ formatSize(img.size) }})</span>
+                </div>
+              </transition-group>
+            </div>
           </div>
-        </div>
+        </transition>
 
         <!-- Input Container -->
-        <div class="input-container" :class="{ 'drag-over': isDragging }">
-          <textarea
-            ref="messageInput"
-            :value="inputMessage"
-            @input="$emit('update:input-message', ($event.target as HTMLTextAreaElement).value)"
-            @keydown.enter.prevent="handleEnter"
-            @paste="handlePaste"
-            @drop.prevent="handleDrop"
-            @dragover.prevent="isDragging = true"
-            @dragleave="isDragging = false"
-            placeholder="Type your message or paste/drop an image... (Enter to send)"
-            class="message-input"
-            :disabled="!connected"
-            rows="3"
-          ></textarea>
-          <button
-            @click="$emit('send')"
-            class="btn-send"
-            :disabled="(!inputMessage.trim() && attachedImages.length === 0) || !connected"
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="22" y1="2" x2="11" y2="13"></line>
-              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-            </svg>
-          </button>
+        <div class="input-container" :class="{ 'drag-over': isDragging, 'focused': isFocused }">
+          <!-- Character Counter & Upload Button -->
+          <div class="input-toolbar">
+            <button
+              @click="triggerFileUpload"
+              class="btn-upload"
+              type="button"
+              :disabled="!connected"
+              title="Attach images (PNG, JPEG, GIF, WebP)"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+              <span class="upload-text">Attach Image</span>
+            </button>
+            <input
+              ref="fileInput"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              multiple
+              @change="handleFileSelect"
+              style="display: none"
+            />
+            <span class="char-counter" :class="{ 'warning': charCount > 4000 }">
+              {{ charCount }} / 5000 characters
+            </span>
+          </div>
+
+          <!-- Textarea & Send Button Row -->
+          <div class="input-row">
+            <textarea
+              ref="messageInput"
+              :value="inputMessage"
+              @input="handleInput"
+              @keydown.enter="handleEnter"
+              @paste="handlePaste"
+              @drop.prevent="handleDrop"
+              @dragover.prevent="isDragging = true"
+              @dragleave="isDragging = false"
+              @focus="isFocused = true"
+              @blur="isFocused = false"
+              placeholder="Type your message or paste/drop an image... (Enter to send, Shift+Enter for new line)"
+              class="message-input"
+              :disabled="!connected"
+              :maxlength="5000"
+              rows="3"
+            ></textarea>
+            <button
+              @click="$emit('send')"
+              class="btn-send"
+              :disabled="(!inputMessage.trim() && attachedImages.length === 0) || !connected"
+              title="Send message (Enter)"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Drag & Drop Overlay -->
+          <transition name="fade">
+            <div v-if="isDragging" class="drag-overlay">
+              <div class="drag-content">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+                <p>Drop images here</p>
+              </div>
+            </div>
+          </transition>
         </div>
       </div>
     </div>
@@ -93,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 interface AttachedImage {
   fileName: string
@@ -111,7 +173,7 @@ interface Props {
   isProcessing: boolean
 }
 
-defineProps<Props>()
+const props = defineProps<Props>()
 
 const emit = defineEmits<{
   'update:input-message': [value: string]
@@ -121,12 +183,17 @@ const emit = defineEmits<{
 
 const messagesContainer = ref<HTMLElement | null>(null)
 const messageInput = ref<HTMLTextAreaElement | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<AttachedImage[]>([])
 const isDragging = ref(false)
+const isFocused = ref(false)
 
 // Allowed image formats
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 const MAX_SIZE = 3.75 * 1024 * 1024 // 3.75 MB
+
+// Character count computed property
+const charCount = computed(() => props.inputMessage.length)
 
 // Handle paste event
 async function handlePaste(event: ClipboardEvent) {
@@ -218,11 +285,56 @@ function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
 }
 
+// Handle input
+function handleInput(event: Event) {
+  const target = event.target as HTMLTextAreaElement
+  emit('update:input-message', target.value)
+}
+
 // Handle Enter key
 function handleEnter(event: KeyboardEvent) {
-  if (!event.shiftKey) {
-    emit('send')
+  if (event.shiftKey) {
+    // Allow Shift+Enter to create new line (don't prevent default)
+    return
   }
+  // Enter without Shift sends the message
+  event.preventDefault()
+  emit('send')
+}
+
+// Trigger file upload dialog
+function triggerFileUpload() {
+  fileInput.value?.click()
+}
+
+// Handle file selection from input
+async function handleFileSelect(event: Event) {
+  const target = event.target as HTMLInputElement
+  const files = target.files
+  if (!files) return
+
+  for (const file of Array.from(files)) {
+    if (file.type.startsWith('image/') && ALLOWED_TYPES.includes(file.type)) {
+      await addImageFile(file)
+    }
+  }
+
+  // Reset input to allow selecting the same file again
+  target.value = ''
+}
+
+// Truncate filename for display
+function truncateFileName(fileName: string): string {
+  if (fileName.length <= 20) return fileName
+  const extension = fileName.split('.').pop()
+  const nameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'))
+  return `${nameWithoutExt.substring(0, 12)}...${extension}`
+}
+
+// Clear all images
+function clearAllImages() {
+  attachedImages.value = []
+  emit('images-attached', attachedImages.value)
 }
 
 // Clear attachments (called from parent)
@@ -347,8 +459,7 @@ defineExpose({
 .input-area {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 16px;
+  gap: 0;
   border-top: 1px solid var(--border-color);
   background: var(--card-bg);
   flex-shrink: 0;
@@ -356,20 +467,62 @@ defineExpose({
 
 /* Image Previews */
 .image-previews {
+  padding: 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.preview-header {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.preview-count {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.clear-all-btn {
+  padding: 4px 12px;
+  background: rgba(220, 53, 69, 0.1);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-all-btn:hover {
+  background: #dc3545;
+  color: white;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 12px;
-  padding-bottom: 8px;
 }
 
 .preview-item {
   position: relative;
-  width: 120px;
-  height: 120px;
+  aspect-ratio: 1;
   border-radius: 8px;
   border: 2px solid var(--border-color);
   overflow: hidden;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
+  transition: all 0.2s;
+}
+
+.preview-item:hover {
+  border-color: var(--accent-purple);
+  transform: scale(1.02);
 }
 
 .preview-image {
@@ -380,25 +533,31 @@ defineExpose({
 
 .remove-btn {
   position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 24px;
-  height: 24px;
-  background: rgba(0, 0, 0, 0.7);
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  background: rgba(0, 0, 0, 0.8);
   color: white;
   border: none;
   border-radius: 50%;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  transition: all 0.2s;
+  opacity: 0;
+}
+
+.preview-item:hover .remove-btn {
+  opacity: 1;
 }
 
 .remove-btn:hover {
-  background: rgba(255, 0, 0, 0.8);
+  background: #dc3545;
+  transform: scale(1.1);
 }
 
 .image-info {
@@ -406,8 +565,8 @@ defineExpose({
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 4px;
-  background: rgba(0, 0, 0, 0.7);
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.85);
   color: white;
   font-size: 0.7rem;
   text-align: center;
@@ -418,33 +577,100 @@ defineExpose({
 
 /* Input Container */
 .input-container {
+  position: relative;
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  padding: 16px;
   transition: all 0.2s;
 }
 
+.input-container.focused {
+  background: var(--bg-primary);
+}
+
 .input-container.drag-over {
-  background: rgba(138, 107, 255, 0.1);
+  background: rgba(139, 92, 246, 0.05);
+}
+
+/* Input Toolbar */
+.input-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.btn-upload {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 4px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-upload:hover:not(:disabled) {
+  background: var(--accent-purple);
+  color: white;
+  border-color: var(--accent-purple);
+  transform: translateY(-1px);
+}
+
+.btn-upload:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upload-text {
+  font-weight: 500;
+}
+
+.char-counter {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.char-counter.warning {
+  color: #ffc107;
+  font-weight: 600;
+}
+
+/* Input Row */
+.input-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
 }
 
 .message-input {
   flex: 1;
-  padding: 12px;
+  padding: 12px 16px;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
   color: var(--text-primary);
   font-size: 0.95rem;
   font-family: inherit;
-  resize: none;
-  transition: border-color 0.2s;
+  resize: vertical;
+  min-height: 80px;
+  max-height: 200px;
+  transition: all 0.2s;
+  line-height: 1.5;
 }
 
 .message-input:focus {
   outline: none;
   border-color: var(--accent-purple);
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 .message-input:disabled {
@@ -454,25 +680,125 @@ defineExpose({
 
 .btn-send {
   padding: 12px 20px;
-  background: var(--accent-purple);
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-purple-hover));
   color: white;
   border: none;
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  align-self: flex-end;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+  height: 48px;
+  min-width: 48px;
 }
 
 .btn-send:hover:not(:disabled) {
-  background: var(--accent-purple-hover);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+}
+
+.btn-send:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .btn-send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+}
+
+/* Drag & Drop Overlay */
+.drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(139, 92, 246, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  z-index: 10;
+}
+
+.drag-content {
+  text-align: center;
+  color: white;
+}
+
+.drag-content svg {
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+
+.drag-content p {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Transitions */
+.preview-slide-enter-active,
+.preview-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.preview-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.preview-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.preview-item-enter-active,
+.preview-item-leave-active {
+  transition: all 0.3s ease;
+}
+
+.preview-item-enter-from {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.preview-item-leave-to {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+.preview-item-move {
+  transition: transform 0.3s ease;
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .input-toolbar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .upload-text {
+    display: none;
+  }
+
+  .preview-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
 }
 </style>

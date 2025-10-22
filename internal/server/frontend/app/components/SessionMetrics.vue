@@ -2,19 +2,79 @@
   <div class="session-metrics" v-if="session">
     <!-- Header with Session ID and Status -->
     <div class="metrics-header">
-      <div class="header-left">
+      <div class="header-row">
         <div class="session-badge">
           <span class="badge-label">Session</span>
           <span class="badge-value">{{ session.id.slice(0, 8) }}</span>
         </div>
+        <div class="duration" v-if="sessionDuration">
+          ⏱️ {{ sessionDuration }}
+        </div>
+      </div>
+      <div class="header-row">
         <div class="status-badge" :class="session.status">
           <span class="status-dot"></span>
           {{ session.status }}
         </div>
       </div>
-      <div class="header-right">
-        <div class="duration" v-if="sessionDuration">
-          ⏱️ {{ sessionDuration }}
+    </div>
+
+    <!-- Model & Provider Section -->
+    <div class="model-section">
+      <div class="model-header">
+        <span class="model-icon">🤖</span>
+        <span class="model-title">AI Model</span>
+      </div>
+      <div class="model-details">
+        <div class="model-row">
+          <span class="model-label">Provider</span>
+          <div class="provider-badge">
+            <span>{{ getProviderDisplay(session.options?.provider) }}</span>
+          </div>
+        </div>
+        <div class="model-row" v-if="session.options?.model || session.model_name">
+          <span class="model-label">Model</span>
+          <div class="model-value-wrapper">
+            <code class="model-value" :title="session.options?.model || session.model_name">
+              {{ session.options?.model || session.model_name }}
+            </code>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Working Directory & Git Branch Section -->
+    <div class="environment-section">
+      <div class="environment-header">
+        <span class="environment-icon">📂</span>
+        <span class="environment-title">Environment</span>
+      </div>
+      <div class="environment-details">
+        <div class="environment-row" v-if="session.options?.working_directory">
+          <span class="env-label">Working Directory</span>
+          <div class="env-value-wrapper">
+            <code class="env-value" :title="session.options.working_directory">{{ session.options.working_directory }}</code>
+          </div>
+        </div>
+        <div class="environment-row" v-else>
+          <span class="env-label">Working Directory</span>
+          <span class="env-not-available">No working directory set</span>
+        </div>
+        <div class="environment-row" v-if="session.git_branch">
+          <span class="env-label">Git Branch</span>
+          <div class="git-branch-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="6" y1="3" x2="6" y2="15"></line>
+              <circle cx="18" cy="6" r="3"></circle>
+              <circle cx="6" cy="18" r="3"></circle>
+              <path d="M18 9a9 9 0 0 1-9 9"></path>
+            </svg>
+            <span>{{ session.git_branch }}</span>
+          </div>
+        </div>
+        <div class="environment-row" v-else>
+          <span class="env-label">Git Branch</span>
+          <span class="env-not-available">{{ session.options?.working_directory ? 'Not a git repository' : 'No environment data' }}</span>
         </div>
       </div>
     </div>
@@ -26,7 +86,7 @@
         <div class="metric-icon">💬</div>
         <div class="metric-content">
           <div class="metric-label">Messages</div>
-          <div class="metric-value">{{ session.message_count }}</div>
+          <div class="metric-value">{{ messageCount }}</div>
           <div class="metric-bar">
             <div class="metric-fill" :style="{ width: messagePercentage + '%' }"></div>
           </div>
@@ -78,62 +138,6 @@
               <span class="detail-value">{{ (session.options?.tools || []).length }}</span>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Model & Provider Section -->
-    <div class="model-section">
-      <div class="model-header">
-        <span class="model-icon">🤖</span>
-        <span class="model-title">AI Model</span>
-      </div>
-      <div class="model-details">
-        <div class="model-row">
-          <span class="model-label">Provider</span>
-          <div class="provider-badge">
-            <span>{{ getProviderDisplay(session.options?.provider) }}</span>
-          </div>
-        </div>
-        <div class="model-row" v-if="session.options?.model || session.model_name">
-          <span class="model-label">Model</span>
-          <div class="model-value-wrapper">
-            <code class="model-value" :title="session.options?.model || session.model_name">
-              {{ session.options?.model || session.model_name }}
-            </code>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Working Directory & Git Branch Section -->
-    <div class="environment-section">
-      <div class="environment-header">
-        <span class="environment-icon">📂</span>
-        <span class="environment-title">Environment</span>
-      </div>
-      <div class="environment-details">
-        <div class="environment-row" v-if="session.options?.working_directory">
-          <span class="env-label">Working Directory</span>
-          <div class="env-value-wrapper">
-            <code class="env-value" :title="session.options.working_directory">{{ session.options.working_directory }}</code>
-          </div>
-        </div>
-        <div class="environment-row" v-if="session.git_branch">
-          <span class="env-label">Git Branch</span>
-          <div class="git-branch-badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="6" y1="3" x2="6" y2="15"></line>
-              <circle cx="18" cy="6" r="3"></circle>
-              <circle cx="6" cy="18" r="3"></circle>
-              <path d="M18 9a9 9 0 0 1-9 9"></path>
-            </svg>
-            <span>{{ session.git_branch }}</span>
-          </div>
-        </div>
-        <div class="environment-row" v-if="!session.git_branch && session.options?.working_directory">
-          <span class="env-label">Git Branch</span>
-          <span class="env-not-available">Not a git repository</span>
         </div>
       </div>
     </div>
@@ -196,6 +200,7 @@ interface SessionMetricsData {
 
 const props = defineProps<{
   session: SessionMetricsData | null
+  messageCount?: number
   toolExecutions?: Record<string, number>
   permissionStats?: {
     approved: number
@@ -212,8 +217,9 @@ const sessionDuration = ref('')
 
 // Computed values
 const messagePercentage = computed(() => {
-  const max = Math.max(props.session?.message_count || 0, 20)
-  return ((props.session?.message_count || 0) / max) * 100
+  const count = props.messageCount ?? props.session?.message_count ?? 0
+  const max = Math.max(count, 20)
+  return (count / max) * 100
 })
 
 const approvalPercentage = computed(() => {
@@ -222,9 +228,10 @@ const approvalPercentage = computed(() => {
 })
 
 const avgMessageSize = computed(() => {
-  if (!props.session?.message_count || props.session.message_count === 0) return '0'
+  const count = props.messageCount ?? props.session?.message_count ?? 0
+  if (count === 0) return '0'
   // Estimate based on typical message sizes
-  return Math.round((props.session.message_count * 150) / Math.max(props.session.message_count, 1))
+  return Math.round((count * 150) / Math.max(count, 1))
 })
 
 // Methods
@@ -362,27 +369,29 @@ watch(sessionStartTime, (newVal) => {
 /* Header */
 .metrics-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 20px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border-color);
 }
 
-.header-left {
+.header-row {
   display: flex;
-  gap: 12px;
+  justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 .session-badge {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 8px 14px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: 8px;
   border: 1px solid var(--border-color);
+  flex: 1;
 }
 
 .badge-label {
@@ -394,22 +403,23 @@ watch(sessionStartTime, (newVal) => {
 }
 
 .badge-value {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--accent-purple);
-  font-weight: 600;
+  font-weight: 700;
   font-family: 'Monaco', 'Menlo', monospace;
 }
 
 .status-badge {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 500;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
   text-transform: capitalize;
   border: 1px solid var(--border-color);
+  flex: 1;
 }
 
 .status-badge.idle {
@@ -445,19 +455,15 @@ watch(sessionStartTime, (newVal) => {
   animation: statusPulse 2s infinite;
 }
 
-.header-right {
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .duration {
-  padding: 6px 12px;
+  padding: 8px 14px;
   background: var(--bg-secondary);
-  border-radius: 6px;
-  font-weight: 500;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
 }
 
 /* Metrics Grid */
@@ -960,10 +966,15 @@ watch(sessionStartTime, (newVal) => {
     grid-template-columns: 1fr;
   }
 
-  .metrics-header {
+  .header-row {
     flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
+    align-items: stretch;
+  }
+
+  .session-badge,
+  .status-badge,
+  .duration {
+    width: 100%;
   }
 
   .metric-card {
