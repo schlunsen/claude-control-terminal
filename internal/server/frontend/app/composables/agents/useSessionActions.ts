@@ -260,7 +260,7 @@ export function useSessionActions(params: SessionActionParams) {
       agentWs.send({
         type: 'load_messages',
         session_id: sessionId,
-        limit: 100,
+        limit: 1000, // Increased from 100 to 1000 to load all messages for long sessions
         offset: 0
       })
       messagesLoaded.value.add(sessionId)
