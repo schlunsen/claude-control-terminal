@@ -115,9 +115,9 @@
               @open-lightbox="openLightbox"
             >
               <!-- Edit Diff Slot (only when diffDisplayLocation is 'chat') -->
-              <template #edit-diff v-if="diffDisplayLocation === 'chat'">
+              <template #edit-diff>
                 <EditDiffMessage
-                  v-if="getEditToolForMessage(message.id)"
+                  v-if="diffDisplayLocation === 'chat' && getEditToolForMessage(message.id)"
                   :file-path="getEditToolForMessage(message.id)?.input?.file_path || ''"
                   :old-string="getEditToolForMessage(message.id)?.input?.old_string || ''"
                   :new-string="getEditToolForMessage(message.id)?.input?.new_string || ''"
@@ -293,10 +293,28 @@ const { diffDisplayLocation } = useDiffDisplaySetting()
 
 // Helper to find Edit tool for a message
 const getEditToolForMessage = (messageId: string) => {
-  return activeSessionTools.value.find(
+  const editTool = activeSessionTools.value.find(
     tool => tool.name === 'Edit' && tool.messageId === messageId
   )
+
+  // Debug logging
+  if (editTool) {
+    console.log('Found Edit tool for message:', messageId, editTool)
+  }
+
+  return editTool
 }
+
+// Debug: Watch diffDisplayLocation
+watch(diffDisplayLocation, (newVal) => {
+  console.log('diffDisplayLocation changed to:', newVal)
+}, { immediate: true })
+
+// Debug: Watch activeSessionTools
+watch(activeSessionTools, (newVal) => {
+  console.log('activeSessionTools:', newVal)
+  console.log('Edit tools:', newVal.filter(t => t.name === 'Edit'))
+}, { deep: true })
 
 // Composables - Provider & Agent Selection
 const {
