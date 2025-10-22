@@ -89,7 +89,7 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
   const setupHandlers = () => {
     // WebSocket event handlers
     agentWs.on('onSessionCreated', (data) => {
-      sessions.value.push(data.session)
+      sessions.value.unshift(data.session)
       activeSessionId.value = data.session_id
       messages.value[data.session_id] = []
 
@@ -101,8 +101,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     })
 
     agentWs.on('onAgentMessage', (data) => {
-      console.log('📨 Received agent message:', data)
-
       if (!messages.value[data.session_id]) {
         messages.value[data.session_id] = []
       }
@@ -116,12 +114,9 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Extract text content from nested object
       const textContent = extractTextContent(data.content)
 
-      console.log('💬 Extracted:', { isComplete, costData, textContent: textContent.substring(0, 50) })
-
       // Process tool uses (when Claude starts using a tool)
       if (data.content && data.content.tools && Array.isArray(data.content.tools)) {
         data.content.tools.forEach((toolUse: any) => {
-          console.log('🔧 Tool use detected:', toolUse.name)
           addActiveTool(data.session_id, toolUse)
         })
       }
@@ -129,7 +124,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Process tool results (when tool execution completes)
       if (data.content && data.content.tool_results && Array.isArray(data.content.tool_results)) {
         data.content.tool_results.forEach((toolResult: any) => {
-          console.log('✅ Tool result received:', toolResult.tool_use_id)
           completeActiveTool(data.session_id, toolResult.tool_use_id, toolResult.is_error || false)
         })
       }
@@ -140,7 +134,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         // Update git branch from metadata
         if (data.metadata && data.metadata.git_branch) {
           session.git_branch = data.metadata.git_branch
-          console.log('🌿 Updated git branch:', session.git_branch)
         }
 
         // Update costs from result message
@@ -149,7 +142,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           session.num_turns = costData.numTurns
           session.duration_ms = costData.durationMs
           session.usage = costData.usage
-          console.log('💰 Updated session cost:', session.cost_usd)
         }
 
         // Set status: idle when complete, processing when receiving content
@@ -183,7 +175,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         }
 
         // Don't create a UI message for result/completion
-        console.log('✅ Message complete (result received)')
         return
       }
 
@@ -240,7 +231,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           }
 
           messages.value[data.session_id].push(toolMessage)
-          console.log('🔧 Created tool result message:', toolMessage.content)
         }
 
         return
@@ -248,7 +238,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       // Skip empty content and system messages (they don't need UI display)
       if (!textContent || textContent.includes('SystemMessage')) {
-        console.log('⏭️  Skipping empty/system message')
         return
       }
 
@@ -271,7 +260,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       }
 
       messages.value[data.session_id].push(newMessage)
-      console.log('✨ Created new message:', newMessage.id)
 
       // Reset processing state when we receive content
       isProcessing.value = false
@@ -305,8 +293,8 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       }
 
       // Track tool usage for metrics
-      const toolStats = sessionToolStats.value.get(data.session_id) || {}
-      toolStats[data.tool] = (toolStats[data.tool] || 0) + 1
+      const currentStats = sessionToolStats.value.get(data.session_id) || {}
+      const toolStats = { ...currentStats, [data.tool]: (currentStats[data.tool] || 0) + 1 }
       sessionToolStats.value.set(data.session_id, toolStats)
 
       // Extract tool details from parameters for display
@@ -344,36 +332,29 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       // Handle TodoWrite specifically
       if (data.tool && data.tool.includes('TodoWrite')) {
-        console.log('TodoWrite tool used with data:', data)
-
         // Try to extract todos from the data.input property (for new format)
         let todos: TodoItem[] | null = null
 
         // If data has input with todos (new enhanced format), use that
         if (data.input && typeof data.input === 'object' && data.input.todos) {
           todos = data.input.todos
-          console.log('Extracted todos from data.input:', todos)
         } else {
           // Try legacy parsing from tool string representation
           const toolStr = String(data.tool || '')
           todos = parseTodoWrite(toolStr)
-          console.log('Parsed todos from legacy tool string:', todos)
         }
 
         if (todos && Array.isArray(todos)) {
-          console.log('Updating session', data.session_id, 'with todos:', todos)
           updateSessionTodos(data.session_id, todos)
 
           // Set up auto-hide timer if all todos are completed
           const allCompleted = todos.every(todo => todo.status === 'completed')
           if (allCompleted) {
-            console.log('All todos completed, setting auto-hide timer for 5 seconds')
             setTimeout(() => {
               // Clear todos after delay, only if all are still completed
               const currentTodos = sessionTodos.value.get(data.session_id)
               if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
                 sessionTodos.value.delete(data.session_id)
-                console.log('Auto-hiding todos for session', data.session_id)
               }
             }, 5000)
           }
@@ -467,17 +448,15 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     })
 
     agentWs.on('onSessionsList', (data) => {
+      // Backend already returns sessions ordered by updated_at DESC (newest first)
       sessions.value = data.sessions
     })
 
     agentWs.on('onSessionDeleted', (data) => {
-      console.log('🗑️ Session deleted:', data.session_id)
       // Session already removed from local state in deleteSession (optimistic update)
-      // Just log confirmation
     })
 
     agentWs.on('onAllSessionsDeleted', (data) => {
-      console.log('🗑️ All sessions deleted, count:', data.count)
 
       // Clear all sessions and messages
       sessions.value = []
@@ -504,24 +483,51 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     })
 
     agentWs.on('onMessagesLoaded', (data) => {
-      console.log('📥 Messages loaded:', data)
-
       if (!data.session_id || !data.messages) return
 
-      // Debug: log sequence numbers
-      console.log('Message sequences from DB:', data.messages.map((m: any) => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
+      // Calculate tool stats from loaded messages
+      const toolStats: Record<string, number> = {}
+      let toolCount = 0
 
-      // Convert DB messages to UI message format
-      const uiMessages = data.messages.map((dbMsg: any) => ({
-        id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
-        role: dbMsg.role,
-        content: dbMsg.content,
-        timestamp: new Date(dbMsg.timestamp),
-        sequence: dbMsg.sequence,
-        isHistorical: true,
-        toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
-        thinkingContent: dbMsg.thinking_content || undefined
-      }))
+      data.messages.forEach((dbMsg: any) => {
+        // Parse tool_uses from assistant messages
+        if (dbMsg.tool_uses) {
+          try {
+            const toolUses = typeof dbMsg.tool_uses === 'string'
+              ? JSON.parse(dbMsg.tool_uses)
+              : dbMsg.tool_uses
+
+            if (Array.isArray(toolUses)) {
+              toolUses.forEach((tool: any) => {
+                const toolName = tool.name || tool.tool || 'Unknown'
+                toolStats[toolName] = (toolStats[toolName] || 0) + 1
+                toolCount++
+              })
+            }
+          } catch (e) {
+            console.warn('Failed to parse tool_uses:', e)
+          }
+        }
+      })
+
+      // Update session tool stats
+      if (toolCount > 0) {
+        sessionToolStats.value.set(data.session_id, toolStats)
+      }
+
+      // Convert DB messages to UI message format, filtering out system messages
+      const uiMessages = data.messages
+        .filter((dbMsg: any) => dbMsg.role !== 'system')
+        .map((dbMsg: any) => ({
+          id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
+          role: dbMsg.role,
+          content: dbMsg.content,
+          timestamp: new Date(dbMsg.timestamp),
+          sequence: dbMsg.sequence,
+          isHistorical: true,
+          toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
+          thinkingContent: dbMsg.thinking_content || undefined
+        }))
 
       // Sort messages by sequence number first, then by timestamp for stable ordering
       // This handles cases where multiple messages have the same sequence number
@@ -533,8 +539,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         return a.timestamp.getTime() - b.timestamp.getTime()
       })
 
-      console.log('Sorted message sequences:', uiMessages.map(m => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
-
       // Set or prepend messages for the session
       if (!messages.value[data.session_id]) {
         messages.value[data.session_id] = []
@@ -542,8 +546,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       // Prepend historical messages (now sorted by sequence, oldest first)
       messages.value[data.session_id] = [...uiMessages, ...messages.value[data.session_id]]
-
-      console.log(`📥 Loaded ${uiMessages.length} historical messages for session ${data.session_id}`)
     })
 
     agentWs.on('onAgentsKilled', (data) => {

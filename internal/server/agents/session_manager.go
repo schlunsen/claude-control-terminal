@@ -189,11 +189,23 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 	if err == nil && existingMeta != nil {
 		logging.Info("Restoring session from database: %s (Claude session: %s)", sessionID, existingMeta.ClaudeSessionID)
 
+		// Restore options from database (if available), otherwise use request options
+		restoredOptions := options // Start with request options as fallback
+		if existingMeta.OptionsJSON != "" {
+			var dbOptions SessionOptions
+			if err := json.Unmarshal([]byte(existingMeta.OptionsJSON), &dbOptions); err == nil {
+				logging.Debug("Restored options from database for session %s", sessionID)
+				restoredOptions = dbOptions
+			} else {
+				logging.Warning("Failed to deserialize session options from DB for session %s: %v", sessionID, err)
+			}
+		}
+
 		// Detect git branch if working directory is provided
 		gitBranch := existingMeta.GitBranch // Use stored value first
-		if gitBranch == "" && options.WorkingDirectory != nil && *options.WorkingDirectory != "" {
+		if gitBranch == "" && restoredOptions.WorkingDirectory != nil && *restoredOptions.WorkingDirectory != "" {
 			// If not stored, try to detect it now
-			gitBranch = GetGitBranch(*options.WorkingDirectory)
+			gitBranch = GetGitBranch(*restoredOptions.WorkingDirectory)
 		}
 
 		// Restore session to memory with data from database
@@ -203,7 +215,7 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 				CreatedAt:       existingMeta.CreatedAt,
 				UpdatedAt:       time.Now(), // Update to current time
 				Status:          SessionStatus(existingMeta.Status),
-				Options:         options, // Use new options from request
+				Options:         restoredOptions, // Use restored options from database
 				MessageCount:    existingMeta.MessageCount,
 				CostUSD:         existingMeta.CostUSD,
 				NumTurns:        existingMeta.NumTurns,
@@ -550,11 +562,11 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 	session.Status = SessionStatusProcessing
 	session.UpdatedAt = time.Now()
 	session.MessageCount++
-	currentMsgCount := session.MessageCount
+	userMsgSequence := session.MessageCount
 	sm.mu.Unlock()
 
 	// Save user prompt message to database
-	if err := sm.saveMessageToDB(session.ID, currentMsgCount-1, "user", prompt, "", nil); err != nil {
+	if err := sm.saveMessageToDB(session.ID, userMsgSequence, "user", prompt, "", nil); err != nil {
 		logging.Error("Failed to save user message to database: %v", err)
 	}
 
@@ -806,7 +818,7 @@ func (sm *SessionManager) SendPromptWithContent(sessionID uuid.UUID, content []C
 	session.Status = SessionStatusProcessing
 	session.UpdatedAt = time.Now()
 	session.MessageCount++
-	currentMsgCount := session.MessageCount
+	userMsgSequence := session.MessageCount
 	sm.mu.Unlock()
 
 	// Convert content blocks to JSON string for database storage
@@ -817,7 +829,7 @@ func (sm *SessionManager) SendPromptWithContent(sessionID uuid.UUID, content []C
 	}
 
 	// Save user prompt message to database (with structured content)
-	if err := sm.saveMessageToDB(session.ID, currentMsgCount-1, "user", string(contentJSON), "", nil); err != nil {
+	if err := sm.saveMessageToDB(session.ID, userMsgSequence, "user", string(contentJSON), "", nil); err != nil {
 		logging.Error("Failed to save user message to database: %v", err)
 	}
 
@@ -1057,8 +1069,14 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 				logging.Debug("Session %s: Failed to refresh git branch: %v", session.ID, err)
 			}
 
-			// Save message to database based on type
-			sm.persistSDKMessage(session.ID, messageCount, msg)
+			// Increment session message count atomically and get sequence number
+			sm.mu.Lock()
+			session.MessageCount++
+			sequenceNum := session.MessageCount
+			sm.mu.Unlock()
+
+			// Save message to database based on type with proper sequence number
+			sm.persistSDKMessage(session.ID, sequenceNum, msg)
 
 			select {
 			case session.responseChan <- msg:

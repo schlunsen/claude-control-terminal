@@ -74,7 +74,9 @@ export function useSessionActions(params: SessionActionParams) {
 
   // Create new session
   const createNewSession = async () => {
-    if (!agentWs.connected) return
+    if (!agentWs.connected) {
+      return
+    }
 
     // Determine provider and model from currentProvider if available
     let defaultProvider = 'anthropic'
@@ -113,7 +115,6 @@ export function useSessionActions(params: SessionActionParams) {
         const data = await response.json()
         if (data.cwd) {
           sessionForm.value.workingDirectory = data.cwd
-          console.log('Auto-populated working directory:', data.cwd)
           // Load agents from this directory
           await loadAvailableAgents()
         }
@@ -157,8 +158,6 @@ export function useSessionActions(params: SessionActionParams) {
         options.system_prompt = sessionForm.value.systemPrompt || 'You are a helpful AI assistant.'
       }
 
-      console.log('Creating session with options:', options)
-
       agentWs.send({
         type: 'create_session',
         session_id: sessionId,
@@ -182,7 +181,6 @@ export function useSessionActions(params: SessionActionParams) {
       if (!response.ok) throw new Error(`Failed to fetch agents: ${response.status}`)
       const data = await response.json()
       availableAgents.value = data.agents ? Object.values(data.agents) : []
-      console.log(`Loaded ${availableAgents.value.length} agents from project`, availableAgents.value)
     } catch (error) {
       console.error('Error loading agents:', error)
       availableAgents.value = []
@@ -213,8 +211,6 @@ export function useSessionActions(params: SessionActionParams) {
           }
         }
       }
-
-      console.log(`Loaded ${availableProviders.value.length} providers`, availableProviders.value)
     } catch (error) {
       console.error('Error loading providers:', error)
       availableProviders.value = []
@@ -256,11 +252,10 @@ export function useSessionActions(params: SessionActionParams) {
 
     // Load historical messages if not already loaded
     if (!messagesLoaded.value.has(sessionId)) {
-      console.log(`Loading messages for session ${sessionId}`)
       agentWs.send({
         type: 'load_messages',
         session_id: sessionId,
-        limit: 100,
+        limit: 1000, // Increased from 100 to 1000 to load all messages for long sessions
         offset: 0
       })
       messagesLoaded.value.add(sessionId)

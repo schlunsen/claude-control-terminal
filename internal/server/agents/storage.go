@@ -72,6 +72,12 @@ func NewSQLiteSessionStorage(db *sql.DB) (*SQLiteSessionStorage, error) {
 		return nil, fmt.Errorf("failed to initialize agent tables: %w", err)
 	}
 
+	// Run migration to fix message sequences (idempotent)
+	if err := storage.FixMessageSequences(); err != nil {
+		// Log warning but don't fail initialization
+		fmt.Printf("Warning: Failed to fix message sequences: %v\n", err)
+	}
+
 	return storage, nil
 }
 
@@ -480,4 +486,76 @@ func (s *SQLiteSessionStorage) GetMessageCount(sessionID uuid.UUID) (int, error)
 // DeleteOldSessions removes sessions older than retentionDays
 func (s *SQLiteSessionStorage) DeleteOldSessions(retentionDays int) (int64, error) {
 	return CleanupOldSessions(s.db, retentionDays)
+}
+
+// FixMessageSequences resequences all messages based on timestamp order
+// This is an idempotent migration that can be run multiple times safely
+func (s *SQLiteSessionStorage) FixMessageSequences() error {
+	// Use a transaction for atomicity
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Create temp table with correct sequences
+	_, err = tx.Exec(`
+		CREATE TEMP TABLE IF NOT EXISTS temp_sequences AS
+		SELECT
+			id,
+			ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY timestamp ASC, sequence ASC) as new_sequence
+		FROM agent_messages
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create temp sequences table: %w", err)
+	}
+
+	// Update all messages with correct sequence numbers
+	result, err := tx.Exec(`
+		UPDATE agent_messages
+		SET sequence = (
+			SELECT new_sequence
+			FROM temp_sequences
+			WHERE temp_sequences.id = agent_messages.id
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to update message sequences: %w", err)
+	}
+
+	// Update session message counts to match actual message count
+	_, err = tx.Exec(`
+		UPDATE agent_sessions
+		SET message_count = (
+			SELECT MAX(sequence)
+			FROM agent_messages
+			WHERE agent_messages.session_id = agent_sessions.id
+		)
+		WHERE EXISTS (
+			SELECT 1
+			FROM agent_messages
+			WHERE agent_messages.session_id = agent_sessions.id
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to update session message counts: %w", err)
+	}
+
+	// Clean up temp table
+	_, err = tx.Exec(`DROP TABLE IF EXISTS temp_sequences`)
+	if err != nil {
+		return fmt.Errorf("failed to drop temp sequences table: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		fmt.Printf("Fixed sequence numbers for %d messages\n", rowsAffected)
+	}
+
+	return nil
 }

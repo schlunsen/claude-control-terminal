@@ -14,6 +14,8 @@ export interface KeyboardShortcut {
 // Global state for shortcuts dialog
 const showDialog = ref(false)
 const shortcuts = ref<Map<string, KeyboardShortcut>>(new Map())
+// Global state for page-specific actions
+const globalShortcutActions = ref<Map<string, () => void>>(new Map())
 
 export const useKeyboardShortcuts = () => {
   const router = useRouter()
@@ -173,7 +175,21 @@ export const useKeyboardShortcuts = () => {
     })
 
     registerShortcut('l', 'Navigate to Live Agents', 'Navigation', () => {
-      router.push('/agents')
+      // If already on agents page, trigger create session modal
+      if (router.currentRoute.value.path === '/agents') {
+        // Use small delay in case page is still mounting
+        setTimeout(() => {
+          triggerGlobalAction('create-new-session')
+        }, 50)
+      } else {
+        router.push('/agents').then(() => {
+          // Use a small delay to ensure the agents page component has fully mounted
+          // and registered its global action handler
+          setTimeout(() => {
+            triggerGlobalAction('create-new-session')
+          }, 100)
+        })
+      }
     })
 
     // UI Controls
@@ -193,6 +209,24 @@ export const useKeyboardShortcuts = () => {
     })
   }
 
+  /**
+   * Register a global shortcut action (for page-specific actions)
+   */
+  const setGlobalAction = (action: string, handler: () => void) => {
+    globalShortcutActions.value.set(action, handler)
+  }
+
+  const removeGlobalAction = (action: string) => {
+    globalShortcutActions.value.delete(action)
+  }
+
+  const triggerGlobalAction = (action: string) => {
+    const handler = globalShortcutActions.value.get(action)
+    if (handler) {
+      handler()
+    }
+  }
+
   return {
     showDialog: readonly(showDialog),
     registerShortcut,
@@ -203,6 +237,9 @@ export const useKeyboardShortcuts = () => {
     openDialog,
     initializeShortcuts,
     cleanupShortcuts,
-    registerDefaultShortcuts
+    registerDefaultShortcuts,
+    setGlobalAction,
+    removeGlobalAction,
+    triggerGlobalAction
   }
 }

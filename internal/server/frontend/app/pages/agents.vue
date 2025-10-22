@@ -134,8 +134,9 @@
         <MetricsSidebar
           :show="!!activeSessionId"
           :session="activeSession"
-          :tool-executions="sessionToolStats.get(activeSessionId)"
-          :permission-stats="sessionPermissionStats.get(activeSessionId)"
+          :message-count="activeMessages.length"
+          :tool-executions="activeSessionToolExecutions"
+          :permission-stats="activeSessionPermissionMetrics"
         />
       </main>
     </div>
@@ -185,7 +186,7 @@
 <script setup lang="ts">
 import { useAgentWebSocket } from '~/composables/useAgentWebSocket'
 import SessionMetrics from '~/components/SessionMetrics.vue'
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import type { ActiveTool } from '~/types/agents'
 
 // Refactored Components
@@ -468,6 +469,17 @@ const { setupHandlers } = useWebSocketHandlers({
 // Initialize WebSocket handlers
 setupHandlers()
 
+// Computed properties for metrics to ensure reactivity
+const activeSessionToolExecutions = computed(() => {
+  if (!activeSessionId.value) return {}
+  return sessionToolStats.value.get(activeSessionId.value) || {}
+})
+
+const activeSessionPermissionMetrics = computed(() => {
+  if (!activeSessionId.value) return undefined
+  return sessionPermissionStats.value.get(activeSessionId.value)
+})
+
 // Watch for modal opening to load sessions
 watch(showResumeModal, (show) => {
   if (show) {
@@ -488,13 +500,11 @@ watch(activeSessionTodos, (todos) => {
 
   // If all todos are completed, set a new timer
   if (todos.length > 0 && todos.every(todo => todo.status === 'completed')) {
-    console.log('All todos completed, setting 5 second auto-hide timer')
     const timer = setTimeout(() => {
       const currentTodos = sessionTodos.value.get(activeSessionId.value)
       if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
         sessionTodos.value.delete(activeSessionId.value)
         todoHideTimers.value.delete(activeSessionId.value)
-        console.log('Auto-hid todos after 5 seconds')
       }
     }, 5000)
     todoHideTimers.value.set(activeSessionId.value, timer)
@@ -508,6 +518,18 @@ onMounted(() => {
   }
   // Load available providers
   loadProviders()
+
+  // Register global action for keyboard shortcut
+  const { setGlobalAction } = useKeyboardShortcuts()
+  setGlobalAction('create-new-session', () => {
+    createNewSession()
+  })
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+  const { removeGlobalAction } = useKeyboardShortcuts()
+  removeGlobalAction('create-new-session')
 })
 
 // Watch for connection changes
