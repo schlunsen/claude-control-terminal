@@ -309,18 +309,15 @@ const formatDuration = (startTime: Date): string => {
 watch(
   () => props.toolExecutions,
   (newVal) => {
-    console.log('🔧 SessionMetrics: toolExecutions changed:', newVal)
-    if (newVal) {
-      // Count unique tools instead of total invocations
+    if (newVal && typeof newVal === 'object') {
+      // Count unique tools (number of keys in the object)
       const uniqueToolCount = Object.keys(newVal).length
-      console.log(`🔧 Calculated unique tool count: ${uniqueToolCount}, tools:`, newVal)
+
       toolStats.value = {
         count: uniqueToolCount,
         byName: newVal
       }
-      console.log('🔧 Updated toolStats:', toolStats.value)
     } else {
-      console.log('🔧 toolExecutions is null/undefined, resetting to 0')
       toolStats.value = {
         count: 0,
         byName: {}

@@ -89,7 +89,7 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
   const setupHandlers = () => {
     // WebSocket event handlers
     agentWs.on('onSessionCreated', (data) => {
-      sessions.value.push(data.session)
+      sessions.value.unshift(data.session)
       activeSessionId.value = data.session_id
       messages.value[data.session_id] = []
 
@@ -101,8 +101,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     })
 
     agentWs.on('onAgentMessage', (data) => {
-      console.log('📨 Received agent message:', data)
-
       if (!messages.value[data.session_id]) {
         messages.value[data.session_id] = []
       }
@@ -116,12 +114,9 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Extract text content from nested object
       const textContent = extractTextContent(data.content)
 
-      console.log('💬 Extracted:', { isComplete, costData, textContent: textContent.substring(0, 50) })
-
       // Process tool uses (when Claude starts using a tool)
       if (data.content && data.content.tools && Array.isArray(data.content.tools)) {
         data.content.tools.forEach((toolUse: any) => {
-          console.log('🔧 Tool use detected:', toolUse.name)
           addActiveTool(data.session_id, toolUse)
         })
       }
@@ -129,7 +124,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Process tool results (when tool execution completes)
       if (data.content && data.content.tool_results && Array.isArray(data.content.tool_results)) {
         data.content.tool_results.forEach((toolResult: any) => {
-          console.log('✅ Tool result received:', toolResult.tool_use_id)
           completeActiveTool(data.session_id, toolResult.tool_use_id, toolResult.is_error || false)
         })
       }
@@ -140,7 +134,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         // Update git branch from metadata
         if (data.metadata && data.metadata.git_branch) {
           session.git_branch = data.metadata.git_branch
-          console.log('🌿 Updated git branch:', session.git_branch)
         }
 
         // Update costs from result message
@@ -149,7 +142,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           session.num_turns = costData.numTurns
           session.duration_ms = costData.durationMs
           session.usage = costData.usage
-          console.log('💰 Updated session cost:', session.cost_usd)
         }
 
         // Set status: idle when complete, processing when receiving content
@@ -183,8 +175,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         }
 
         // Don't create a UI message for result/completion
-        console.log('✅ Message complete (result received) - NOT ADDING TO UI')
-        console.log(`📊 Current message count in UI: ${messages.value[data.session_id]?.length || 0}`)
         return
       }
 
@@ -241,7 +231,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           }
 
           messages.value[data.session_id].push(toolMessage)
-          console.log('🔧 Created tool result message:', toolMessage.content)
         }
 
         return
@@ -249,10 +238,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       // Skip empty content and system messages (they don't need UI display)
       if (!textContent || textContent.includes('SystemMessage')) {
-        console.log('⏭️  Skipping empty/system message - NOT ADDING TO UI')
-        console.log(`   textContent: "${textContent}"`)
-        console.log(`   hasSystemMessage: ${textContent?.includes('SystemMessage')}`)
-        console.log(`📊 Current message count in UI: ${messages.value[data.session_id]?.length || 0}`)
         return
       }
 
@@ -275,8 +260,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       }
 
       messages.value[data.session_id].push(newMessage)
-      console.log('✨ Created new message:', newMessage.id)
-      console.log(`📊 Total messages in UI now: ${messages.value[data.session_id].length}`)
 
       // Reset processing state when we receive content
       isProcessing.value = false
@@ -310,8 +293,8 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       }
 
       // Track tool usage for metrics
-      const toolStats = sessionToolStats.value.get(data.session_id) || {}
-      toolStats[data.tool] = (toolStats[data.tool] || 0) + 1
+      const currentStats = sessionToolStats.value.get(data.session_id) || {}
+      const toolStats = { ...currentStats, [data.tool]: (currentStats[data.tool] || 0) + 1 }
       sessionToolStats.value.set(data.session_id, toolStats)
 
       // Extract tool details from parameters for display
@@ -349,36 +332,29 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       // Handle TodoWrite specifically
       if (data.tool && data.tool.includes('TodoWrite')) {
-        console.log('TodoWrite tool used with data:', data)
-
         // Try to extract todos from the data.input property (for new format)
         let todos: TodoItem[] | null = null
 
         // If data has input with todos (new enhanced format), use that
         if (data.input && typeof data.input === 'object' && data.input.todos) {
           todos = data.input.todos
-          console.log('Extracted todos from data.input:', todos)
         } else {
           // Try legacy parsing from tool string representation
           const toolStr = String(data.tool || '')
           todos = parseTodoWrite(toolStr)
-          console.log('Parsed todos from legacy tool string:', todos)
         }
 
         if (todos && Array.isArray(todos)) {
-          console.log('Updating session', data.session_id, 'with todos:', todos)
           updateSessionTodos(data.session_id, todos)
 
           // Set up auto-hide timer if all todos are completed
           const allCompleted = todos.every(todo => todo.status === 'completed')
           if (allCompleted) {
-            console.log('All todos completed, setting auto-hide timer for 5 seconds')
             setTimeout(() => {
               // Clear todos after delay, only if all are still completed
               const currentTodos = sessionTodos.value.get(data.session_id)
               if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
                 sessionTodos.value.delete(data.session_id)
-                console.log('Auto-hiding todos for session', data.session_id)
               }
             }, 5000)
           }
@@ -472,29 +448,15 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     })
 
     agentWs.on('onSessionsList', (data) => {
-      console.log('📋 Received sessions list:', data.sessions.length, 'sessions')
-      data.sessions.forEach((session: any, index: number) => {
-        console.log(`📋 Session ${index}:`, {
-          id: session.id?.slice(0, 8),
-          status: session.status,
-          has_options: !!session.options,
-          working_directory: session.options?.working_directory,
-          git_branch: session.git_branch,
-          provider: session.options?.provider,
-          model: session.options?.model || session.model_name
-        })
-      })
+      // Backend already returns sessions ordered by updated_at DESC (newest first)
       sessions.value = data.sessions
     })
 
     agentWs.on('onSessionDeleted', (data) => {
-      console.log('🗑️ Session deleted:', data.session_id)
       // Session already removed from local state in deleteSession (optimistic update)
-      // Just log confirmation
     })
 
     agentWs.on('onAllSessionsDeleted', (data) => {
-      console.log('🗑️ All sessions deleted, count:', data.count)
 
       // Clear all sessions and messages
       sessions.value = []
@@ -521,18 +483,7 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     })
 
     agentWs.on('onMessagesLoaded', (data) => {
-      console.log('📥 Messages loaded:', data)
-
       if (!data.session_id || !data.messages) return
-
-      // Debug: log ALL messages from DB before filtering
-      console.log(`📊 Total messages from DB: ${data.messages.length}`)
-      console.log('Message sequences from DB:', data.messages.map((m: any) => ({
-        seq: m.sequence,
-        role: m.role,
-        content: m.content.substring(0, 50),
-        filtered: m.role === 'system' ? '❌ FILTERED' : '✅ KEPT'
-      })))
 
       // Calculate tool stats from loaded messages
       const toolStats: Record<string, number> = {}
@@ -562,22 +513,11 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Update session tool stats
       if (toolCount > 0) {
         sessionToolStats.value.set(data.session_id, toolStats)
-        console.log(`🔧 Calculated tool stats for session ${data.session_id}:`, toolStats)
-        console.log(`🔧 Total tool executions: ${toolCount}`)
-      } else {
-        console.log(`🔧 No tool uses found in loaded messages for session ${data.session_id}`)
       }
 
       // Convert DB messages to UI message format, filtering out system messages
-      const beforeFilter = data.messages.length
       const uiMessages = data.messages
-        .filter((dbMsg: any) => {
-          const keep = dbMsg.role !== 'system'
-          if (!keep) {
-            console.log(`🚫 Filtering out system message (seq: ${dbMsg.sequence}): ${dbMsg.content.substring(0, 80)}`)
-          }
-          return keep
-        })
+        .filter((dbMsg: any) => dbMsg.role !== 'system')
         .map((dbMsg: any) => ({
           id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
           role: dbMsg.role,
@@ -589,9 +529,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           thinkingContent: dbMsg.thinking_content || undefined
         }))
 
-      const afterFilter = uiMessages.length
-      console.log(`🔍 Filtered ${beforeFilter - afterFilter} system messages, kept ${afterFilter} messages`)
-
       // Sort messages by sequence number first, then by timestamp for stable ordering
       // This handles cases where multiple messages have the same sequence number
       uiMessages.sort((a, b) => {
@@ -602,24 +539,13 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         return a.timestamp.getTime() - b.timestamp.getTime()
       })
 
-      console.log('✅ Sorted message sequences:', uiMessages.map(m => ({
-        seq: m.sequence,
-        role: m.role,
-        content: m.content.substring(0, 50)
-      })))
-
       // Set or prepend messages for the session
       if (!messages.value[data.session_id]) {
         messages.value[data.session_id] = []
       }
 
-      const existingCount = messages.value[data.session_id].length
-
       // Prepend historical messages (now sorted by sequence, oldest first)
       messages.value[data.session_id] = [...uiMessages, ...messages.value[data.session_id]]
-
-      console.log(`📥 Loaded ${uiMessages.length} historical messages for session ${data.session_id}`)
-      console.log(`📊 Total messages in UI now: ${messages.value[data.session_id].length} (${existingCount} existing + ${uiMessages.length} loaded)`)
     })
 
     agentWs.on('onAgentsKilled', (data) => {

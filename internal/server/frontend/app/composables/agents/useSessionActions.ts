@@ -113,7 +113,6 @@ export function useSessionActions(params: SessionActionParams) {
         const data = await response.json()
         if (data.cwd) {
           sessionForm.value.workingDirectory = data.cwd
-          console.log('Auto-populated working directory:', data.cwd)
           // Load agents from this directory
           await loadAvailableAgents()
         }
@@ -157,8 +156,6 @@ export function useSessionActions(params: SessionActionParams) {
         options.system_prompt = sessionForm.value.systemPrompt || 'You are a helpful AI assistant.'
       }
 
-      console.log('Creating session with options:', options)
-
       agentWs.send({
         type: 'create_session',
         session_id: sessionId,
@@ -182,7 +179,6 @@ export function useSessionActions(params: SessionActionParams) {
       if (!response.ok) throw new Error(`Failed to fetch agents: ${response.status}`)
       const data = await response.json()
       availableAgents.value = data.agents ? Object.values(data.agents) : []
-      console.log(`Loaded ${availableAgents.value.length} agents from project`, availableAgents.value)
     } catch (error) {
       console.error('Error loading agents:', error)
       availableAgents.value = []
@@ -213,8 +209,6 @@ export function useSessionActions(params: SessionActionParams) {
           }
         }
       }
-
-      console.log(`Loaded ${availableProviders.value.length} providers`, availableProviders.value)
     } catch (error) {
       console.error('Error loading providers:', error)
       availableProviders.value = []
@@ -252,23 +246,10 @@ export function useSessionActions(params: SessionActionParams) {
 
   // Select session
   const selectSession = (sessionId: string) => {
-    const session = sessions.value.find(s => s.id === sessionId)
-    console.log('🔄 Session selected:', {
-      id: sessionId.slice(0, 8),
-      status: session?.status,
-      has_options: !!session?.options,
-      working_directory: session?.options?.working_directory,
-      git_branch: session?.git_branch,
-      provider: session?.options?.provider,
-      model: session?.options?.model || session?.model_name,
-      full_session: session
-    })
-
     activeSessionId.value = sessionId
 
     // Load historical messages if not already loaded
     if (!messagesLoaded.value.has(sessionId)) {
-      console.log(`Loading messages for session ${sessionId}`)
       agentWs.send({
         type: 'load_messages',
         session_id: sessionId,

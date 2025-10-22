@@ -62,7 +62,6 @@ export function useSessionState() {
       if (toolStatsData) {
         const parsed = JSON.parse(toolStatsData)
         sessionToolStats.value = new Map(Object.entries(parsed))
-        console.log('📦 Loaded tool stats from localStorage:', parsed)
       }
 
       // Load permission stats
@@ -70,7 +69,6 @@ export function useSessionState() {
       if (permStatsData) {
         const parsed = JSON.parse(permStatsData)
         sessionPermissionStats.value = new Map(Object.entries(parsed))
-        console.log('📦 Loaded permission stats from localStorage:', parsed)
       }
     } catch (error) {
       console.error('Failed to load stats from localStorage:', error)
@@ -84,7 +82,6 @@ export function useSessionState() {
     try {
       const obj = Object.fromEntries(newStats.entries())
       localStorage.setItem(TOOL_STATS_KEY, JSON.stringify(obj))
-      console.log('💾 Saved tool stats to localStorage')
     } catch (error) {
       console.error('Failed to save tool stats to localStorage:', error)
     }
@@ -96,7 +93,6 @@ export function useSessionState() {
     try {
       const obj = Object.fromEntries(newStats.entries())
       localStorage.setItem(PERMISSION_STATS_KEY, JSON.stringify(obj))
-      console.log('💾 Saved permission stats to localStorage')
     } catch (error) {
       console.error('Failed to save permission stats to localStorage:', error)
     }
