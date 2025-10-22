@@ -100,8 +100,15 @@
           <div class="metric-label">Tools Used</div>
           <div class="metric-value">{{ toolStats.count }}</div>
           <div class="tools-list">
-            <span v-for="(count, tool) in toolStats.byName" :key="tool" class="tool-badge">
-              {{ getToolIcon(tool) }} {{ tool }}
+            <span
+              v-for="(count, tool) in toolStats.byName"
+              :key="tool"
+              class="tool-badge-wrapper"
+            >
+              <span class="tool-badge">
+                {{ getToolIcon(tool) }} {{ tool }}
+              </span>
+              <span class="tool-tooltip">{{ count }} use{{ count !== 1 ? 's' : '' }}</span>
             </span>
           </div>
         </div>
@@ -591,6 +598,11 @@ watch(sessionStartTime, (newVal) => {
   margin-top: 8px;
 }
 
+.tool-badge-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
 .tool-badge {
   display: inline-block;
   padding: 4px 8px;
@@ -600,6 +612,53 @@ watch(sessionStartTime, (newVal) => {
   color: var(--text-secondary);
   font-weight: 500;
   white-space: nowrap;
+  cursor: help;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.tool-badge:hover {
+  background: var(--accent-purple);
+  color: white;
+  border-color: var(--accent-purple-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.3);
+}
+
+.tool-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.9);
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #2d2d3a 0%, #1a1a24 100%);
+  border: 1px solid var(--accent-purple);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: all 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 20px rgba(139, 92, 246, 0.3);
+}
+
+.tool-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #2d2d3a;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+}
+
+.tool-badge-wrapper:hover .tool-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
 }
 
 /* Status Details */
