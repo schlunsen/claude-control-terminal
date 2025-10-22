@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
 
 -- Insert default settings
 INSERT OR IGNORE INTO user_settings (key, value, value_type, description) VALUES
-('diff_display_location', 'options', 'string', 'Where to display file diffs: "chat" or "options"');
+('diff_display_location', 'chat', 'string', 'Where to display file diffs: "chat" or "options"');
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_shell_commands_conversation

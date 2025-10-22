@@ -1,6 +1,6 @@
 // Composable for managing diff display location setting
 export const useDiffDisplaySetting = () => {
-  const diffDisplayLocation = ref<'chat' | 'options' | 'panel'>('options')
+  const diffDisplayLocation = ref<'chat' | 'options'>('chat')
   const isLoading = ref(false)
   const { fetchWithAuth } = useAuthenticatedFetch()
 
@@ -14,12 +14,12 @@ export const useDiffDisplaySetting = () => {
 
       if (response.ok) {
         const setting = await response.json()
-        diffDisplayLocation.value = (setting.value || 'options') as 'chat' | 'options' | 'panel'
+        diffDisplayLocation.value = (setting.value || 'chat') as 'chat' | 'options'
       }
     } catch (error) {
       console.warn('Failed to fetch diff display setting:', error)
-      // Default to 'options' if fetch fails
-      diffDisplayLocation.value = 'options'
+      // Default to 'chat' if fetch fails
+      diffDisplayLocation.value = 'chat'
     } finally {
       isLoading.value = false
     }
