@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.13] - Settings UI & Unified Diff Display - 2025-10-23
+
+### Added
+- Comprehensive Settings UI page for user preference management
+- Professional unified diff algorithm with contextual display using jsdiff library
+- Smart context-aware diff with automatic collapsing for large file edits
+- Conditional diff display based on user preferences (inline chat vs overlay)
+- Diff statistics showing additions/deletions/context lines
+- Side-by-side diff support infrastructure for future enhancements
+
+### Changed
+- Edit diff display now defaults to 'In Chat' for better inline visibility
+- Removed 'In Panel' option from diff display settings for simplified UX
+- Edit tool data now persists on messages for reliable diff display
+- Diff display shows 3 lines of context around changes matching git diff standards
+- Improved diff rendering with proper line-by-line matching instead of simple before/after
+
+### Fixed
+- Resolved variable shadowing bug in useDiff composable causing initialization errors
+- Fixed Edit diff persistence issue by storing data directly on message objects
+- Corrected default diff display values across database schema and TypeScript types
+- Edit diffs now display reliably even after tool dismissal
+
+### Removed
+- Verbose debug console logging across frontend codebase for better performance
+- Removed debug logs from TodoWrite parser and WebSocket connection handling
+- Cleaned up console noise while preserving error and warning visibility
+
 ## [0.5.12] - Sidebar Improvements & Session State Persistence - 2025-10-23
 
 ### Added

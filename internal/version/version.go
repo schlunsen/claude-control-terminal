@@ -1,6 +1,6 @@
 package version
 
 const (
-	Version = "0.5.12"
+	Version = "0.5.13"
 	Name    = "claude-control-terminal"
 )
