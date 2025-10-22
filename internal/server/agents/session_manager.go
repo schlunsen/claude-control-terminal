@@ -189,11 +189,23 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 	if err == nil && existingMeta != nil {
 		logging.Info("Restoring session from database: %s (Claude session: %s)", sessionID, existingMeta.ClaudeSessionID)
 
+		// Restore options from database (if available), otherwise use request options
+		restoredOptions := options // Start with request options as fallback
+		if existingMeta.OptionsJSON != "" {
+			var dbOptions SessionOptions
+			if err := json.Unmarshal([]byte(existingMeta.OptionsJSON), &dbOptions); err == nil {
+				logging.Debug("Restored options from database for session %s", sessionID)
+				restoredOptions = dbOptions
+			} else {
+				logging.Warning("Failed to deserialize session options from DB for session %s: %v", sessionID, err)
+			}
+		}
+
 		// Detect git branch if working directory is provided
 		gitBranch := existingMeta.GitBranch // Use stored value first
-		if gitBranch == "" && options.WorkingDirectory != nil && *options.WorkingDirectory != "" {
+		if gitBranch == "" && restoredOptions.WorkingDirectory != nil && *restoredOptions.WorkingDirectory != "" {
 			// If not stored, try to detect it now
-			gitBranch = GetGitBranch(*options.WorkingDirectory)
+			gitBranch = GetGitBranch(*restoredOptions.WorkingDirectory)
 		}
 
 		// Restore session to memory with data from database
@@ -203,7 +215,7 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 				CreatedAt:       existingMeta.CreatedAt,
 				UpdatedAt:       time.Now(), // Update to current time
 				Status:          SessionStatus(existingMeta.Status),
-				Options:         options, // Use new options from request
+				Options:         restoredOptions, // Use restored options from database
 				MessageCount:    existingMeta.MessageCount,
 				CostUSD:         existingMeta.CostUSD,
 				NumTurns:        existingMeta.NumTurns,
