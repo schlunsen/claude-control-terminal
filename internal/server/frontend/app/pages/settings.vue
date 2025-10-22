@@ -18,8 +18,7 @@
               <p class="setting-description">
                 Choose where to display file edit diffs when using the Edit tool.
                 "In Chat" shows the full diff in the conversation, "In Options" shows diffs
-                in a collapsible overlay, and "In Panel" displays the diff in a dedicated
-                side panel showing the current file being edited.
+                in a collapsible overlay.
               </p>
             </div>
             <div class="setting-control">
@@ -66,27 +65,6 @@
                     </div>
                   </div>
                 </label>
-                <label class="radio-option" :class="{ 'active': diffDisplayLocation === 'panel' }">
-                  <input
-                    type="radio"
-                    name="diff-location"
-                    value="panel"
-                    v-model="diffDisplayLocation"
-                    @change="saveDiffDisplayLocation"
-                  />
-                  <div class="radio-content">
-                    <div class="radio-icon">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="3" y="3" width="7" height="18" rx="1" ry="1"></rect>
-                        <rect x="14" y="3" width="7" height="18" rx="1" ry="1"></rect>
-                      </svg>
-                    </div>
-                    <div class="radio-text">
-                      <strong>In Panel</strong>
-                      <span>Show diff in dedicated side panel</span>
-                    </div>
-                  </div>
-                </label>
               </div>
             </div>
           </div>
@@ -119,7 +97,7 @@ import { ref, onMounted } from 'vue'
 const { fetchWithAuth } = useAuthenticatedFetch()
 
 // Settings state
-const diffDisplayLocation = ref('options')
+const diffDisplayLocation = ref('chat')
 const showSaveStatus = ref(false)
 
 // Fetch current settings from API
@@ -131,12 +109,12 @@ const fetchSettings = async () => {
 
     if (response.ok) {
       const setting = await response.json()
-      diffDisplayLocation.value = setting.value || 'options'
+      diffDisplayLocation.value = setting.value || 'chat'
     }
   } catch (error) {
     console.error('Failed to fetch settings:', error)
-    // Default to 'options' if fetch fails
-    diffDisplayLocation.value = 'options'
+    // Default to 'chat' if fetch fails
+    diffDisplayLocation.value = 'chat'
   }
 }
 
@@ -151,7 +129,7 @@ const saveDiffDisplayLocation = async () => {
       body: JSON.stringify({
         value: diffDisplayLocation.value,
         value_type: 'string',
-        description: 'Where to display file diffs: "chat", "options", or "panel"',
+        description: 'Where to display file diffs: "chat" or "options"',
       }),
     })
 
