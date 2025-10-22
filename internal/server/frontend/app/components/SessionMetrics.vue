@@ -74,7 +74,7 @@
         </div>
         <div class="environment-row" v-else>
           <span class="env-label">Git Branch</span>
-          <span class="env-not-available">{{ session.options?.working_directory ? 'Not a git repository' : 'No environment data' }}</span>
+          <span class="env-not-available">{{ session.options?.working_directory ? 'Not a git repository' : 'No working directory set' }}</span>
         </div>
       </div>
     </div>
@@ -304,10 +304,11 @@ watch(
   (newVal) => {
     console.log('🔧 SessionMetrics: toolExecutions changed:', newVal)
     if (newVal) {
-      const count = Object.values(newVal).reduce((a, b) => a + b, 0)
-      console.log(`🔧 Calculated tool count: ${count}, tools:`, newVal)
+      // Count unique tools instead of total invocations
+      const uniqueToolCount = Object.keys(newVal).length
+      console.log(`🔧 Calculated unique tool count: ${uniqueToolCount}, tools:`, newVal)
       toolStats.value = {
-        count: count,
+        count: uniqueToolCount,
         byName: newVal
       }
       console.log('🔧 Updated toolStats:', toolStats.value)

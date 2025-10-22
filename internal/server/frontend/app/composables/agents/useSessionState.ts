@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import type { TodoItem } from '~/utils/agents/todoParser'
 import type { ActiveTool } from '~/types/agents'
 
@@ -9,6 +9,10 @@ interface ToolExecution {
   pattern?: string
   timestamp: Date
 }
+
+// LocalStorage keys
+const TOOL_STATS_KEY = 'cct_session_tool_stats'
+const PERMISSION_STATS_KEY = 'cct_session_permission_stats'
 
 export function useSessionState() {
   // Core session state
@@ -44,9 +48,64 @@ export function useSessionState() {
   // Session filtering
   const activeFilter = ref('active')
 
-  // Session metrics
+  // Session metrics - initialize from localStorage
   const sessionToolStats = ref(new Map<string, Record<string, number>>())
   const sessionPermissionStats = ref(new Map<string, { approved: number; denied: number; total: number }>())
+
+  // Load persisted stats from localStorage on mount
+  const loadPersistedStats = () => {
+    if (typeof window === 'undefined') return
+
+    try {
+      // Load tool stats
+      const toolStatsData = localStorage.getItem(TOOL_STATS_KEY)
+      if (toolStatsData) {
+        const parsed = JSON.parse(toolStatsData)
+        sessionToolStats.value = new Map(Object.entries(parsed))
+        console.log('📦 Loaded tool stats from localStorage:', parsed)
+      }
+
+      // Load permission stats
+      const permStatsData = localStorage.getItem(PERMISSION_STATS_KEY)
+      if (permStatsData) {
+        const parsed = JSON.parse(permStatsData)
+        sessionPermissionStats.value = new Map(Object.entries(parsed))
+        console.log('📦 Loaded permission stats from localStorage:', parsed)
+      }
+    } catch (error) {
+      console.error('Failed to load stats from localStorage:', error)
+    }
+  }
+
+  // Persist stats to localStorage whenever they change
+  watch(sessionToolStats, (newStats) => {
+    if (typeof window === 'undefined') return
+
+    try {
+      const obj = Object.fromEntries(newStats.entries())
+      localStorage.setItem(TOOL_STATS_KEY, JSON.stringify(obj))
+      console.log('💾 Saved tool stats to localStorage')
+    } catch (error) {
+      console.error('Failed to save tool stats to localStorage:', error)
+    }
+  }, { deep: true })
+
+  watch(sessionPermissionStats, (newStats) => {
+    if (typeof window === 'undefined') return
+
+    try {
+      const obj = Object.fromEntries(newStats.entries())
+      localStorage.setItem(PERMISSION_STATS_KEY, JSON.stringify(obj))
+      console.log('💾 Saved permission stats to localStorage')
+    } catch (error) {
+      console.error('Failed to save permission stats to localStorage:', error)
+    }
+  }, { deep: true })
+
+  // Load on mount
+  onMounted(() => {
+    loadPersistedStats()
+  })
 
   // Computed: Filtered sessions
   const filteredSessions = computed(() => {

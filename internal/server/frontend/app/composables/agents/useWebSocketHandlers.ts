@@ -522,6 +522,40 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         filtered: m.role === 'system' ? '❌ FILTERED' : '✅ KEPT'
       })))
 
+      // Calculate tool stats from loaded messages
+      const toolStats: Record<string, number> = {}
+      let toolCount = 0
+
+      data.messages.forEach((dbMsg: any) => {
+        // Parse tool_uses from assistant messages
+        if (dbMsg.tool_uses) {
+          try {
+            const toolUses = typeof dbMsg.tool_uses === 'string'
+              ? JSON.parse(dbMsg.tool_uses)
+              : dbMsg.tool_uses
+
+            if (Array.isArray(toolUses)) {
+              toolUses.forEach((tool: any) => {
+                const toolName = tool.name || tool.tool || 'Unknown'
+                toolStats[toolName] = (toolStats[toolName] || 0) + 1
+                toolCount++
+              })
+            }
+          } catch (e) {
+            console.warn('Failed to parse tool_uses:', e)
+          }
+        }
+      })
+
+      // Update session tool stats
+      if (toolCount > 0) {
+        sessionToolStats.value.set(data.session_id, toolStats)
+        console.log(`🔧 Calculated tool stats for session ${data.session_id}:`, toolStats)
+        console.log(`🔧 Total tool executions: ${toolCount}`)
+      } else {
+        console.log(`🔧 No tool uses found in loaded messages for session ${data.session_id}`)
+      }
+
       // Convert DB messages to UI message format, filtering out system messages
       const beforeFilter = data.messages.length
       const uiMessages = data.messages
