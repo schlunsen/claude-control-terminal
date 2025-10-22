@@ -472,6 +472,18 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     })
 
     agentWs.on('onSessionsList', (data) => {
+      console.log('📋 Received sessions list:', data.sessions.length, 'sessions')
+      data.sessions.forEach((session: any, index: number) => {
+        console.log(`📋 Session ${index}:`, {
+          id: session.id?.slice(0, 8),
+          status: session.status,
+          has_options: !!session.options,
+          working_directory: session.options?.working_directory,
+          git_branch: session.git_branch,
+          provider: session.options?.provider,
+          model: session.options?.model || session.model_name
+        })
+      })
       sessions.value = data.sessions
     })
 

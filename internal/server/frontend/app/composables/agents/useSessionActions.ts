@@ -252,6 +252,18 @@ export function useSessionActions(params: SessionActionParams) {
 
   // Select session
   const selectSession = (sessionId: string) => {
+    const session = sessions.value.find(s => s.id === sessionId)
+    console.log('🔄 Session selected:', {
+      id: sessionId.slice(0, 8),
+      status: session?.status,
+      has_options: !!session?.options,
+      working_directory: session?.options?.working_directory,
+      git_branch: session?.git_branch,
+      provider: session?.options?.provider,
+      model: session?.options?.model || session?.model_name,
+      full_session: session
+    })
+
     activeSessionId.value = sessionId
 
     // Load historical messages if not already loaded
