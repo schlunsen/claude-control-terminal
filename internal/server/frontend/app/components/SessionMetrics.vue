@@ -302,10 +302,20 @@ const formatDuration = (startTime: Date): string => {
 watch(
   () => props.toolExecutions,
   (newVal) => {
+    console.log('🔧 SessionMetrics: toolExecutions changed:', newVal)
     if (newVal) {
+      const count = Object.values(newVal).reduce((a, b) => a + b, 0)
+      console.log(`🔧 Calculated tool count: ${count}, tools:`, newVal)
       toolStats.value = {
-        count: Object.values(newVal).reduce((a, b) => a + b, 0),
+        count: count,
         byName: newVal
+      }
+      console.log('🔧 Updated toolStats:', toolStats.value)
+    } else {
+      console.log('🔧 toolExecutions is null/undefined, resetting to 0')
+      toolStats.value = {
+        count: 0,
+        byName: {}
       }
     }
   },

@@ -183,7 +183,8 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         }
 
         // Don't create a UI message for result/completion
-        console.log('✅ Message complete (result received)')
+        console.log('✅ Message complete (result received) - NOT ADDING TO UI')
+        console.log(`📊 Current message count in UI: ${messages.value[data.session_id]?.length || 0}`)
         return
       }
 
@@ -248,7 +249,10 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       // Skip empty content and system messages (they don't need UI display)
       if (!textContent || textContent.includes('SystemMessage')) {
-        console.log('⏭️  Skipping empty/system message')
+        console.log('⏭️  Skipping empty/system message - NOT ADDING TO UI')
+        console.log(`   textContent: "${textContent}"`)
+        console.log(`   hasSystemMessage: ${textContent?.includes('SystemMessage')}`)
+        console.log(`📊 Current message count in UI: ${messages.value[data.session_id]?.length || 0}`)
         return
       }
 
@@ -272,6 +276,7 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       messages.value[data.session_id].push(newMessage)
       console.log('✨ Created new message:', newMessage.id)
+      console.log(`📊 Total messages in UI now: ${messages.value[data.session_id].length}`)
 
       // Reset processing state when we receive content
       isProcessing.value = false
@@ -508,12 +513,25 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       if (!data.session_id || !data.messages) return
 
-      // Debug: log sequence numbers
-      console.log('Message sequences from DB:', data.messages.map((m: any) => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
+      // Debug: log ALL messages from DB before filtering
+      console.log(`📊 Total messages from DB: ${data.messages.length}`)
+      console.log('Message sequences from DB:', data.messages.map((m: any) => ({
+        seq: m.sequence,
+        role: m.role,
+        content: m.content.substring(0, 50),
+        filtered: m.role === 'system' ? '❌ FILTERED' : '✅ KEPT'
+      })))
 
       // Convert DB messages to UI message format, filtering out system messages
+      const beforeFilter = data.messages.length
       const uiMessages = data.messages
-        .filter((dbMsg: any) => dbMsg.role !== 'system')
+        .filter((dbMsg: any) => {
+          const keep = dbMsg.role !== 'system'
+          if (!keep) {
+            console.log(`🚫 Filtering out system message (seq: ${dbMsg.sequence}): ${dbMsg.content.substring(0, 80)}`)
+          }
+          return keep
+        })
         .map((dbMsg: any) => ({
           id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
           role: dbMsg.role,
@@ -525,6 +543,9 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           thinkingContent: dbMsg.thinking_content || undefined
         }))
 
+      const afterFilter = uiMessages.length
+      console.log(`🔍 Filtered ${beforeFilter - afterFilter} system messages, kept ${afterFilter} messages`)
+
       // Sort messages by sequence number first, then by timestamp for stable ordering
       // This handles cases where multiple messages have the same sequence number
       uiMessages.sort((a, b) => {
@@ -535,17 +556,24 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         return a.timestamp.getTime() - b.timestamp.getTime()
       })
 
-      console.log('Sorted message sequences:', uiMessages.map(m => ({ seq: m.sequence, role: m.role, content: m.content.substring(0, 50) })))
+      console.log('✅ Sorted message sequences:', uiMessages.map(m => ({
+        seq: m.sequence,
+        role: m.role,
+        content: m.content.substring(0, 50)
+      })))
 
       // Set or prepend messages for the session
       if (!messages.value[data.session_id]) {
         messages.value[data.session_id] = []
       }
 
+      const existingCount = messages.value[data.session_id].length
+
       // Prepend historical messages (now sorted by sequence, oldest first)
       messages.value[data.session_id] = [...uiMessages, ...messages.value[data.session_id]]
 
       console.log(`📥 Loaded ${uiMessages.length} historical messages for session ${data.session_id}`)
+      console.log(`📊 Total messages in UI now: ${messages.value[data.session_id].length} (${existingCount} existing + ${uiMessages.length} loaded)`)
     })
 
     agentWs.on('onAgentsKilled', (data) => {
