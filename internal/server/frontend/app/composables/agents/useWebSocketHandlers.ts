@@ -342,6 +342,11 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         const lastAssistantMessage = sessionMessages.findLast(m => m.role === 'assistant')
         const associatedMessageId = lastAssistantMessage?.id
 
+        console.log('Edit tool detected!')
+        console.log('Last assistant message:', lastAssistantMessage)
+        console.log('Associated message ID:', associatedMessageId)
+        console.log('Edit params:', params)
+
         // Attach Edit tool data directly to the message for persistent display
         if (lastAssistantMessage) {
           lastAssistantMessage.editToolData = {
@@ -351,6 +356,9 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
             replaceAll: params.replace_all || false,
             status: 'running'
           }
+          console.log('Attached editToolData to message:', lastAssistantMessage.editToolData)
+        } else {
+          console.warn('No last assistant message found to attach Edit data!')
         }
 
         // Create a tool use object for the active tools overlay
