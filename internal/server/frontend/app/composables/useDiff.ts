@@ -35,7 +35,7 @@ export const useDiff = () => {
     // Use jsdiff to compute changes
     const changes: Change[] = diffLines(oldText, newText)
 
-    const diffLines: DiffLine[] = []
+    const result: DiffLine[] = []
 
     // Process each change
     for (const change of changes) {
@@ -48,19 +48,19 @@ export const useDiff = () => {
 
       for (const line of lines) {
         if (change.added) {
-          diffLines.push({
+          result.push({
             type: 'addition',
             marker: '+',
             text: line
           })
         } else if (change.removed) {
-          diffLines.push({
+          result.push({
             type: 'deletion',
             marker: '-',
             text: line
           })
         } else {
-          diffLines.push({
+          result.push({
             type: 'context',
             marker: ' ',
             text: line
@@ -69,7 +69,7 @@ export const useDiff = () => {
       }
     }
 
-    return diffLines
+    return result
   }
 
   /**
