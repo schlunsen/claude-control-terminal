@@ -82,8 +82,13 @@
                   :tool="tool"
                   @dismiss="removeActiveTool(tool.sessionId, $event)"
                 />
+                <EditDiffOverlay
+                  v-else-if="tool.name === 'Edit' && diffDisplayLocation === 'options'"
+                  :tool="tool"
+                  @dismiss="removeActiveTool(tool.sessionId, $event)"
+                />
                 <ToolOverlay
-                  v-else
+                  v-else-if="tool.name !== 'Edit'"
                   :tool="tool"
                   @dismiss="removeActiveTool(tool.sessionId, $event)"
                 />
@@ -108,7 +113,19 @@
               :format-time="formatTime"
               :format-message="formatMessage"
               @open-lightbox="openLightbox"
-            />
+            >
+              <!-- Edit Diff Slot (only when diffDisplayLocation is 'chat') -->
+              <template #edit-diff v-if="diffDisplayLocation === 'chat'">
+                <EditDiffMessage
+                  v-if="getEditToolForMessage(message.id)"
+                  :file-path="getEditToolForMessage(message.id)?.input?.file_path || ''"
+                  :old-string="getEditToolForMessage(message.id)?.input?.old_string || ''"
+                  :new-string="getEditToolForMessage(message.id)?.input?.new_string || ''"
+                  :replace-all="getEditToolForMessage(message.id)?.input?.replace_all || false"
+                  :status="getEditToolForMessage(message.id)?.status || 'running'"
+                />
+              </template>
+            </MessageBubble>
           </template>
 
           <!-- Permissions Slot -->
@@ -203,6 +220,7 @@ import MessageBubble from '~/components/agents/MessageBubble.vue'
 import TodoWriteBox from '~/components/agents/TodoWriteBox.vue'
 import ToolOverlaysContainer from '~/components/agents/ToolOverlaysContainer.vue'
 import ImageLightbox from '~/components/agents/ImageLightbox.vue'
+import EditDiffMessage from '~/components/agents/EditDiffMessage.vue'
 
 // Utilities
 import { formatTime, formatMessage } from '~/utils/agents/messageFormatters'
@@ -213,6 +231,7 @@ import { getToolIcon } from '~/utils/agents/toolParser'
 import { useMessageScroll } from '~/composables/agents/useMessageScroll'
 import { useSessionState } from '~/composables/agents/useSessionState'
 import { useAgentProviders } from '~/composables/agents/useAgentProviders'
+import { useDiffDisplaySetting } from '~/composables/useDiffDisplaySetting'
 import { useSessionActions } from '~/composables/agents/useSessionActions'
 import { useMessageHelpers } from '~/composables/agents/useMessageHelpers'
 import { useToolManagement } from '~/composables/agents/useToolManagement'
@@ -222,6 +241,7 @@ import { useWebSocketHandlers } from '~/composables/agents/useWebSocketHandlers'
 // Existing overlays
 import TodoWriteOverlay from '~/components/TodoWriteOverlay.vue'
 import ToolOverlay from '~/components/ToolOverlay.vue'
+import EditDiffOverlay from '~/components/agents/EditDiffOverlay.vue'
 
 // WebSocket connection
 const agentWs = useAgentWebSocket()
@@ -267,6 +287,16 @@ const {
   activeSessionTools,
   shouldShowTodoBox
 } = useSessionState()
+
+// Diff display setting
+const { diffDisplayLocation } = useDiffDisplaySetting()
+
+// Helper to find Edit tool for a message
+const getEditToolForMessage = (messageId: string) => {
+  return activeSessionTools.value.find(
+    tool => tool.name === 'Edit' && tool.messageId === messageId
+  )
+}
 
 // Composables - Provider & Agent Selection
 const {
