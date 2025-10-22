@@ -34,15 +34,43 @@ export function useToolManagement(params: ToolManagementParams) {
   }
 
   // Tool overlay management
-  const addActiveTool = (sessionId: string, toolUse: any) => {
+  const addActiveTool = (sessionId: string, toolUse: any, messageId?: string) => {
     const tools = activeTools.value.get(sessionId) || []
+
+    // For Edit tool, check if there's an existing tool for the same file
+    // If so, update it instead of creating a new one
+    if (toolUse.name === 'Edit' && toolUse.input?.file_path) {
+      const existingToolIndex = tools.findIndex(
+        t => t.name === 'Edit' &&
+             t.input?.file_path === toolUse.input.file_path &&
+             (t.status === 'running' || t.status === 'completed')
+      )
+
+      if (existingToolIndex !== -1) {
+        // Update existing tool with new data
+        tools[existingToolIndex] = {
+          id: toolUse.id,
+          name: toolUse.name,
+          input: toolUse.input,
+          status: 'running',
+          startTime: Date.now(),
+          sessionId,
+          messageId
+        }
+        activeTools.value.set(sessionId, [...tools])
+        return
+      }
+    }
+
+    // Otherwise, create a new tool
     const activeTool: ActiveTool = {
       id: toolUse.id,
       name: toolUse.name,
       input: toolUse.input,
       status: 'running',
       startTime: Date.now(),
-      sessionId
+      sessionId,
+      messageId
     }
     tools.push(activeTool)
     activeTools.value.set(sessionId, tools)

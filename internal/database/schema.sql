@@ -112,6 +112,20 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Table for user settings
+CREATE TABLE IF NOT EXISTS user_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    value_type TEXT DEFAULT 'string', -- 'string', 'boolean', 'number', 'json'
+    description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default settings
+INSERT OR IGNORE INTO user_settings (key, value, value_type, description) VALUES
+('diff_display_location', 'options', 'string', 'Where to display file diffs: "chat" or "options"');
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_shell_commands_conversation
     ON shell_commands(conversation_id, executed_at DESC);
