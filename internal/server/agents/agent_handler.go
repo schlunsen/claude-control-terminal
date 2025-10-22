@@ -372,6 +372,17 @@ func (h *AgentHandler) sendAgentMessage(ws *websocket.Conn, sessionID uuid.UUID,
 						"input":  toolUseBlock.Input,
 						"status": "running",
 					})
+
+					// Broadcast agent_tool_use event for metrics tracking
+					toolUseEvent := map[string]interface{}{
+						"type":       string(MessageTypeAgentToolUse),
+						"session_id": sessionID.String(),
+						"tool":       toolUseBlock.Name,
+						"parameters": toolUseBlock.Input,
+					}
+					if err := ws.WriteJSON(toolUseEvent); err != nil {
+						log.Printf("Failed to send agent_tool_use event: %v", err)
+					}
 				} else {
 					log.Printf("Block %d is not a TextBlock or ToolUseBlock (type=%T)", i, block)
 				}
@@ -676,6 +687,17 @@ func (h *AgentHandler) sendFiberAgentMessage(c *fiberws.Conn, sessionID uuid.UUI
 						"input":  toolUseBlock.Input,
 						"status": "running",
 					})
+
+					// Broadcast agent_tool_use event for metrics tracking
+					toolUseEvent := map[string]interface{}{
+						"type":       string(MessageTypeAgentToolUse),
+						"session_id": sessionID.String(),
+						"tool":       toolUseBlock.Name,
+						"parameters": toolUseBlock.Input,
+					}
+					if err := c.WriteJSON(toolUseEvent); err != nil {
+						log.Printf("Failed to send agent_tool_use event: %v", err)
+					}
 				} else {
 					log.Printf("Block %d is not a TextBlock or ToolUseBlock (type=%T)", i, block)
 				}
