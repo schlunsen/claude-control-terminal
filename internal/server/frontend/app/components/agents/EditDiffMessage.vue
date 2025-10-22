@@ -53,6 +53,8 @@
 </template>
 
 <script setup lang="ts">
+import { useDiff } from '~/composables/useDiff'
+
 const props = defineProps<{
   filePath: string
   oldString: string
@@ -61,12 +63,16 @@ const props = defineProps<{
   status: 'running' | 'completed' | 'error'
 }>()
 
+const { computeContextualDiff, getDiffStats } = useDiff()
+
+// Compute diff with context
+const diffLines = computed(() => {
+  return computeContextualDiff(props.oldString, props.newString, 3)
+})
+
 // Auto-expand small diffs, keep large ones collapsed
-// Consider a diff "small" if it has <= 20 total lines
 const isSmallDiff = computed(() => {
-  const totalLines = (props.oldString?.split('\n').length || 0) +
-                     (props.newString?.split('\n').length || 0)
-  return totalLines <= 20
+  return diffLines.value.length <= 20
 })
 
 const expanded = ref(isSmallDiff.value)
@@ -84,50 +90,11 @@ const statusText = computed(() => {
   }
 })
 
-interface DiffLine {
-  type: 'addition' | 'deletion' | 'context'
-  marker: string
-  text: string
-}
+// Get diff statistics
+const diffStats = computed(() => getDiffStats(diffLines.value))
 
-const diffLines = computed<DiffLine[]>(() => {
-  const old = props.oldString
-  const newStr = props.newString
-
-  if (!old && !newStr) return []
-
-  const lines: DiffLine[] = []
-
-  // Split by lines for better diff display
-  const oldLines = old.split('\n')
-  const newLines = newStr.split('\n')
-
-  if (oldLines.length === 1 && newLines.length === 1) {
-    // Single line change - show inline
-    if (old !== newStr) {
-      lines.push({ type: 'deletion', marker: '-', text: old })
-      lines.push({ type: 'addition', marker: '+', text: newStr })
-    }
-  } else {
-    // Multi-line change
-    oldLines.forEach(line => {
-      lines.push({ type: 'deletion', marker: '-', text: line })
-    })
-    newLines.forEach(line => {
-      lines.push({ type: 'addition', marker: '+', text: line })
-    })
-  }
-
-  return lines
-})
-
-const additionCount = computed(() => {
-  return diffLines.value.filter(l => l.type === 'addition').length
-})
-
-const deletionCount = computed(() => {
-  return diffLines.value.filter(l => l.type === 'deletion').length
-})
+const additionCount = computed(() => diffStats.value.additions)
+const deletionCount = computed(() => diffStats.value.deletions)
 </script>
 
 <style scoped>

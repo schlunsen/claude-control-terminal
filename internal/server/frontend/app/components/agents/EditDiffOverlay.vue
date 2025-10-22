@@ -63,6 +63,7 @@
 
 <script setup lang="ts">
 import type { ActiveTool } from '~/types/agents'
+import { useDiff } from '~/composables/useDiff'
 
 const props = defineProps<{
   tool: ActiveTool
@@ -72,6 +73,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   dismiss: [toolId: string]
 }>()
+
+const { computeContextualDiff, getDiffStats } = useDiff()
 
 const visible = ref(true)
 const expanded = ref(false)
@@ -106,53 +109,16 @@ const replaceAll = computed(() => {
   return props.tool.input?.replace_all === true
 })
 
-interface DiffLine {
-  type: 'addition' | 'deletion' | 'context'
-  marker: string
-  text: string
-}
-
-const diffLines = computed<DiffLine[]>(() => {
-  const old = oldString.value
-  const newStr = newString.value
-
-  if (!old && !newStr) return []
-
-  const lines: DiffLine[] = []
-
-  // Split by lines for better diff display
-  const oldLines = old.split('\n')
-  const newLines = newStr.split('\n')
-
-  // Simple diff: show deletions then additions
-  // For a more sophisticated diff, we could use a diff library
-
-  if (oldLines.length === 1 && newLines.length === 1) {
-    // Single line change - show inline
-    if (old !== newStr) {
-      lines.push({ type: 'deletion', marker: '-', text: old })
-      lines.push({ type: 'addition', marker: '+', text: newStr })
-    }
-  } else {
-    // Multi-line change
-    oldLines.forEach(line => {
-      lines.push({ type: 'deletion', marker: '-', text: line })
-    })
-    newLines.forEach(line => {
-      lines.push({ type: 'addition', marker: '+', text: line })
-    })
-  }
-
-  return lines
+// Compute diff with context
+const diffLines = computed(() => {
+  return computeContextualDiff(oldString.value, newString.value, 3)
 })
 
-const additionCount = computed(() => {
-  return diffLines.value.filter(l => l.type === 'addition').length
-})
+// Get diff statistics
+const diffStats = computed(() => getDiffStats(diffLines.value))
 
-const deletionCount = computed(() => {
-  return diffLines.value.filter(l => l.type === 'deletion').length
-})
+const additionCount = computed(() => diffStats.value.additions)
+const deletionCount = computed(() => diffStats.value.deletions)
 
 const displayLines = computed(() => {
   if (expanded.value || diffLines.value.length <= 5) {
