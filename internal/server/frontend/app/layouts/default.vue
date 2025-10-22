@@ -95,6 +95,29 @@ onMounted(() => {
   loadVersion()
   // Initialize keyboard shortcuts
   registerDefaultShortcuts()
+
+  // Register new session shortcut (Shift+Option+Cmd+N)
+  const { registerShortcut } = useKeyboardShortcuts()
+  const router = useRouter()
+  registerShortcut('n', 'Create New Session', 'Agents', () => {
+    // Navigate to agents page and trigger create session
+    if (router.currentRoute.value.path !== '/agents') {
+      router.push('/agents').then(() => {
+        // Use a small delay to ensure the agents page component has fully mounted
+        setTimeout(() => {
+          const { triggerGlobalAction } = useKeyboardShortcuts()
+          triggerGlobalAction('create-new-session')
+        }, 100)
+      })
+    } else {
+      // Already on agents page, trigger immediately
+      nextTick(() => {
+        const { triggerGlobalAction } = useKeyboardShortcuts()
+        triggerGlobalAction('create-new-session')
+      })
+    }
+  })
+
   initializeShortcuts()
 })
 

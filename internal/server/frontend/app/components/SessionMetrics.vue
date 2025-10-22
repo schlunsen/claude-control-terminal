@@ -324,7 +324,7 @@ watch(
       }
     }
   },
-  { immediate: true }
+  { immediate: true, deep: true }
 )
 
 watch(

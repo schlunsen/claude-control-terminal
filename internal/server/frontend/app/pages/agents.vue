@@ -135,8 +135,8 @@
           :show="!!activeSessionId"
           :session="activeSession"
           :message-count="activeMessages.length"
-          :tool-executions="sessionToolStats.get(activeSessionId)"
-          :permission-stats="sessionPermissionStats.get(activeSessionId)"
+          :tool-executions="activeSessionToolExecutions"
+          :permission-stats="activeSessionPermissionMetrics"
         />
       </main>
     </div>
@@ -186,7 +186,7 @@
 <script setup lang="ts">
 import { useAgentWebSocket } from '~/composables/useAgentWebSocket'
 import SessionMetrics from '~/components/SessionMetrics.vue'
-import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import type { ActiveTool } from '~/types/agents'
 
 // Refactored Components
@@ -469,6 +469,17 @@ const { setupHandlers } = useWebSocketHandlers({
 // Initialize WebSocket handlers
 setupHandlers()
 
+// Computed properties for metrics to ensure reactivity
+const activeSessionToolExecutions = computed(() => {
+  if (!activeSessionId.value) return {}
+  return sessionToolStats.value.get(activeSessionId.value) || {}
+})
+
+const activeSessionPermissionMetrics = computed(() => {
+  if (!activeSessionId.value) return undefined
+  return sessionPermissionStats.value.get(activeSessionId.value)
+})
+
 // Watch for modal opening to load sessions
 watch(showResumeModal, (show) => {
   if (show) {
@@ -509,6 +520,21 @@ onMounted(() => {
   }
   // Load available providers
   loadProviders()
+
+  // Register global action for keyboard shortcut
+  console.log('[agents.vue] Mounting - registering create-new-session action')
+  const { setGlobalAction } = useKeyboardShortcuts()
+  setGlobalAction('create-new-session', () => {
+    console.log('[agents.vue] create-new-session action triggered')
+    createNewSession()
+  })
+  console.log('[agents.vue] create-new-session action registered')
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+  const { removeGlobalAction } = useKeyboardShortcuts()
+  removeGlobalAction('create-new-session')
 })
 
 // Watch for connection changes

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="show" class="modal-overlay" @click="$emit('close')">
+  <div v-if="show" class="modal-overlay" @click="$emit('close')" @keydown.enter="handleEnterKey">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
         <h2>Create New Session</h2>
@@ -217,10 +217,12 @@
           @click="$emit('create', formData)"
           class="btn-create"
           :disabled="!formData.workingDirectory || creating"
+          :title="!creating ? 'Press Enter to submit' : ''"
         >
           <div v-if="creating" class="btn-spinner"></div>
           <span v-if="!creating">Create Session</span>
           <span v-else>Creating...</span>
+          <kbd v-if="!creating" class="kbd-hint">↵</kbd>
         </button>
       </div>
     </div>
@@ -228,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch, nextTick } from 'vue'
 
 interface Provider {
   id: string
@@ -287,6 +289,32 @@ const handleAgentSelect = (agentName: string) => {
   props.formData.selectedAgent = agentName
   emit('agentSelect', agentName)
 }
+
+const handleEnterKey = (event: KeyboardEvent) => {
+  // Only trigger if we're not in a textarea (allow Enter in custom prompt)
+  const target = event.target as HTMLElement
+  if (target.tagName === 'TEXTAREA') {
+    return
+  }
+
+  // Only trigger if working directory is set and not already creating
+  if (props.formData.workingDirectory && !props.creating) {
+    event.preventDefault()
+    emit('create', props.formData)
+  }
+}
+
+// Auto-focus the working directory input when modal opens
+watch(() => props.show, (show) => {
+  if (show) {
+    nextTick(() => {
+      const workingDirInput = document.getElementById('working-directory') as HTMLInputElement
+      if (workingDirInput) {
+        workingDirInput.focus()
+      }
+    })
+  }
+})
 </script>
 
 <style scoped>
@@ -696,6 +724,25 @@ const handleAgentSelect = (agentName: string) => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* Keyboard Hint */
+.kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: white;
+  font-family: inherit;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  margin-left: 4px;
 }
 
 /* Responsive */
