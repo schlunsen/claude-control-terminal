@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.12] - Sidebar Improvements & Session State Persistence - 2025-10-23
+
+### Added
+- Enhanced sidebar with improved session state persistence for better user experience
+- Session state now reliably persists across page refreshes and navigation
+- Improved sidebar UI with better visual feedback and interaction patterns
+
+### Changed
+- Sidebar architecture refactored for more reliable state management
+- Enhanced session tracking to maintain user context during navigation
+- Improved sidebar responsiveness and performance
+
 ## [0.5.11] - Image Support & Agent UI Enhancements - 2025-10-20
 
 ### Added
@@ -758,6 +770,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.5.12]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.8...v0.5.9
