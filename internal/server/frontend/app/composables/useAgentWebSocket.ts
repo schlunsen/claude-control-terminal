@@ -62,7 +62,6 @@ export const useAgentWebSocket = () => {
 
       ws.value.onopen = () => {
         connected.value = true
-        console.log('Connected to agent server')
 
         // Clear reconnect timer
         if (reconnectTimer.value) {
@@ -71,7 +70,6 @@ export const useAgentWebSocket = () => {
         }
 
         // Automatically request session list when connected
-        console.log('Sending list_sessions message')
         ws.value?.send(JSON.stringify({ type: 'list_sessions' }))
       }
 
@@ -88,7 +86,6 @@ export const useAgentWebSocket = () => {
           // Route to appropriate handler
           switch (message.type) {
             case 'session_created':
-              console.log('Received session_created:', message)
               callbacks.onSessionCreated?.(message)
               break
 
@@ -105,12 +102,10 @@ export const useAgentWebSocket = () => {
               break
 
             case 'permission_request':
-              console.log('Received permission_request:', message)
               callbacks.onPermissionRequest?.(message)
               break
 
             case 'permission_acknowledged':
-              console.log('Received permission_acknowledged:', message)
               callbacks.onPermissionAcknowledged?.(message)
               break
 
@@ -139,7 +134,7 @@ export const useAgentWebSocket = () => {
               break
 
             default:
-              console.log('Unknown agent message type:', message.type)
+              console.warn('Unknown agent message type:', message.type)
           }
         } catch (error) {
           console.error('Error parsing agent WebSocket message:', error)
@@ -155,7 +150,6 @@ export const useAgentWebSocket = () => {
       ws.value.onclose = () => {
         connected.value = false
         authenticated.value = false
-        console.log('Disconnected from agent server')
 
         // Reconnect after 5 seconds
         if (!reconnectTimer.value) {
@@ -204,7 +198,6 @@ export const useAgentWebSocket = () => {
 
   // Register event handlers
   const on = (event: keyof AgentWebSocketCallbacks, handler: any) => {
-    console.log(`Registering handler for ${event}`)
     callbacks[event] = handler
   }
 

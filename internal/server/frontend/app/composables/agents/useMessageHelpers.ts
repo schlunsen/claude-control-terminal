@@ -30,12 +30,9 @@ export function useMessageHelpers() {
     if (!content || typeof content !== 'string') return null
 
     try {
-      console.log('Parsing TodoWrite from content:', content)
-
       // Pattern 1: Look for numbered lists (1. task, 2. task, etc.)
       const numberedListMatch = content.match(/(?:\d+\.\s+)([^\n]+)/g)
       if (numberedListMatch) {
-        console.log('Found numbered list matches:', numberedListMatch)
         const todos: TodoItem[] = []
         for (let i = 0; i < numberedListMatch.length; i++) {
           const taskContent = numberedListMatch[i].replace(/^\d+\.\s+/, '').trim()
@@ -47,7 +44,6 @@ export function useMessageHelpers() {
           }
         }
         if (todos.length > 0) {
-          console.log('Successfully parsed todos from numbered list:', todos)
           return todos
         }
       }
@@ -55,7 +51,6 @@ export function useMessageHelpers() {
       // Pattern 2: Look for checkmark-style lists (- task, * task, etc.)
       const bulletListMatch = content.match(/[-*]\s+([^\n]+)/g)
       if (bulletListMatch) {
-        console.log('Found bullet list matches:', bulletListMatch)
         const todos: TodoItem[] = []
         for (const match of bulletListMatch) {
           const taskContent = match.replace(/^[-*]\s+/, '').trim()
@@ -67,7 +62,6 @@ export function useMessageHelpers() {
           }
         }
         if (todos.length > 0) {
-          console.log('Successfully parsed todos from bullet list:', todos)
           return todos
         }
       }
@@ -82,7 +76,6 @@ export function useMessageHelpers() {
             content: item.trim(),
             status: 'pending' as const
           }))
-          console.log('Successfully parsed todos from todo marker:', todos)
           return todos
         }
       }
@@ -105,13 +98,11 @@ export function useMessageHelpers() {
           })).filter(todo => todo.content)
 
           if (todos.length > 0) {
-            console.log('Successfully parsed todos from task pattern:', todos)
             return todos
           }
         }
       }
 
-      console.log('No TodoWrite data found in content')
       return null
     } catch (e) {
       console.warn('Failed to parse TodoWrite content:', e)

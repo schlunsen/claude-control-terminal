@@ -136,3 +136,13 @@ type NotificationStats struct {
 	MostRequestedTool      string `json:"most_requested_tool"`
 	MostRequestedToolCount int64  `json:"most_requested_tool_count"`
 }
+
+// UserSetting represents a user preference/setting
+type UserSetting struct {
+	Key         string    `json:"key"`
+	Value       string    `json:"value"`
+	ValueType   string    `json:"value_type"` // 'string', 'boolean', 'number', 'json'
+	Description string    `json:"description,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}

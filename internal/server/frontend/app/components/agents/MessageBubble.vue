@@ -34,6 +34,9 @@
       </svg>
       Using {{ message.toolUse }}
     </div>
+
+    <!-- Expandable Edit Diff (when diffDisplayLocation is 'chat') -->
+    <slot name="edit-diff"></slot>
   </div>
 </template>
 

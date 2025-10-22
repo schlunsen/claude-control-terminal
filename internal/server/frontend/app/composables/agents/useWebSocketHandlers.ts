@@ -114,10 +114,13 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Extract text content from nested object
       const textContent = extractTextContent(data.content)
 
+      // Generate message ID for associating tools with messages
+      const messageId = `msg-${data.session_id}-${Date.now()}`
+
       // Process tool uses (when Claude starts using a tool)
       if (data.content && data.content.tools && Array.isArray(data.content.tools)) {
         data.content.tools.forEach((toolUse: any) => {
-          addActiveTool(data.session_id, toolUse)
+          addActiveTool(data.session_id, toolUse, messageId)
         })
       }
 
@@ -251,7 +254,7 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Since backend sends complete messages (not character-by-character streaming),
       // we just create a new message for each response
       const newMessage = {
-        id: `msg-${data.session_id}-${Date.now()}`,
+        id: messageId,  // Use the same messageId we generated earlier
         role: 'assistant',
         content: textContent,
         timestamp: new Date(),
@@ -328,6 +331,44 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       const lastMessage = messages.value[data.session_id][messages.value[data.session_id].length - 1]
       if (lastMessage && lastMessage.role === 'assistant') {
         lastMessage.toolUse = data.tool
+      }
+
+      // Handle Edit tool specifically - add to activeTools for overlay display AND attach to message
+      if (data.tool === 'Edit' && data.parameters) {
+        const params = typeof data.parameters === 'string' ? JSON.parse(data.parameters) : data.parameters
+
+        // Find the last assistant message ID to associate the tool with
+        const sessionMessages = messages.value[data.session_id] || []
+        const lastAssistantMessage = sessionMessages.findLast(m => m.role === 'assistant')
+        const associatedMessageId = lastAssistantMessage?.id
+
+        console.log('Edit tool detected!')
+        console.log('Last assistant message:', lastAssistantMessage)
+        console.log('Associated message ID:', associatedMessageId)
+        console.log('Edit params:', params)
+
+        // Attach Edit tool data directly to the message for persistent display
+        if (lastAssistantMessage) {
+          lastAssistantMessage.editToolData = {
+            filePath: params.file_path,
+            oldString: params.old_string,
+            newString: params.new_string,
+            replaceAll: params.replace_all || false,
+            status: 'running'
+          }
+          console.log('Attached editToolData to message:', lastAssistantMessage.editToolData)
+        } else {
+          console.warn('No last assistant message found to attach Edit data!')
+        }
+
+        // Create a tool use object for the active tools overlay
+        const toolUse = {
+          id: `edit-${Date.now()}`, // Generate a unique ID
+          name: 'Edit',
+          input: params,
+          status: 'running'
+        }
+        addActiveTool(data.session_id, toolUse, associatedMessageId)
       }
 
       // Handle TodoWrite specifically

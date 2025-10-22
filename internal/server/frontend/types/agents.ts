@@ -56,4 +56,5 @@ export interface ActiveTool {
   startTime: number
   endTime?: number
   sessionId: string
+  messageId?: string  // Associate tool with the message that created it
 }

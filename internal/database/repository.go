@@ -1025,3 +1025,112 @@ func (r *Repository) DeleteAllNotifications() error {
 
 	return nil
 }
+
+// GetUserSetting retrieves a user setting by key
+func (r *Repository) GetUserSetting(key string) (*UserSetting, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT key, value, value_type, description, created_at, updated_at
+		FROM user_settings
+		WHERE key = ?
+	`
+
+	var setting UserSetting
+	err := r.db.db.QueryRow(query, key).Scan(
+		&setting.Key,
+		&setting.Value,
+		&setting.ValueType,
+		&setting.Description,
+		&setting.CreatedAt,
+		&setting.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user setting: %w", err)
+	}
+
+	return &setting, nil
+}
+
+// GetAllUserSettings retrieves all user settings
+func (r *Repository) GetAllUserSettings() ([]UserSetting, error) {
+	r.db.mu.RLock()
+	defer r.db.mu.RUnlock()
+
+	query := `
+		SELECT key, value, value_type, description, created_at, updated_at
+		FROM user_settings
+		ORDER BY key
+	`
+
+	rows, err := r.db.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user settings: %w", err)
+	}
+	defer rows.Close()
+
+	var settings []UserSetting
+	for rows.Next() {
+		var setting UserSetting
+		err := rows.Scan(
+			&setting.Key,
+			&setting.Value,
+			&setting.ValueType,
+			&setting.Description,
+			&setting.CreatedAt,
+			&setting.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan user setting: %w", err)
+		}
+		settings = append(settings, setting)
+	}
+
+	return settings, nil
+}
+
+// SetUserSetting creates or updates a user setting
+func (r *Repository) SetUserSetting(setting *UserSetting) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := `
+		INSERT INTO user_settings (key, value, value_type, description, updated_at)
+		VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET
+			value = excluded.value,
+			value_type = excluded.value_type,
+			description = excluded.description,
+			updated_at = CURRENT_TIMESTAMP
+	`
+
+	_, err := r.db.db.Exec(
+		query,
+		setting.Key,
+		setting.Value,
+		setting.ValueType,
+		setting.Description,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to set user setting: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteUserSetting removes a user setting by key
+func (r *Repository) DeleteUserSetting(key string) error {
+	r.db.mu.Lock()
+	defer r.db.mu.Unlock()
+
+	query := "DELETE FROM user_settings WHERE key = ?"
+	_, err := r.db.db.Exec(query, key)
+	if err != nil {
+		return fmt.Errorf("failed to delete user setting: %w", err)
+	}
+
+	return nil
+}

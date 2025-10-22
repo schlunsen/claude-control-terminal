@@ -336,6 +336,12 @@ func (s *Server) setupRoutes() {
 
 	// System info endpoint (system metrics and runtime information)
 	api.Get("/system-info", s.handleGetSystemInfo)
+
+	// User settings endpoints
+	api.Get("/settings", s.handleGetAllSettings)
+	api.Get("/settings/:key", s.handleGetSetting)
+	api.Put("/settings/:key", s.handleUpdateSetting)
+	api.Delete("/settings/:key", s.handleDeleteSetting)
 }
 
 // Handler: Health check
@@ -2050,5 +2056,117 @@ func (s *Server) handleGetSystemInfo(c *fiber.Ctx) error {
 		"database":  dbStats,
 		"version":   version.Version,
 		"timestamp": time.Now(),
+	})
+}
+
+// Handler: Get all user settings
+func (s *Server) handleGetAllSettings(c *fiber.Ctx) error {
+	settings, err := s.repo.GetAllUserSettings()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"settings": settings,
+		"count":    len(settings),
+	})
+}
+
+// Handler: Get a specific user setting
+func (s *Server) handleGetSetting(c *fiber.Ctx) error {
+	key := c.Params("key")
+	if key == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "setting key is required",
+		})
+	}
+
+	setting, err := s.repo.GetUserSetting(key)
+	if err != nil {
+		return c.Status(404).JSON(fiber.Map{
+			"error": fmt.Sprintf("setting not found: %v", err),
+		})
+	}
+
+	return c.JSON(setting)
+}
+
+// Handler: Update a user setting
+func (s *Server) handleUpdateSetting(c *fiber.Ctx) error {
+	key := c.Params("key")
+	if key == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "setting key is required",
+		})
+	}
+
+	type UpdateSettingRequest struct {
+		Value       string `json:"value"`
+		ValueType   string `json:"value_type,omitempty"`
+		Description string `json:"description,omitempty"`
+	}
+
+	var req UpdateSettingRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "invalid request body",
+		})
+	}
+
+	// Default to string type if not specified
+	if req.ValueType == "" {
+		req.ValueType = "string"
+	}
+
+	setting := &database.UserSetting{
+		Key:         key,
+		Value:       req.Value,
+		ValueType:   req.ValueType,
+		Description: req.Description,
+	}
+
+	if err := s.repo.SetUserSetting(setting); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to update setting: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.BroadcastData("setting_updated", fiber.Map{
+		"key":   key,
+		"value": req.Value,
+	})
+
+	return c.JSON(fiber.Map{
+		"status":  "updated",
+		"setting": setting,
+	})
+}
+
+// Handler: Delete a user setting
+func (s *Server) handleDeleteSetting(c *fiber.Ctx) error {
+	key := c.Params("key")
+	if key == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "setting key is required",
+		})
+	}
+
+	if err := s.repo.DeleteUserSetting(key); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("failed to delete setting: %v", err),
+		})
+	}
+
+	// Broadcast update to WebSocket clients
+	s.wsHub.BroadcastData("setting_deleted", fiber.Map{
+		"key": key,
+	})
+
+	return c.JSON(fiber.Map{
+		"status": "deleted",
+		"key":    key,
 	})
 }
