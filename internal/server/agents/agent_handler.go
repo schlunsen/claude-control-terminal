@@ -896,8 +896,9 @@ func (h *AgentHandler) handleFiberLoadMessages(c *fiberws.Conn, rawMsg map[strin
 	}
 
 	// Validate pagination params
-	if limit < 1 || limit > 500 {
-		limit = 50
+	// Increased max limit to 1000 to support long conversations
+	if limit < 1 || limit > 1000 {
+		limit = 100 // Default to 100 instead of 50
 	}
 	if offset < 0 {
 		offset = 0
