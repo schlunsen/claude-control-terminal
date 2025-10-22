@@ -117,12 +117,12 @@
               <!-- Edit Diff Slot (only when diffDisplayLocation is 'chat') -->
               <template #edit-diff>
                 <EditDiffMessage
-                  v-if="diffDisplayLocation === 'chat' && getEditToolForMessage(message.id)"
-                  :file-path="getEditToolForMessage(message.id)?.input?.file_path || ''"
-                  :old-string="getEditToolForMessage(message.id)?.input?.old_string || ''"
-                  :new-string="getEditToolForMessage(message.id)?.input?.new_string || ''"
-                  :replace-all="getEditToolForMessage(message.id)?.input?.replace_all || false"
-                  :status="getEditToolForMessage(message.id)?.status || 'running'"
+                  v-if="diffDisplayLocation === 'chat' && message.editToolData"
+                  :file-path="message.editToolData.filePath"
+                  :old-string="message.editToolData.oldString"
+                  :new-string="message.editToolData.newString"
+                  :replace-all="message.editToolData.replaceAll"
+                  :status="message.editToolData.status"
                 />
               </template>
             </MessageBubble>

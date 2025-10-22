@@ -333,7 +333,7 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         lastMessage.toolUse = data.tool
       }
 
-      // Handle Edit tool specifically - add to activeTools for overlay display
+      // Handle Edit tool specifically - add to activeTools for overlay display AND attach to message
       if (data.tool === 'Edit' && data.parameters) {
         const params = typeof data.parameters === 'string' ? JSON.parse(data.parameters) : data.parameters
 
@@ -341,6 +341,17 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         const sessionMessages = messages.value[data.session_id] || []
         const lastAssistantMessage = sessionMessages.findLast(m => m.role === 'assistant')
         const associatedMessageId = lastAssistantMessage?.id
+
+        // Attach Edit tool data directly to the message for persistent display
+        if (lastAssistantMessage) {
+          lastAssistantMessage.editToolData = {
+            filePath: params.file_path,
+            oldString: params.old_string,
+            newString: params.new_string,
+            replaceAll: params.replace_all || false,
+            status: 'running'
+          }
+        }
 
         // Create a tool use object for the active tools overlay
         const toolUse = {
