@@ -500,13 +500,11 @@ watch(activeSessionTodos, (todos) => {
 
   // If all todos are completed, set a new timer
   if (todos.length > 0 && todos.every(todo => todo.status === 'completed')) {
-    console.log('All todos completed, setting 5 second auto-hide timer')
     const timer = setTimeout(() => {
       const currentTodos = sessionTodos.value.get(activeSessionId.value)
       if (currentTodos && currentTodos.every(todo => todo.status === 'completed')) {
         sessionTodos.value.delete(activeSessionId.value)
         todoHideTimers.value.delete(activeSessionId.value)
-        console.log('Auto-hid todos after 5 seconds')
       }
     }, 5000)
     todoHideTimers.value.set(activeSessionId.value, timer)
@@ -522,13 +520,10 @@ onMounted(() => {
   loadProviders()
 
   // Register global action for keyboard shortcut
-  console.log('[agents.vue] Mounting - registering create-new-session action')
   const { setGlobalAction } = useKeyboardShortcuts()
   setGlobalAction('create-new-session', () => {
-    console.log('[agents.vue] create-new-session action triggered')
     createNewSession()
   })
-  console.log('[agents.vue] create-new-session action registered')
 })
 
 // Cleanup on unmount

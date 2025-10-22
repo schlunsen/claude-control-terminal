@@ -74,9 +74,7 @@ export function useSessionActions(params: SessionActionParams) {
 
   // Create new session
   const createNewSession = async () => {
-    console.log('[useSessionActions] createNewSession called, connected:', agentWs.connected)
     if (!agentWs.connected) {
-      console.warn('[useSessionActions] Cannot create session - WebSocket not connected')
       return
     }
 
@@ -125,9 +123,7 @@ export function useSessionActions(params: SessionActionParams) {
       console.error('Error fetching current working directory:', error)
     }
 
-    console.log('[useSessionActions] Opening create session modal, value will be:', true)
     showCreateSessionModal.value = true
-    console.log('[useSessionActions] Modal state after setting:', showCreateSessionModal.value)
   }
 
   // Create session with options

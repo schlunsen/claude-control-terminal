@@ -175,22 +175,17 @@ export const useKeyboardShortcuts = () => {
     })
 
     registerShortcut('l', 'Navigate to Live Agents', 'Navigation', () => {
-      console.log('[Shortcut L] Triggered, current path:', router.currentRoute.value.path)
       // If already on agents page, trigger create session modal
       if (router.currentRoute.value.path === '/agents') {
-        console.log('[Shortcut L] Already on /agents, triggering action with small delay')
         // Use small delay in case page is still mounting
         setTimeout(() => {
           triggerGlobalAction('create-new-session')
         }, 50)
       } else {
-        console.log('[Shortcut L] Navigating to /agents...')
         router.push('/agents').then(() => {
-          console.log('[Shortcut L] Navigation complete, waiting 100ms before triggering action')
           // Use a small delay to ensure the agents page component has fully mounted
           // and registered its global action handler
           setTimeout(() => {
-            console.log('[Shortcut L] Delay complete, triggering action now')
             triggerGlobalAction('create-new-session')
           }, 100)
         })
@@ -226,14 +221,9 @@ export const useKeyboardShortcuts = () => {
   }
 
   const triggerGlobalAction = (action: string) => {
-    console.log(`[useKeyboardShortcuts] Triggering global action: ${action}`)
-    console.log(`[useKeyboardShortcuts] Available actions:`, Array.from(globalShortcutActions.value.keys()))
     const handler = globalShortcutActions.value.get(action)
     if (handler) {
-      console.log(`[useKeyboardShortcuts] Handler found for ${action}, executing...`)
       handler()
-    } else {
-      console.warn(`[useKeyboardShortcuts] No handler found for action: ${action}`)
     }
   }
 
