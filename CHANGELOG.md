@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.15] - Browser-Based Voice Recording & Transcription - 2025-10-23
+
+### Added
+- Browser-based voice recording with Whisper.js transcription for hands-free agent interaction
+- Three Whisper model options: Tiny (~35MB, fast), Base (~75MB, balanced), Small (~150MB, accurate)
+- Voice recording settings UI with model selection and visual size/speed/accuracy indicators
+- Auto-start recording after Whisper model loads for streamlined voice input workflow
+- Keyboard shortcuts for voice recording: Ctrl/Cmd+R to start, Space to stop, Escape to cancel
+- Real-time progress tracking during Whisper model downloads with per-file progress calculation
+- Vertical button layout in voice recording modal optimized for mobile UX
+- Visual feedback showing keyboard shortcuts during recording session
+- Smart model switching that avoids reloading when same model already loaded
+- Complete documentation in VOICE_RECORDING.md with architecture and usage guide
+
+### Changed
+- Voice recording UX improved with immediate auto-start after model initialization
+- Recording modal buttons stacked vertically for better mobile accessibility
+- Progress bar now accurately reflects multi-file Whisper model download status
+- Button labels enhanced to display keyboard shortcut hints
+
+### Technical
+- Integrated Whisper.js (@xenova/transformers) for client-side speech recognition
+- Dynamic model loading based on user preferences stored in settings
+- Per-file progress tracking with overall percentage calculation
+- Model caching to prevent unnecessary redownloads
+
 ## [0.5.14] - Username/Password Authentication System - 2025-10-23
 
 ### Added
