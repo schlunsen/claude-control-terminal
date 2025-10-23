@@ -103,7 +103,7 @@
             </span>
           </div>
 
-          <!-- Textarea & Send Button Row -->
+          <!-- Textarea & Buttons Row -->
           <div class="input-row">
             <textarea
               ref="messageInput"
@@ -122,17 +122,32 @@
               :maxlength="5000"
               rows="3"
             ></textarea>
-            <button
-              @click="$emit('send')"
-              class="btn-send"
-              :disabled="(!inputMessage.trim() && attachedImages.length === 0) || !connected"
-              title="Send message (Enter)"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="22" y1="2" x2="11" y2="13"></line>
-                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-              </svg>
-            </button>
+            <div class="button-group">
+              <button
+                @click="startVoiceRecording"
+                class="btn-record"
+                :disabled="!connected"
+                title="Record voice message"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </button>
+              <button
+                @click="$emit('send')"
+                class="btn-send"
+                :disabled="(!inputMessage.trim() && attachedImages.length === 0) || !connected"
+                title="Send message (Enter)"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
           </div>
 
           <!-- Drag & Drop Overlay -->
@@ -151,11 +166,104 @@
         </div>
       </div>
     </div>
+
+    <!-- Recording Modal -->
+    <transition name="modal-fade">
+      <div v-if="showRecordingModal" class="recording-modal-overlay" @click="cancelVoiceRecording">
+        <div class="recording-modal" @click.stop>
+          <div class="modal-header">
+            <h3>Voice Recording</h3>
+            <button @click="cancelVoiceRecording" class="close-btn" title="Cancel">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          <div class="modal-body">
+            <!-- Recording Visualization -->
+            <div class="recording-visualization" v-if="voiceRecording.isRecording.value && !whisperTranscription.isTranscribing.value">
+              <div class="pulse-ring"></div>
+              <div class="pulse-ring-2"></div>
+              <div class="microphone-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="23"></line>
+                  <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+              </div>
+            </div>
+
+            <!-- Transcribing State -->
+            <div v-if="whisperTranscription.isTranscribing.value" class="transcribing-state">
+              <div class="spinner"></div>
+              <p class="status-text">Transcribing...</p>
+            </div>
+
+            <!-- Model Loading State -->
+            <div v-if="whisperTranscription.isModelLoading.value" class="loading-state">
+              <div class="loading-icon">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+              </div>
+              <h3 class="loading-title">Preparing AI Model</h3>
+              <p class="status-text">Downloading Whisper speech recognition model...</p>
+              <p class="status-subtext">This only happens once, then it's cached for instant use</p>
+              <div class="progress-bar-container">
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: whisperTranscription.transcriptionProgress.value + '%' }"></div>
+                </div>
+                <p class="progress-text">{{ whisperTranscription.transcriptionProgress.value }}%</p>
+              </div>
+            </div>
+
+            <!-- Recording Status -->
+            <div v-if="!whisperTranscription.isTranscribing.value && !whisperTranscription.isModelLoading.value" class="recording-status">
+              <p class="status-text">
+                {{ voiceRecording.isRecording.value ? 'Recording...' : 'Ready to record' }}
+              </p>
+              <p class="duration">{{ voiceRecording.formatDuration(voiceRecording.duration.value) }}</p>
+              <p v-if="voiceRecording.isRecording.value" class="status-hint">Press Space to stop recording</p>
+            </div>
+
+            <!-- Error Display -->
+            <div v-if="voiceRecording.error.value || whisperTranscription.error.value" class="error-message">
+              {{ voiceRecording.error.value || whisperTranscription.error.value }}
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button
+              v-if="voiceRecording.isRecording.value"
+              @click="finishRecording"
+              class="btn-modal btn-stop"
+              :disabled="whisperTranscription.isTranscribing.value"
+            >
+              Stop & Transcribe (Space)
+            </button>
+            <button
+              @click="cancelVoiceRecording"
+              class="btn-modal btn-cancel"
+              :disabled="whisperTranscription.isModelLoading.value"
+            >
+              Cancel (Esc)
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { useVoiceRecording } from '~/composables/useVoiceRecording'
+import { useWhisperTranscription } from '~/composables/useWhisperTranscription'
 
 interface AttachedImage {
   fileName: string
@@ -187,6 +295,13 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const attachedImages = ref<AttachedImage[]>([])
 const isDragging = ref(false)
 const isFocused = ref(false)
+
+// Voice recording composables
+const voiceRecording = useVoiceRecording()
+const whisperTranscription = useWhisperTranscription()
+
+// Recording state
+const showRecordingModal = ref(false)
 
 // Allowed image formats
 const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
@@ -341,6 +456,106 @@ function clearAllImages() {
 function clearAttachments() {
   attachedImages.value = []
 }
+
+// Voice recording functions
+async function startVoiceRecording() {
+  try {
+    // Show modal first
+    showRecordingModal.value = true
+
+    // Preload the Whisper model if not already loaded
+    await whisperTranscription.initializeModel()
+
+    // Auto-start recording immediately after model is loaded
+    await voiceRecording.startRecording()
+  } catch (error) {
+    console.error('Failed to initialize voice recording:', error)
+    showRecordingModal.value = false
+  }
+}
+
+function stopVoiceRecording() {
+  voiceRecording.stopRecording()
+}
+
+// Keyboard handler for Space key to stop recording
+function handleKeydown(event: KeyboardEvent) {
+  // Only handle space key when modal is open and recording
+  if (event.code === 'Space' && showRecordingModal.value && voiceRecording.isRecording.value) {
+    event.preventDefault()
+    finishRecording()
+  }
+  // Also allow Escape to cancel
+  if (event.code === 'Escape' && showRecordingModal.value) {
+    event.preventDefault()
+    cancelVoiceRecording()
+  }
+}
+
+function cancelVoiceRecording() {
+  voiceRecording.cancelRecording()
+  showRecordingModal.value = false
+}
+
+async function finishRecording() {
+  try {
+    // Stop recording
+    stopVoiceRecording()
+
+    // Wait a bit for the blob to be ready
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    const audioBlob = voiceRecording.audioBlob.value
+    if (!audioBlob) {
+      console.error('No audio recorded')
+      voiceRecording.error.value = 'No audio recorded'
+      return
+    }
+
+    console.log('Audio blob ready:', audioBlob.size, 'bytes')
+
+    // Transcribe audio
+    const text = await whisperTranscription.transcribe(audioBlob)
+
+    console.log('Transcription result:', text)
+
+    // Add transcribed text to input
+    if (text) {
+      const currentText = props.inputMessage
+      const newText = currentText ? `${currentText} ${text}` : text
+      console.log('Emitting update:input-message with:', newText)
+      emit('update:input-message', newText)
+
+      // Focus the input field after transcription
+      await nextTick()
+      if (messageInput.value) {
+        messageInput.value.focus()
+        // Move cursor to end
+        const length = newText.length
+        messageInput.value.setSelectionRange(length, length)
+      }
+    } else {
+      console.warn('Transcription returned empty text')
+      whisperTranscription.error.value = 'No speech detected in audio'
+    }
+
+    // Reset and close modal
+    voiceRecording.reset()
+    showRecordingModal.value = false
+  } catch (error) {
+    console.error('Failed to transcribe audio:', error)
+    whisperTranscription.error.value = error instanceof Error ? error.message : 'Transcription failed'
+  }
+}
+
+// Add keyboard event listener for Space and Escape keys
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+})
 
 defineExpose({
   messagesContainer,
@@ -650,6 +865,13 @@ defineExpose({
   align-items: flex-end;
 }
 
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
 .message-input {
   flex: 1;
   padding: 12px 16px;
@@ -691,7 +913,7 @@ defineExpose({
   justify-content: center;
   box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
   height: 48px;
-  min-width: 48px;
+  width: 100%;
 }
 
 .btn-send:hover:not(:disabled) {
@@ -704,6 +926,37 @@ defineExpose({
 }
 
 .btn-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-record {
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+  height: 48px;
+  width: 100%;
+}
+
+.btn-record:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(220, 53, 69, 0.4);
+}
+
+.btn-record:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-record:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
@@ -785,6 +1038,329 @@ defineExpose({
   opacity: 0;
 }
 
+/* Recording Modal */
+.recording-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.recording-modal {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 400px;
+  max-width: 500px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text-primary);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 32px 16px;
+}
+
+.recording-visualization {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pulse-ring,
+.pulse-ring-2 {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border: 3px solid #dc3545;
+  border-radius: 50%;
+  animation: pulse 2s ease-out infinite;
+  opacity: 0;
+}
+
+.pulse-ring-2 {
+  animation-delay: 1s;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0;
+  }
+}
+
+.microphone-icon {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  z-index: 1;
+  box-shadow: 0 4px 20px rgba(220, 53, 69, 0.4);
+}
+
+.transcribing-state,
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  text-align: center;
+}
+
+.loading-icon {
+  color: var(--accent-purple);
+  animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.loading-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.status-subtext {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: -8px 0 0 0;
+  opacity: 0.8;
+}
+
+.progress-bar-container {
+  width: 100%;
+  max-width: 300px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--border-color);
+  border-top-color: var(--accent-purple);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.recording-status {
+  text-align: center;
+}
+
+.status-text {
+  font-size: 1.1rem;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.duration {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--accent-purple);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.keyboard-hint {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 12px 0 0 0;
+  opacity: 0.9;
+}
+
+.keyboard-hint kbd {
+  display: inline-block;
+  padding: 3px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-purple);
+  box-shadow: 0 2px 0 var(--border-color);
+}
+
+.status-hint {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 8px 0 0 0;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-purple), var(--accent-purple-hover));
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 4px 0 0 0;
+}
+
+.error-message {
+  color: #dc3545;
+  background: rgba(220, 53, 69, 0.1);
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.modal-footer {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px;
+  margin-top: 24px;
+  align-items: stretch;
+}
+
+.btn-modal {
+  width: 100% !important;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: block;
+  flex-shrink: 0;
+}
+
+.btn-start {
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+}
+
+.btn-start:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
+
+.btn-stop {
+  background: linear-gradient(135deg, var(--accent-purple), var(--accent-purple-hover));
+  color: white;
+}
+
+.btn-stop:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.btn-cancel {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.btn-cancel:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
+}
+
+.btn-modal:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Modal Transitions */
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.modal-fade-enter-active .recording-modal,
+.modal-fade-leave-active .recording-modal {
+  transition: transform 0.3s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+
+.modal-fade-enter-from .recording-modal {
+  transform: scale(0.9) translateY(-20px);
+}
+
+.modal-fade-leave-to .recording-modal {
+  transform: scale(0.9) translateY(-20px);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .input-toolbar {
@@ -799,6 +1375,11 @@ defineExpose({
 
   .preview-grid {
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
+
+  .recording-modal {
+    min-width: 90%;
+    max-width: 90%;
   }
 }
 </style>
