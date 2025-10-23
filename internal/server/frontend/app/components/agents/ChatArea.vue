@@ -116,7 +116,7 @@
               @dragleave="isDragging = false"
               @focus="isFocused = true"
               @blur="isFocused = false"
-              placeholder="Type your message or paste/drop an image... (Enter to send, Shift+Enter for new line, Ctrl/Cmd+R to record)"
+              placeholder="Type your message or paste/drop an image... (Enter to send, Shift+Enter for new line, ⇧⌥⌘R to record)"
               class="message-input"
               :disabled="!connected"
               :maxlength="5000"
@@ -127,7 +127,7 @@
                 @click="startVoiceRecording"
                 class="btn-record"
                 :disabled="!connected"
-                title="Record voice message (Ctrl/Cmd+R)"
+                title="Record voice message (⇧⌥⌘R)"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -480,9 +480,8 @@ function stopVoiceRecording() {
 
 // Keyboard handler for shortcuts
 function handleKeydown(event: KeyboardEvent) {
-  // Only handle 'R' key when NOT typing in an input/textarea
-  // Ctrl/Cmd+R to start recording (doesn't interfere with typing)
-  if (event.code === 'KeyR' && (event.ctrlKey || event.metaKey) && !showRecordingModal.value && props.connected) {
+  // Shift + Option/Alt + Command/Ctrl + R to start recording
+  if (event.code === 'KeyR' && event.shiftKey && event.altKey && (event.metaKey || event.ctrlKey) && !showRecordingModal.value && props.connected) {
     event.preventDefault()
     startVoiceRecording()
     return
