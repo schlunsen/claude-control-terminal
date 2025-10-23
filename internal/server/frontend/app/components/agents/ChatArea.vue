@@ -116,7 +116,7 @@
               @dragleave="isDragging = false"
               @focus="isFocused = true"
               @blur="isFocused = false"
-              placeholder="Type your message or paste/drop an image... (Enter to send, Shift+Enter for new line)"
+              placeholder="Type your message or paste/drop an image... (Enter to send, Shift+Enter for new line, Ctrl/Cmd+R to record)"
               class="message-input"
               :disabled="!connected"
               :maxlength="5000"
@@ -127,7 +127,7 @@
                 @click="startVoiceRecording"
                 class="btn-record"
                 :disabled="!connected"
-                title="Record voice message"
+                title="Record voice message (Ctrl/Cmd+R)"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -478,17 +478,28 @@ function stopVoiceRecording() {
   voiceRecording.stopRecording()
 }
 
-// Keyboard handler for Space key to stop recording
+// Keyboard handler for shortcuts
 function handleKeydown(event: KeyboardEvent) {
-  // Only handle space key when modal is open and recording
+  // Only handle 'R' key when NOT typing in an input/textarea
+  // Ctrl/Cmd+R to start recording (doesn't interfere with typing)
+  if (event.code === 'KeyR' && (event.ctrlKey || event.metaKey) && !showRecordingModal.value && props.connected) {
+    event.preventDefault()
+    startVoiceRecording()
+    return
+  }
+
+  // Space key to stop recording (only when modal is open)
   if (event.code === 'Space' && showRecordingModal.value && voiceRecording.isRecording.value) {
     event.preventDefault()
     finishRecording()
+    return
   }
-  // Also allow Escape to cancel
+
+  // Escape to cancel recording
   if (event.code === 'Escape' && showRecordingModal.value) {
     event.preventDefault()
     cancelVoiceRecording()
+    return
   }
 }
 
