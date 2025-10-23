@@ -605,6 +605,10 @@ func (h *AgentHandler) handleFiberCreateSession(c *fiberws.Conn, rawMsg map[stri
 	}
 
 	log.Printf("Creating session: %s", msg.SessionID)
+	log.Printf("Session options received: %+v", msg.Options)
+	if msg.Options.WorkingDirectory != nil {
+		log.Printf("Working directory: %s", *msg.Options.WorkingDirectory)
+	}
 
 	// Create session
 	session, err := h.SessionManager.CreateSession(msg.SessionID, msg.Options)
