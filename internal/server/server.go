@@ -152,7 +152,7 @@ func (s *Server) Setup() error {
 		}
 
 		// Create session auth middleware
-		s.sessionAuthMiddleware = NewSessionAuthMiddleware(s.userStore, config.Auth.RequireLogin)
+		s.sessionAuthMiddleware = NewSessionAuthMiddleware(s.userStore, true, config.Auth.RequireLogin)
 
 		if !s.quiet {
 			if s.userStore.HasUsers() {

@@ -47,31 +47,11 @@
 
     <!-- Shortcuts Dialog -->
     <ShortcutsDialog />
-
-    <!-- Login Modal -->
-    <LoginModal
-      v-model="showLoginModal"
-      :can-close="!requireLogin"
-      :title="requireLogin ? 'Login Required' : 'Login'"
-      @login="handleLogin"
-    />
   </div>
 </template>
 
 <script setup>
 import '../assets/css/main.css'
-
-// Initialize authentication
-const {
-  showLoginModal,
-  requireLogin,
-  checkAuthStatus
-} = useAuth()
-
-// Check auth status on mount
-async function handleLogin() {
-  await checkAuthStatus()
-}
 
 // Initialize theme system
 const { isDark } = useTheme()
@@ -110,12 +90,9 @@ function openAnalytics() {
   window.open('http://localhost:3333', '_blank')
 }
 
-// Load version and check auth on mount
-onMounted(async () => {
+// Load version on mount
+onMounted(() => {
   loadVersion()
-
-  // Check authentication status
-  await checkAuthStatus()
 
   // Initialize keyboard shortcuts
   registerDefaultShortcuts()

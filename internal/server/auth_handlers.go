@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -34,15 +35,17 @@ type CreateUserRequest struct {
 
 // SessionAuthMiddleware creates a middleware for session authentication
 type SessionAuthMiddleware struct {
-	userStore *UserStore
-	enabled   bool
+	userStore    *UserStore
+	enabled      bool
+	requireLogin bool
 }
 
 // NewSessionAuthMiddleware creates a new session authentication middleware
-func NewSessionAuthMiddleware(userStore *UserStore, enabled bool) *SessionAuthMiddleware {
+func NewSessionAuthMiddleware(userStore *UserStore, enabled bool, requireLogin bool) *SessionAuthMiddleware {
 	return &SessionAuthMiddleware{
-		userStore: userStore,
-		enabled:   enabled,
+		userStore:    userStore,
+		enabled:      enabled,
+		requireLogin: requireLogin,
 	}
 }
 
@@ -54,20 +57,39 @@ func (sam *SessionAuthMiddleware) Handler() fiber.Handler {
 			return c.Next()
 		}
 
-		// Skip auth for login endpoint
-		if c.Path() == "/api/auth/login" || c.Path() == "/api/auth/status" {
+		// Always allow auth endpoints
+		path := c.Path()
+		if path == "/api/auth/login" || path == "/api/auth/status" || path == "/api/auth/logout" {
 			return c.Next()
 		}
 
-		// Allow GET requests for static files and public endpoints
+		// Always allow health and version endpoints
+		if path == "/api/health" || path == "/api/version" {
+			return c.Next()
+		}
+
 		method := c.Method()
-		if method == "GET" || method == "OPTIONS" {
-			// Check if this is a public endpoint (dashboard pages, assets, etc.)
-			path := c.Path()
-			if path == "/" || path == "/api/health" || path == "/api/version" ||
-				path == "/assets/" || path == "/favicon.ico" {
+
+		// If require_login is false, allow GET/OPTIONS requests without auth
+		// This lets users browse the dashboard but protects write operations
+		if !sam.requireLogin && (method == "GET" || method == "OPTIONS") {
+			// Still allow static assets
+			if path == "/" || strings.HasPrefix(path, "/assets/") ||
+			   strings.HasPrefix(path, "/_nuxt/") || path == "/favicon.ico" {
 				return c.Next()
 			}
+			// Allow API GET requests without auth when require_login is false
+			return c.Next()
+		}
+
+		// If require_login is true, only allow static assets without auth
+		if sam.requireLogin && (method == "GET" || method == "OPTIONS") {
+			// Allow static assets only
+			if path == "/" || strings.HasPrefix(path, "/assets/") ||
+			   strings.HasPrefix(path, "/_nuxt/") || path == "/favicon.ico" {
+				return c.Next()
+			}
+			// All other GET requests require auth when require_login is true
 		}
 
 		// Get session token from cookie or Authorization header

@@ -84,6 +84,7 @@ type Model struct {
 	currentTheme       int  // 0=orange, 1=green, 2=cyan, 3=purple
 	shouldLaunchClaude bool // Signal to launch Claude after TUI exits
 	launchLastSession  bool // Signal to launch Claude with -c parameter
+	shouldSetupUserAuth bool // Signal to setup user auth after TUI exits
 
 	// Analytics state
 	analyticsEnabled bool            // Whether analytics server is running
@@ -485,13 +486,10 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "u", "U":
-		// Setup user authentication - run synchronously
-		// This exits the TUI temporarily to interact with the user
-		if err := SetupUserAuth(m.claudeDir); err != nil {
-			// Error will be printed by SetupUserAuth
-			return m, nil
-		}
-		return m, nil
+		// Setup user authentication - exit TUI first to avoid conflicts
+		m.shouldSetupUserAuth = true
+		m.quitting = true
+		return m, tea.Quit
 	}
 	return m, nil
 }
