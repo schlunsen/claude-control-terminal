@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - Agent Session Control & UI Polish - 2025-10-24
+
+### Added
+- Interrupt session functionality for Live Agents allowing users to stop running agent sessions
+- Manual close buttons for tool overlays providing better control over UI elements
+- Enhanced metrics sidebar with provider badge for visual provider identification
+
+### Changed
+- Reorganized metrics sidebar layout with improved provider information display
+- Enhanced tool overlay user experience with manual dismissal controls
+
+### Fixed
+- Permission request handling improvements for more reliable agent interactions
+- WebSocket reconnection logic enhanced for better connection stability
+
 ## [0.5.15] - Browser-Based Voice Recording & Transcription - 2025-10-23
 
 ### Added
@@ -873,6 +888,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.6.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.15...v0.6.0
+[0.5.15]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.14...v0.5.15
 [0.5.14]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.13...v0.5.14
 [0.5.13]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.12...v0.5.13
 [0.5.12]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.11...v0.5.12
