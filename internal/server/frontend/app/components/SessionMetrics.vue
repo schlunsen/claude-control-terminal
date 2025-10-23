@@ -1,7 +1,7 @@
 <template>
   <div class="session-metrics" v-if="session">
     <!-- Header with Session ID and Status -->
-    <div class="metrics-header">
+    <div v-if="!hideHeader" class="metrics-header">
       <div class="header-row">
         <div class="session-badge">
           <span class="badge-label">Session</span>
@@ -15,30 +15,6 @@
         <div class="status-badge" :class="session.status">
           <span class="status-dot"></span>
           {{ session.status }}
-        </div>
-      </div>
-    </div>
-
-    <!-- Model & Provider Section -->
-    <div class="model-section">
-      <div class="model-header">
-        <span class="model-icon">🤖</span>
-        <span class="model-title">AI Model</span>
-      </div>
-      <div class="model-details">
-        <div class="model-row">
-          <span class="model-label">Provider</span>
-          <div class="provider-badge">
-            <span>{{ getProviderDisplay(session.options?.provider) }}</span>
-          </div>
-        </div>
-        <div class="model-row" v-if="session.options?.model || session.model_name">
-          <span class="model-label">Model</span>
-          <div class="model-value-wrapper">
-            <code class="model-value" :title="session.options?.model || session.model_name">
-              {{ session.options?.model || session.model_name }}
-            </code>
-          </div>
         </div>
       </div>
     </div>
@@ -214,6 +190,7 @@ const props = defineProps<{
     denied: number
     total: number
   }
+  hideHeader?: boolean
 }>()
 
 // Reactive data
@@ -815,56 +792,7 @@ watch(sessionStartTime, (newVal) => {
   }
 }
 
-/* Model & Provider Section */
-.model-section {
-  padding: 16px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  margin-bottom: 16px;
-}
-
-.model-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.model-icon {
-  font-size: 1.2rem;
-}
-
-.model-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.model-details {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.model-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.model-label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-}
-
+/* Provider Badge - Kept for reuse in stats header */
 .provider-badge {
   display: inline-flex;
   align-items: center;
@@ -877,43 +805,6 @@ watch(sessionStartTime, (newVal) => {
   color: white;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
   width: fit-content;
-}
-
-.model-value-wrapper {
-  overflow-x: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
-
-.model-value {
-  display: block;
-  padding: 8px 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-family: 'Monaco', 'Menlo', monospace;
-  font-size: 0.85rem;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow-x: auto;
-}
-
-.model-value::-webkit-scrollbar {
-  height: 6px;
-}
-
-.model-value::-webkit-scrollbar-track {
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-}
-
-.model-value::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-.model-value::-webkit-scrollbar-thumb:hover {
-  background: var(--accent-purple);
 }
 
 /* Environment Section */
