@@ -5,6 +5,55 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.14] - Username/Password Authentication System - 2025-10-23
+
+### Added
+- Comprehensive username/password authentication system with session-based login
+- Admin user management interface accessible via TUI ('U' key)
+- Dedicated login page with beautiful UI and form validation
+- User menu dropdown in navbar showing username and admin badge
+- Configurable authentication modes: disabled, optional, or required
+- Session-based authentication with 24-hour token expiration
+- Password change functionality for authenticated users
+- Admin-only user management endpoints (create, list, delete users)
+- Rate limiting on authentication endpoints (5 login attempts, 3 password changes per 15min)
+- Interactive setup wizard for creating first admin user via TUI
+- useAuth composable for managing authentication state across frontend
+- Automatic login prompt when authentication is required
+- Comprehensive USER_AUTHENTICATION.md documentation
+
+### Security
+- Bcrypt password hashing with cost factor 12 for secure password storage
+- 256-bit random session tokens for secure session management
+- HttpOnly session cookies to prevent XSS attacks
+- Secure flag for HTTPS to prevent man-in-the-middle attacks
+- Timing attack protection using crypto/subtle constant-time comparison for API keys
+- File permissions: 0600 for sensitive files (users.json, sessions.json)
+- Minimum 8 character password requirement
+- Session middleware protecting endpoints based on configuration
+- .gitignore updated to exclude sensitive files (users.json, sessions.json, .secret, *.key, *.crt)
+
+### Changed
+- Authentication middleware now properly enforces authentication based on require_login setting
+- Static assets (/, /assets/, /_nuxt/, favicon) allowed without authentication
+- API access properly blocked when user authentication is enabled
+- Improved middleware logic for strict vs optional authentication modes
+- User menu appears in top-right navbar when authenticated with logout option
+
+### API
+- POST /api/auth/login - Login with username/password credentials
+- POST /api/auth/logout - Logout current session
+- GET /api/auth/status - Check authentication status
+- POST /api/auth/change-password - Change user password
+- POST /api/auth/users - Create user (admin only)
+- GET /api/auth/users - List all users (admin only)
+- DELETE /api/auth/users/:username - Delete user (admin only)
+
+### Files
+- ~/.claude/analytics/users/users.json - User account storage
+- ~/.claude/analytics/users/sessions.json - Active session tracking
+- USER_AUTHENTICATION.md - Complete authentication documentation
+
 ## [0.5.13] - Settings UI & Unified Diff Display - 2025-10-23
 
 ### Added
@@ -798,6 +847,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.5.14]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.13...v0.5.14
+[0.5.13]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.12...v0.5.13
 [0.5.12]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.9...v0.5.10
