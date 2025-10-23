@@ -258,9 +258,6 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 	gitBranch := ""
 	if options.WorkingDirectory != nil && *options.WorkingDirectory != "" {
 		gitBranch = GetGitBranch(*options.WorkingDirectory)
-		logging.Debug("Session %s: Working directory: %s, Git branch: %s", sessionID, *options.WorkingDirectory, gitBranch)
-	} else {
-		logging.Debug("Session %s: No working directory provided in options", sessionID)
 	}
 
 	session := &AgentSession{
@@ -327,9 +324,6 @@ func (sm *SessionManager) sessionToMetadata(session *Session) *SessionMetadata {
 	// Serialize Options to JSON
 	if optionsBytes, err := json.Marshal(session.Options); err == nil {
 		metadata.OptionsJSON = string(optionsBytes)
-		logging.Debug("Session %s: Serialized options to JSON: %s", session.ID, metadata.OptionsJSON)
-	} else {
-		logging.Error("Session %s: Failed to serialize options: %v", session.ID, err)
 	}
 
 	// Check if session is ended

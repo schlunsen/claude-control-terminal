@@ -152,7 +152,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           }
           contextUsageLoading.value = false
 
-          console.log('Parsed context usage:', usage)
         }
         // Don't display /context responses in the chat
         return
@@ -200,7 +199,6 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           // This ensures Claude has fresh context after completing a task
           if (!session._contextReloaded) {
             session._contextReloaded = true
-            console.log(`Session ${data.session_id}: Reloading context on idle`)
 
             // Send /context command to reload context window
             setTimeout(() => {

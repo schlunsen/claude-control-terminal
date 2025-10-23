@@ -42,7 +42,6 @@ export function useContextUsage() {
       // Parse model
       const modelMatch = cleanText.match(/Model:\s*(.+)/i)
       if (!modelMatch) {
-        console.warn('Could not find model in context response')
         return null
       }
 
@@ -50,8 +49,6 @@ export function useContextUsage() {
       // Need to handle both with and without asterisks (markdown bold)
       const tokensMatch = cleanText.match(/Tokens:\*?\*?\s*([\d.]+)k\s*\/\s*([\d.]+)k\s*\((\d+)%\)/i)
       if (!tokensMatch) {
-        console.warn('Could not parse tokens from context response')
-        console.log('Text content:', cleanText.substring(0, 300))
         return null
       }
 
@@ -86,7 +83,6 @@ export function useContextUsage() {
       }
 
       if (categories.length === 0) {
-        console.warn('Could not parse categories from context response')
         return null
       }
 
@@ -113,7 +109,6 @@ export function useContextUsage() {
     onResponse: (usage: ContextUsageData) => void
   ): Promise<void> => {
     if (loading.value) {
-      console.log('Context usage fetch already in progress')
       return
     }
 
