@@ -1,6 +1,7 @@
 import { type Ref } from 'vue'
 import type { TodoItem } from '~/utils/agents/todoParser'
 import type { ActiveTool } from '~/types/agents'
+import { useContextUsage } from '~/composables/agents/useContextUsage'
 
 interface ToolExecution {
   toolName: string
@@ -30,6 +31,9 @@ interface WebSocketHandlerParams {
   activeTools: Ref<Map<string, ActiveTool[]>>
   sessionToolStats: Ref<Map<string, Record<string, number>>>
   sessionPermissionStats: Ref<Map<string, { approved: number; denied: number; total: number }>>
+  sessionContextUsage: Ref<Map<string, any>>
+  contextUsageLoading: Ref<boolean>
+  contextUsageTimeoutId: Ref<number | null>
 
   // Helper functions from useMessageHelpers
   parseTodoWrite: (content: string) => TodoItem[] | null
@@ -69,6 +73,9 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     activeTools,
     sessionToolStats,
     sessionPermissionStats,
+    sessionContextUsage,
+    contextUsageLoading,
+    contextUsageTimeoutId,
     parseTodoWrite,
     parseToolUse,
     extractToolName,
@@ -85,6 +92,9 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     messagesContainer
   } = params
 
+  // Import context usage parser
+  const { parseContextResponse } = useContextUsage()
+
   // Setup all WebSocket event handlers
   const setupHandlers = () => {
     // WebSocket event handlers
@@ -95,6 +105,15 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       // Mark new session as loaded (it has no history to load)
       messagesLoaded.value.add(data.session_id)
+
+      // Automatically load context window for new sessions
+      // This ensures Claude has access to project context from the start
+      contextUsageLoading.value = true
+      agentWs.send({
+        type: 'send_prompt',
+        session_id: data.session_id,
+        prompt: '/context'
+      })
 
       // Focus the input after session creation
       focusMessageInput()
@@ -113,6 +132,31 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       // Extract text content from nested object
       const textContent = extractTextContent(data.content)
+
+      // Check if this is a /context response and parse it
+      // Also check if it's the new format with "Context Usage"
+      const isContextResponse = textContent && (
+        textContent.toLowerCase().includes('context window') ||
+        textContent.includes('## Context Usage')
+      )
+
+      if (isContextResponse) {
+        const usage = parseContextResponse(textContent)
+        if (usage) {
+          sessionContextUsage.value.set(data.session_id, usage)
+
+          // Clear the timeout and reset loading state
+          if (contextUsageTimeoutId.value !== null) {
+            clearTimeout(contextUsageTimeoutId.value)
+            contextUsageTimeoutId.value = null
+          }
+          contextUsageLoading.value = false
+
+          console.log('Parsed context usage:', usage)
+        }
+        // Don't display /context responses in the chat
+        return
+      }
 
       // Generate message ID for associating tools with messages
       const messageId = `msg-${data.session_id}-${Date.now()}`
@@ -151,6 +195,23 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         if (isComplete) {
           session.status = 'idle'
           session.message_count = (session.message_count || 0) + 1
+
+          // Reload context window when session goes idle (only once per session)
+          // This ensures Claude has fresh context after completing a task
+          if (!session._contextReloaded) {
+            session._contextReloaded = true
+            console.log(`Session ${data.session_id}: Reloading context on idle`)
+
+            // Send /context command to reload context window
+            setTimeout(() => {
+              contextUsageLoading.value = true
+              agentWs.send({
+                type: 'send_prompt',
+                session_id: data.session_id,
+                prompt: '/context'
+              })
+            }, 500) // Small delay to avoid race conditions
+          }
         } else if (textContent) {
           session.status = 'processing'
         }
