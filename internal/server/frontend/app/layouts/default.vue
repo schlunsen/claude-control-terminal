@@ -34,6 +34,40 @@
           </div>
           <ThemeSelector :show-label="false" />
           <ThemeToggle />
+
+          <!-- User menu (only show if authenticated) -->
+          <div v-if="isAuthenticated" class="user-menu">
+            <button
+              @click="toggleUserMenu"
+              class="user-button"
+              :title="`Logged in as ${user?.username}`"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              <span class="user-name">{{ user?.username }}</span>
+            </button>
+
+            <!-- Dropdown menu -->
+            <div v-if="showUserMenu" class="user-dropdown">
+              <div class="user-dropdown-header">
+                <div class="user-info">
+                  <span class="user-info-name">{{ user?.username }}</span>
+                  <span v-if="user?.isAdmin" class="user-info-badge">Admin</span>
+                </div>
+              </div>
+              <div class="user-dropdown-divider"></div>
+              <button @click="handleLogout" class="user-dropdown-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                  <polyline points="16 17 21 12 16 7"/>
+                  <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Logout
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </nav>
@@ -55,6 +89,33 @@ import '../assets/css/main.css'
 
 // Initialize theme system
 const { isDark } = useTheme()
+
+// Initialize authentication
+const { isAuthenticated, user, logout, checkAuthStatus } = useAuth()
+const showUserMenu = ref(false)
+const router = useRouter()
+
+// Toggle user menu
+const toggleUserMenu = () => {
+  showUserMenu.value = !showUserMenu.value
+}
+
+// Close menu when clicking outside
+const closeUserMenu = () => {
+  showUserMenu.value = false
+}
+
+// Handle logout
+const handleLogout = async () => {
+  try {
+    await logout()
+    router.push('/login')
+  } catch (error) {
+    console.error('Logout failed:', error)
+  } finally {
+    showUserMenu.value = false
+  }
+}
 
 // Initialize sidebar state
 const { isCollapsed, toggleSidebar } = useSidebar()
@@ -91,10 +152,22 @@ function openAnalytics() {
 }
 
 // Load version on mount
-onMounted(() => {
+onMounted(async () => {
   loadVersion()
+
+  // Check authentication status
+  await checkAuthStatus()
+
   // Initialize keyboard shortcuts
   registerDefaultShortcuts()
+
+  // Close user menu on click outside
+  document.addEventListener('click', (e) => {
+    const userMenu = document.querySelector('.user-menu')
+    if (userMenu && !userMenu.contains(e.target)) {
+      showUserMenu.value = false
+    }
+  })
 
   // Register new session shortcut (Shift+Option+Cmd+N)
   const { registerShortcut } = useKeyboardShortcuts()
@@ -241,6 +314,118 @@ onUnmounted(() => {
   letter-spacing: 0.02em;
 }
 
+/* User Menu */
+.user-menu {
+  position: relative;
+}
+
+.user-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.user-button:hover {
+  background: var(--accent-purple);
+  color: white;
+  border-color: var(--accent-purple);
+}
+
+.user-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  min-width: 200px;
+  z-index: 1000;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.user-dropdown-header {
+  padding: 12px 16px;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-info-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.user-info-badge {
+  display: inline-block;
+  background: var(--accent-purple);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  width: fit-content;
+}
+
+.user-dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 0;
+}
+
+.user-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.user-dropdown-item:hover {
+  background: var(--bg-secondary);
+}
+
+.user-dropdown-item:last-child {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
 .app-layout {
   display: flex;
   flex: 1;
@@ -292,6 +477,14 @@ onUnmounted(() => {
 
   .nav-title {
     display: none;
+  }
+
+  .user-name {
+    display: none;
+  }
+
+  .user-button {
+    padding: 8px;
   }
 }
 

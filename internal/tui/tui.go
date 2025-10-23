@@ -72,6 +72,18 @@ func Launch(targetDir string) error {
 			// Sync analytics server reference from model
 			analyticsServer = model.analyticsServer
 
+			if model.shouldSetupUserAuth {
+				// Setup user authentication
+				if err := SetupUserAuth(claudeDir); err != nil {
+					// Show error but continue back to TUI
+					fmt.Printf("Error setting up user authentication: %v\n", err)
+					fmt.Println("Press Enter to continue...")
+					fmt.Scanln()
+				}
+				// Loop back to restart TUI
+				continue
+			}
+
 			if model.shouldLaunchClaude {
 				// Launch Claude CLI with appropriate flags
 				var err error

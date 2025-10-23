@@ -29,8 +29,11 @@ type TLSSettings struct {
 
 // AuthSettings holds authentication configuration
 type AuthSettings struct {
-	Enabled    bool   `json:"enabled"`
-	APIKeyPath string `json:"api_key_path,omitempty"`
+	Enabled         bool   `json:"enabled"`
+	APIKeyPath      string `json:"api_key_path,omitempty"`
+	UserAuthEnabled bool   `json:"user_auth_enabled"`        // Enable username/password authentication
+	RequireLogin    bool   `json:"require_login"`            // Require login for all endpoints
+	SessionTimeout  int    `json:"session_timeout_hours"`    // Session timeout in hours (default: 24)
 }
 
 // ServerSettings holds server configuration
@@ -170,8 +173,11 @@ func (cm *ConfigManager) getDefaultConfig() *Config {
 			Enabled: true,
 		},
 		Auth: AuthSettings{
-			Enabled:    true,
-			APIKeyPath: cm.secretFile,
+			Enabled:         true,
+			APIKeyPath:      cm.secretFile,
+			UserAuthEnabled: false, // Disabled by default, can be enabled via TUI or config
+			RequireLogin:    false, // Only require login if user auth is enabled
+			SessionTimeout:  24,    // 24 hours default
 		},
 		Server: ServerSettings{
 			Port:  3333,
@@ -201,4 +207,38 @@ func (cm *ConfigManager) GetConfigPath() string {
 // GetSecretPath returns the path to the secret file
 func (cm *ConfigManager) GetSecretPath() string {
 	return cm.secretFile
+}
+
+// EnableUserAuth enables user authentication in the config
+func (cm *ConfigManager) EnableUserAuth(requireLogin bool) error {
+	config, err := cm.LoadOrCreateConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	config.Auth.UserAuthEnabled = true
+	config.Auth.RequireLogin = requireLogin
+
+	if err := cm.SaveConfig(config); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	return nil
+}
+
+// DisableUserAuth disables user authentication in the config
+func (cm *ConfigManager) DisableUserAuth() error {
+	config, err := cm.LoadOrCreateConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	config.Auth.UserAuthEnabled = false
+	config.Auth.RequireLogin = false
+
+	if err := cm.SaveConfig(config); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	return nil
 }

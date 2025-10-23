@@ -84,6 +84,7 @@ type Model struct {
 	currentTheme       int  // 0=orange, 1=green, 2=cyan, 3=purple
 	shouldLaunchClaude bool // Signal to launch Claude after TUI exits
 	launchLastSession  bool // Signal to launch Claude with -c parameter
+	shouldSetupUserAuth bool // Signal to setup user auth after TUI exits
 
 	// Analytics state
 	analyticsEnabled bool            // Whether analytics server is running
@@ -477,9 +478,18 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o", "O":
 		// Open analytics dashboard in browser
 		if m.analyticsEnabled {
+			// Check if user auth is enabled but no admin user exists
+			if err := CheckAndSetupAuthBeforeOpen(m.claudeDir); err != nil {
+				return m, nil
+			}
 			openBrowser("https://localhost:3333")
 		}
 		return m, nil
+	case "u", "U":
+		// Setup user authentication - exit TUI first to avoid conflicts
+		m.shouldSetupUserAuth = true
+		m.quitting = true
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -924,9 +934,9 @@ func (m Model) viewMainScreen() string {
 
 	b.WriteString("\n")
 	if m.analyticsEnabled {
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • O: Open Dashboard • H: Hooks • Q/Esc: Quit"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • O: Open Dashboard • H: Hooks • U: User Auth • Q/Esc: Quit"))
 	} else {
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Logging Hooks • Q/Esc: Quit"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Logging Hooks • U: User Auth • Q/Esc: Quit"))
 	}
 
 	content := BoxStyle.Render(b.String())

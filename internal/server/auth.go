@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/subtle"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -56,8 +57,8 @@ func (am *AuthMiddleware) Handler() fiber.Handler {
 
 		token := parts[1]
 
-		// Validate token
-		if token != am.apiKey {
+		// Validate token using constant-time comparison to prevent timing attacks
+		if subtle.ConstantTimeCompare([]byte(token), []byte(am.apiKey)) != 1 {
 			pterm.Warning.Printf("Unauthorized API request from %s\n", c.IP())
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid API key",
@@ -81,7 +82,8 @@ func ProtectEndpoint(apiKey string) fiber.Handler {
 		}
 
 		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" || parts[1] != apiKey {
+		// Use constant-time comparison to prevent timing attacks
+		if len(parts) != 2 || parts[0] != "Bearer" || subtle.ConstantTimeCompare([]byte(parts[1]), []byte(apiKey)) != 1 {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid credentials",
 			})

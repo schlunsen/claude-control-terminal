@@ -42,6 +42,16 @@ Thumbs.db
 !.claude/agents/
 .mcp.json
 
+# Security - Sensitive files (DO NOT COMMIT)
+**/.secret
+**/users.json
+**/sessions.json
+**/*.key
+**/*.crt
+**/*.pem
+**/config.json
+SECURITY_AUDIT.md
+
 # Website build output (source is committed, only ignore build artifacts)
 /website/.nuxt
 /website/.output
