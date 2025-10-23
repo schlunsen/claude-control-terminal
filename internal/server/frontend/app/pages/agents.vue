@@ -72,6 +72,7 @@
           :is-thinking="isThinking"
           :is-processing="isProcessing"
           @send="handleSendMessage"
+          @interrupt="interruptSession"
         >
           <!-- Tool Overlays Slot -->
           <template #tool-overlays>
@@ -424,7 +425,8 @@ const {
   denyPermission,
   sendPermissionResponse,
   deleteAllSessions,
-  killAllAgents
+  killAllAgents,
+  interruptSession
 } = useMessaging({
   agentWs,
   activeSessionId,

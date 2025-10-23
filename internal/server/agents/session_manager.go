@@ -414,6 +414,52 @@ func (sm *SessionManager) ListAllSessions(statusFilter string) ([]Session, error
 	return sessions, nil
 }
 
+// InterruptSession interrupts an ongoing session without ending it
+// This cancels the current context and closes the client, allowing the session to continue with new prompts
+func (sm *SessionManager) InterruptSession(sessionID uuid.UUID) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	session, exists := sm.sessions[sessionID]
+	if !exists {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	logging.Info("Interrupting session %s (status: %s)", sessionID, session.Status)
+
+	// Close the streaming client BEFORE cancelling context
+	// This ensures the client can clean up properly
+	session.mu.Lock()
+	if session.client != nil {
+		logging.Info("Closing client for interrupted session %s", sessionID)
+		// Use a background context for closing, not the about-to-be-cancelled session context
+		closeCtx := context.Background()
+		session.client.Close(closeCtx)
+		session.client = nil
+	}
+	session.mu.Unlock()
+
+	// Now cancel current context (this will interrupt any ongoing agent operations)
+	if session.cancel != nil {
+		session.cancel()
+	}
+
+	// Create a new context for future operations
+	session.ctx, session.cancel = context.WithCancel(context.Background())
+
+	// Update status back to idle
+	session.Status = SessionStatusIdle
+	session.UpdatedAt = time.Now()
+
+	// Update in database
+	if err := sm.updateSessionInDB(&session.Session); err != nil {
+		logging.Error("Failed to update interrupted session in database: %v", err)
+	}
+
+	logging.Info("Session interrupted successfully: %s (client closed, context refreshed)", sessionID)
+	return nil
+}
+
 // EndSession ends a session
 func (sm *SessionManager) EndSession(sessionID uuid.UUID) error {
 	sm.mu.Lock()

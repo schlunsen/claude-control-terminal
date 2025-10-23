@@ -137,6 +137,17 @@
                 </svg>
               </button>
               <button
+                v-if="isProcessing"
+                @click="$emit('interrupt')"
+                class="btn-interrupt"
+                :disabled="!connected"
+                title="Interrupt current response"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="6" y="6" width="12" height="12"></rect>
+                </svg>
+              </button>
+              <button
                 @click="$emit('send')"
                 class="btn-send"
                 :disabled="(!inputMessage.trim() && attachedImages.length === 0) || !connected"
@@ -936,6 +947,38 @@ defineExpose({
 }
 
 .btn-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-interrupt {
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
+  height: 48px;
+  width: 100%;
+}
+
+.btn-interrupt:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(255, 107, 107, 0.4);
+  background: linear-gradient(135deg, #ee5a52, #dc3545);
+}
+
+.btn-interrupt:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-interrupt:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;

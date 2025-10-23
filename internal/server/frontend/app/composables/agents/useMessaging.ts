@@ -219,12 +219,48 @@ export function useMessaging(params: MessagingParams) {
     }
   }
 
+  // Interrupt current session
+  const interruptSession = async () => {
+    if (!agentWs.connected || !activeSessionId.value) return
+
+    try {
+      console.log('Interrupting session:', activeSessionId.value)
+      agentWs.send({
+        type: 'interrupt_session',
+        session_id: activeSessionId.value
+      })
+
+      // Update processing state
+      isProcessing.value = false
+
+      // Add system message to indicate interruption
+      if (!messages.value[activeSessionId.value]) {
+        messages.value[activeSessionId.value] = []
+      }
+
+      messages.value[activeSessionId.value].push({
+        id: crypto.randomUUID(),
+        role: 'system',
+        content: '⚠️ Session interrupted by user',
+        timestamp: new Date(),
+        isInterruption: true
+      })
+
+      // Auto-scroll to bottom
+      autoScrollIfNearBottom(messagesContainer)
+    } catch (error) {
+      console.error('Failed to interrupt session:', error)
+      alert('Failed to interrupt session. Please try again.')
+    }
+  }
+
   return {
     sendMessage,
     approvePermission,
     denyPermission,
     sendPermissionResponse,
     deleteAllSessions,
-    killAllAgents
+    killAllAgents,
+    interruptSession
   }
 }

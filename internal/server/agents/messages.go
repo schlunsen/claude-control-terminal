@@ -19,6 +19,8 @@ const (
 	MessageTypeSessionCreated MessageType = "session_created"
 	MessageTypeEndSession    MessageType = "end_session"
 	MessageTypeSessionEnded  MessageType = "session_ended"
+	MessageTypeInterruptSession MessageType = "interrupt_session"
+	MessageTypeSessionInterrupted MessageType = "session_interrupted"
 	MessageTypeDeleteSession MessageType = "delete_session"
 	MessageTypeSessionDeleted MessageType = "session_deleted"
 	MessageTypeListSessions  MessageType = "list_sessions"
@@ -160,6 +162,19 @@ type EndSessionMessage struct {
 
 // SessionEndedMessage represents a session end response
 type SessionEndedMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+	Status    string    `json:"status"`
+}
+
+// InterruptSessionMessage represents interrupting a session
+type InterruptSessionMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+}
+
+// SessionInterruptedMessage represents a session interrupt response
+type SessionInterruptedMessage struct {
 	BaseMessage
 	SessionID uuid.UUID `json:"session_id"`
 	Status    string    `json:"status"`

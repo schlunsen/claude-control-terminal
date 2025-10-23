@@ -119,6 +119,26 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       focusMessageInput()
     })
 
+    agentWs.on('onSessionInterrupted', (data) => {
+      console.log('Session interrupted:', data.session_id)
+
+      // Update session status to idle
+      const session = sessions.value.find(s => s.id === data.session_id)
+      if (session) {
+        session.status = 'idle'
+      }
+
+      // Update processing state
+      isProcessing.value = false
+      isThinking.value = false
+
+      // Clear any pending tool execution state for this session
+      clearSessionToolExecution(data.session_id)
+
+      // Focus the input after interruption so user can send another message
+      focusMessageInput()
+    })
+
     agentWs.on('onAgentMessage', (data) => {
       if (!messages.value[data.session_id]) {
         messages.value[data.session_id] = []
