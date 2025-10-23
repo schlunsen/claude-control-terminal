@@ -617,9 +617,29 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
         sessionToolStats.value.set(data.session_id, toolStats)
       }
 
-      // Convert DB messages to UI message format, filtering out system messages
+      // Convert DB messages to UI message format, filtering out system messages and /context commands
       const uiMessages = data.messages
-        .filter((dbMsg: any) => dbMsg.role !== 'system')
+        .filter((dbMsg: any) => {
+          // Filter out system messages
+          if (dbMsg.role === 'system') return false
+
+          // Filter out /context user messages
+          if (dbMsg.role === 'user' && dbMsg.content) {
+            // Handle both string and array content formats
+            if (typeof dbMsg.content === 'string') {
+              return dbMsg.content.trim() !== '/context'
+            }
+            if (Array.isArray(dbMsg.content)) {
+              // Check if content is a single text block with /context
+              const hasOnlyContextCommand = dbMsg.content.length === 1 &&
+                dbMsg.content[0].type === 'text' &&
+                dbMsg.content[0].text?.trim() === '/context'
+              return !hasOnlyContextCommand
+            }
+          }
+
+          return true
+        })
         .map((dbMsg: any) => ({
           id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
           role: dbMsg.role,
