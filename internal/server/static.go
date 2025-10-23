@@ -12,7 +12,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/filesystem"
 )
 
-//go:embed frontend/.output/public/*
+//go:embed all:frontend/.output/public
 var frontendFiles embed.FS
 
 // ServeStaticFiles adds static file serving to the server

@@ -155,6 +155,9 @@
           :message-count="activeMessages.length"
           :tool-executions="activeSessionToolExecutions"
           :permission-stats="activeSessionPermissionMetrics"
+          :context-usage="activeSessionContextUsage"
+          :context-loading="contextUsageLoading"
+          @refresh-context="handleRefreshContext"
         />
       </main>
     </div>
@@ -227,6 +230,7 @@ import EditDiffMessage from '~/components/agents/EditDiffMessage.vue'
 import { formatTime, formatMessage } from '~/utils/agents/messageFormatters'
 import { type TodoItem } from '~/utils/agents/todoParser'
 import { getToolIcon } from '~/utils/agents/toolParser'
+import { useContextUsage } from '~/composables/agents/useContextUsage'
 
 // Composables
 import { useMessageScroll } from '~/composables/agents/useMessageScroll'
@@ -278,6 +282,7 @@ const {
   activeFilter,
   sessionToolStats,
   sessionPermissionStats,
+  sessionContextUsage,
   filteredSessions,
   sessionFiltersWithCounts,
   activeSession,
@@ -286,8 +291,14 @@ const {
   activeSessionTodos,
   activeSessionToolExecution,
   activeSessionTools,
-  shouldShowTodoBox
+  shouldShowTodoBox,
+  activeSessionContextUsage
 } = useSessionState()
+
+// Context usage composable
+const { parseContextResponse } = useContextUsage()
+const contextUsageLoading = ref(false)
+const contextUsageTimeoutId = ref<number | null>(null)
 
 // Diff display setting
 const { diffDisplayLocation } = useDiffDisplaySetting()
@@ -298,32 +309,8 @@ const getEditToolForMessage = (messageId: string) => {
     tool => tool.name === 'Edit' && tool.messageId === messageId
   )
 
-  // Debug logging
-  if (editTool) {
-    console.log('Found Edit tool for message:', messageId, editTool)
-  }
-
   return editTool
 }
-
-// Debug: Watch diffDisplayLocation
-watch(diffDisplayLocation, (newVal) => {
-  console.log('diffDisplayLocation changed to:', newVal)
-}, { immediate: true })
-
-// Debug: Watch activeSessionTools
-watch(activeSessionTools, (newVal) => {
-  console.log('activeSessionTools:', newVal)
-  console.log('Edit tools:', newVal.filter(t => t.name === 'Edit'))
-}, { deep: true })
-
-// Debug: Watch activeMessages for editToolData
-watch(activeMessages, (newVal) => {
-  const messagesWithEditData = newVal.filter(m => m.editToolData)
-  if (messagesWithEditData.length > 0) {
-    console.log('Messages with editToolData:', messagesWithEditData)
-  }
-}, { deep: true })
 
 // Composables - Provider & Agent Selection
 const {
@@ -490,6 +477,46 @@ const closeLightbox = () => {
   }, 300)
 }
 
+// Handle context usage refresh
+const handleRefreshContext = async () => {
+  if (!activeSessionId.value || contextUsageLoading.value) {
+    return
+  }
+
+  // Clear any existing timeout
+  if (contextUsageTimeoutId.value !== null) {
+    clearTimeout(contextUsageTimeoutId.value)
+  }
+
+  contextUsageLoading.value = true
+
+  // Set a 15-second timeout to reset loading state if no response
+  contextUsageTimeoutId.value = setTimeout(() => {
+    if (contextUsageLoading.value) {
+      console.warn('Context usage request timed out after 15 seconds')
+      contextUsageLoading.value = false
+      contextUsageTimeoutId.value = null
+    }
+  }, 15000) as unknown as number
+
+  try {
+    // Set the input message to /context and send it
+    inputMessage.value = '/context'
+    await sendMessage([]) // Send with empty attachments array
+
+    // The response will be handled by the WebSocket handlers
+    // and will update sessionContextUsage through parseContextResponse
+    // The timeout will be cleared in the WebSocket handler when response arrives
+  } catch (error) {
+    console.error('Failed to fetch context usage:', error)
+    if (contextUsageTimeoutId.value !== null) {
+      clearTimeout(contextUsageTimeoutId.value)
+      contextUsageTimeoutId.value = null
+    }
+    contextUsageLoading.value = false
+  }
+}
+
 // WebSocket handlers composable
 const { setupHandlers } = useWebSocketHandlers({
   agentWs,
@@ -507,6 +534,9 @@ const { setupHandlers } = useWebSocketHandlers({
   activeTools,
   sessionToolStats,
   sessionPermissionStats,
+  sessionContextUsage,
+  contextUsageLoading,
+  contextUsageTimeoutId,
   parseTodoWrite,
   parseToolUse,
   extractToolName,
@@ -600,6 +630,16 @@ watch(() => agentWs.connected, (connected) => {
 watch(activeMessages, () => {
   autoScrollIfNearBottom(messagesContainer.value)
 }, { deep: true, flush: 'post' })
+
+// Auto-refresh context when a session is selected (both new and old sessions)
+watch(activeSessionId, (newSessionId, oldSessionId) => {
+  if (newSessionId && newSessionId !== oldSessionId) {
+    // Wait a bit for messages to load, then fetch context
+    setTimeout(() => {
+      handleRefreshContext()
+    }, 500)
+  }
+})
 </script>
 
 <style scoped>

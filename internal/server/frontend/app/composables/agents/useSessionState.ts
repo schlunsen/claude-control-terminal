@@ -52,6 +52,9 @@ export function useSessionState() {
   const sessionToolStats = ref(new Map<string, Record<string, number>>())
   const sessionPermissionStats = ref(new Map<string, { approved: number; denied: number; total: number }>())
 
+  // Context usage tracking
+  const sessionContextUsage = ref(new Map<string, any>())
+
   // Load persisted stats from localStorage on mount
   const loadPersistedStats = () => {
     if (typeof window === 'undefined') return
@@ -170,6 +173,11 @@ export function useSessionState() {
     return todos.length > 0 && todos.some(t => t.status !== 'completed')
   })
 
+  // Computed: Active session context usage
+  const activeSessionContextUsage = computed(() =>
+    sessionContextUsage.value.get(activeSessionId.value as string) || null
+  )
+
   return {
     // State
     sessions,
@@ -195,6 +203,7 @@ export function useSessionState() {
     activeFilter,
     sessionToolStats,
     sessionPermissionStats,
+    sessionContextUsage,
 
     // Computed
     filteredSessions,
@@ -206,6 +215,7 @@ export function useSessionState() {
     activeSessionToolExecution,
     activeSessionTools,
     shouldShowTodoBox,
+    activeSessionContextUsage,
 
     // Helpers
     getFilterCount

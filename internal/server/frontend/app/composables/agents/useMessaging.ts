@@ -77,13 +77,19 @@ export function useMessaging(params: MessagingParams) {
       })
     }
 
+    // Check if this is a /context command (should be hidden from chat)
+    const isContextCommand = hasMessage && message.trim() === '/context'
+
     // Store message in local state with structured content
-    messages.value[activeSessionId.value].push({
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: content,
-      timestamp: new Date()
-    })
+    // Don't add /context commands to the chat UI
+    if (!isContextCommand) {
+      messages.value[activeSessionId.value].push({
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: content,
+        timestamp: new Date()
+      })
+    }
 
     isProcessing.value = true
 
