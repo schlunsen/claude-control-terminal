@@ -1,5 +1,8 @@
 <template>
-  <div class="permission-request">
+  <div class="permission-request" :class="{ 'disconnected': !connected }">
+    <div v-if="!connected" class="connection-warning">
+      ⚠️ Connection lost - this request may no longer be valid
+    </div>
     <div class="permission-header">
       <div class="permission-icon">🔐</div>
       <div class="permission-title">Permission Request</div>
@@ -12,6 +15,7 @@
       <button
         @click="$emit('deny', permission)"
         class="btn-deny"
+        :disabled="!connected"
         title="Deny this request"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -23,6 +27,7 @@
       <button
         @click="$emit('approve', permission)"
         class="btn-approve"
+        :disabled="!connected"
         title="Approve this request"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -45,9 +50,13 @@ interface Permission {
 
 interface Props {
   permission: Permission
+  connected?: boolean
 }
 
-defineProps<Props>()
+withDefaults(defineProps<Props>(), {
+  connected: true
+})
+
 defineEmits<{
   (e: 'approve', permission: Permission): void
   (e: 'deny', permission: Permission): void
@@ -125,9 +134,32 @@ defineEmits<{
   color: white;
 }
 
-.btn-approve:hover {
+.btn-approve:hover:not(:disabled) {
   background: var(--color-success-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-deny:disabled,
+.btn-approve:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.permission-request.disconnected {
+  opacity: 0.7;
+  border-color: var(--color-error);
+}
+
+.connection-warning {
+  background: var(--color-error-alpha);
+  border: 1px solid var(--color-error);
+  border-radius: 0.375rem;
+  padding: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-error);
+  text-align: center;
 }
 </style>

@@ -122,11 +122,46 @@ func (h *AgentHandler) HandleFiberWebSocket(c *fiberws.Conn) {
 	log.Printf("HandleFiberWebSocket: Active connections: %d/%d", h.Active, h.Config.MaxConcurrentSessions)
 	h.Mu.Unlock()
 
+	// Track which sessions are connected via this WebSocket
+	connectedSessions := make(map[uuid.UUID]bool)
+	var connectedSessionsMu sync.Mutex
+
+	// Helper function to register a session with this WebSocket
+	registerSession := func(sessionID uuid.UUID) {
+		connectedSessionsMu.Lock()
+		defer connectedSessionsMu.Unlock()
+
+		// If session was previously connected via another WebSocket, clean it up first
+		if session, err := h.SessionManager.GetSession(sessionID); err == nil {
+			if session.IsWebSocketConnected() {
+				logging.Warning("Session %s reconnecting - cleaning up old WebSocket state", sessionID)
+				session.CleanupPendingPermissions()
+				session.StopPermissionForwarder()
+			}
+			session.SetWebSocketConnected(true)
+		}
+
+		connectedSessions[sessionID] = true
+		logging.Info("Session %s registered with WebSocket connection", sessionID)
+	}
+
 	defer func() {
 		h.Mu.Lock()
 		h.Active--
 		h.Mu.Unlock()
 		logging.Debug("WebSocket connection closed, active connections: %d", h.Active)
+
+		// Clean up all sessions connected via this WebSocket
+		connectedSessionsMu.Lock()
+		for sessionID := range connectedSessions {
+			if session, err := h.SessionManager.GetSession(sessionID); err == nil {
+				logging.Info("Disconnecting session %s due to WebSocket close", sessionID)
+				session.SetWebSocketConnected(false)
+				session.CleanupPendingPermissions()
+				session.StopPermissionForwarder()
+			}
+		}
+		connectedSessionsMu.Unlock()
 	}()
 
 	log.Printf("Fiber WebSocket connection established from %s", c.RemoteAddr().String())
@@ -152,7 +187,7 @@ func (h *AgentHandler) HandleFiberWebSocket(c *fiberws.Conn) {
 		log.Printf("📥 WS INCOMING: type=%s, sessionID=%v, data=%+v", msgType, rawMsg["session_id"], rawMsg)
 
 		// Route message to appropriate handler
-		if err := h.routeFiberMessage(c, MessageType(msgType), rawMsg); err != nil {
+		if err := h.routeFiberMessage(c, MessageType(msgType), rawMsg, registerSession); err != nil {
 			log.Printf("ERROR: Failed to handle message type %s: %v", msgType, err)
 			h.sendFiberError(c, fmt.Sprintf("message handling failed: %v", err))
 		}
@@ -171,17 +206,17 @@ func (h *AgentHandler) sendFiberError(c *fiberws.Conn, errMsg string) {
 }
 
 // routeFiberMessage routes messages to appropriate handlers for Fiber WebSocket
-func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, rawMsg map[string]interface{}) error {
+func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, rawMsg map[string]interface{}, registerSession func(uuid.UUID)) error {
 	switch msgType {
 	case MessageTypeAuth:
 		// Authentication handled by server middleware, skip
 		return nil
 
 	case MessageTypeCreateSession:
-		return h.handleFiberCreateSession(c, rawMsg)
+		return h.handleFiberCreateSession(c, rawMsg, registerSession)
 
 	case MessageTypeSendPrompt:
-		return h.handleFiberSendPrompt(c, rawMsg)
+		return h.handleFiberSendPrompt(c, rawMsg, registerSession)
 
 	case MessageTypeEndSession:
 		return h.handleFiberEndSession(c, rawMsg)
@@ -190,7 +225,7 @@ func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, r
 		return h.handleFiberDeleteSession(c, rawMsg)
 
 	case MessageTypeListSessions:
-		return h.handleFiberListSessions(c)
+		return h.handleFiberListSessions(c, registerSession)
 
 	case MessageTypeLoadMessages:
 		return h.handleFiberLoadMessages(c, rawMsg)
@@ -562,7 +597,7 @@ func (h *AgentHandler) sendError(ws *websocket.Conn, errMsg string) {
 // Fiber WebSocket Handler Methods (duplicates of above for Fiber compatibility)
 
 // handleFiberCreateSession creates a new agent session (Fiber version)
-func (h *AgentHandler) handleFiberCreateSession(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+func (h *AgentHandler) handleFiberCreateSession(c *fiberws.Conn, rawMsg map[string]interface{}, registerSession func(uuid.UUID)) error {
 	var msg CreateSessionMessage
 	msgBytes, _ := json.Marshal(rawMsg)
 	if err := json.Unmarshal(msgBytes, &msg); err != nil {
@@ -577,6 +612,9 @@ func (h *AgentHandler) handleFiberCreateSession(c *fiberws.Conn, rawMsg map[stri
 		log.Printf("ERROR: Failed to create session: %v", err)
 		return err
 	}
+
+	// Register session with this WebSocket connection
+	registerSession(msg.SessionID)
 
 	log.Printf("Session created successfully: %s", session.ID)
 
@@ -600,7 +638,7 @@ func (h *AgentHandler) handleFiberCreateSession(c *fiberws.Conn, rawMsg map[stri
 
 // handleFiberSendPrompt sends a prompt to an agent session (Fiber version)
 // Note: This returns a response channel that must be monitored by the main handler
-func (h *AgentHandler) handleFiberSendPrompt(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+func (h *AgentHandler) handleFiberSendPrompt(c *fiberws.Conn, rawMsg map[string]interface{}, registerSession func(uuid.UUID)) error {
 	var msg SendPromptMessage
 	msgBytes, _ := json.Marshal(rawMsg)
 	if err := json.Unmarshal(msgBytes, &msg); err != nil {
@@ -620,6 +658,9 @@ func (h *AgentHandler) handleFiberSendPrompt(c *fiberws.Conn, rawMsg map[string]
 	if err != nil {
 		return err
 	}
+
+	// Register session with this WebSocket connection (handles reconnections)
+	registerSession(msg.SessionID)
 
 	// Start monitoring for permission requests BEFORE sending the prompt
 	// This prevents a race condition where the SDK requests permission
@@ -846,7 +887,7 @@ func (h *AgentHandler) handleFiberDeleteSession(c *fiberws.Conn, rawMsg map[stri
 }
 
 // handleFiberListSessions lists all sessions from database (Fiber version)
-func (h *AgentHandler) handleFiberListSessions(c *fiberws.Conn) error {
+func (h *AgentHandler) handleFiberListSessions(c *fiberws.Conn, registerSession func(uuid.UUID)) error {
 	log.Printf("handleFiberListSessions: Fetching all sessions from database")
 	sessions, err := h.SessionManager.ListAllSessions("all")
 	if err != nil {
@@ -858,6 +899,13 @@ func (h *AgentHandler) handleFiberListSessions(c *fiberws.Conn) error {
 	log.Printf("handleFiberListSessions: Found %d sessions in database", len(sessions))
 	for i, session := range sessions {
 		log.Printf("  Session %d: ID=%s, Status=%s, Created=%s", i+1, session.ID, session.Status, session.CreatedAt)
+
+		// Register active sessions with this WebSocket connection
+		// This allows reconnection after page reload
+		if session.Status == SessionStatusActive || session.Status == SessionStatusIdle || session.Status == SessionStatusProcessing {
+			registerSession(session.ID)
+			logging.Info("Registered active session %s with reconnected WebSocket", session.ID)
+		}
 	}
 
 	response := SessionsListMessage{
@@ -962,12 +1010,34 @@ func (h *AgentHandler) handleFiberDeleteAllSessions(c *fiberws.Conn) error {
 func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid.UUID, session *AgentSession) {
 	logging.Info("🚀 Permission forwarder started for session %s", sessionID)
 
+	defer func() {
+		session.StopPermissionForwarder()
+		logging.Info("🛑 Permission forwarder stopped for session %s", sessionID)
+	}()
+
+	// Create a ticker to periodically check WebSocket connection state
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case permReq, ok := <-session.permissionReqChan:
 			if !ok {
 				logging.Info("Permission request channel closed for session %s", sessionID)
 				return
+			}
+
+			// Check if WebSocket is still connected before forwarding
+			if !session.IsWebSocketConnected() {
+				logging.Warning("⚠️ WebSocket disconnected, denying permission request: %s", permReq.RequestID)
+				select {
+				case permReq.ResponseChan <- PermissionResponse{
+					Approved:    false,
+					DenyMessage: "WebSocket connection lost",
+				}:
+				default:
+				}
+				continue
 			}
 
 			logging.Info("🔐 PERMISSION REQUEST RECEIVED FROM CHANNEL: tool=%s, requestID=%s, input=%+v", permReq.ToolName, permReq.RequestID, permReq.Input)
@@ -990,21 +1060,37 @@ func (h *AgentHandler) forwardPermissionRequests(c *fiberws.Conn, sessionID uuid
 
 			if err := c.WriteJSON(response); err != nil {
 				logging.Error("❌ Failed to send permission request to WebSocket: %v", err)
+
+				// Mark session as disconnected
+				session.SetWebSocketConnected(false)
+
 				// Send error response back to callback
 				select {
 				case permReq.ResponseChan <- PermissionResponse{
 					Approved:    false,
-					DenyMessage: "Failed to send permission request to frontend",
+					DenyMessage: "Failed to send permission request to frontend (WebSocket error)",
 				}:
 				default:
 				}
+
+				// Clean up any other pending permissions
+				session.CleanupPendingPermissions()
 				return
 			}
 
 			logging.Info("✅ Permission request sent to WebSocket successfully: %s", permReq.RequestID)
 
+		case <-ticker.C:
+			// Periodically check if WebSocket is still connected
+			if !session.IsWebSocketConnected() {
+				logging.Info("⏱️ WebSocket connection lost, stopping permission forwarder for session %s", sessionID)
+				session.CleanupPendingPermissions()
+				return
+			}
+
 		case <-session.ctx.Done():
 			logging.Info("Session %s context cancelled, stopping permission request forwarding", sessionID)
+			session.CleanupPendingPermissions()
 			return
 		}
 	}
