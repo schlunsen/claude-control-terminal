@@ -25,13 +25,29 @@ export default defineNuxtConfig({
     server: {
       proxy: {
         '/api': {
-          target: 'http://localhost:3333',
-          changeOrigin: true
+          target: 'https://localhost:3333',
+          changeOrigin: true,
+          secure: false // Accept self-signed certificates
         },
         '/ws': {
-          target: 'ws://localhost:3333',
-          ws: true
+          target: 'wss://localhost:3333',
+          ws: true,
+          secure: false // Accept self-signed certificates
+        },
+        '/agent/ws': {
+          target: 'wss://localhost:3333',
+          ws: true,
+          secure: false // Accept self-signed certificates
         }
+      }
+    },
+    optimizeDeps: {
+      include: ['@huggingface/transformers'],
+      exclude: []
+    },
+    build: {
+      rollupOptions: {
+        external: []
       }
     }
   },
