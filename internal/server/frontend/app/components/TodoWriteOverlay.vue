@@ -11,6 +11,12 @@
           <div class="tool-name">TodoWrite</div>
           <div class="tool-status">{{ statusText }}</div>
         </div>
+        <button class="close-btn" @click="handleManualClose" title="Dismiss">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
 
       <div v-if="todoItems.length > 0" class="todo-items">
@@ -61,6 +67,14 @@ const todoItems = computed(() => {
   }
   return []
 })
+
+// Manual close handler
+const handleManualClose = () => {
+  visible.value = false
+  setTimeout(() => {
+    emit('dismiss', props.tool.id)
+  }, 300) // Wait for animation
+}
 
 // Watch for completion and auto-dismiss
 watch(() => props.tool.status, (newStatus) => {
@@ -186,6 +200,29 @@ watch(() => props.tool.status, (newStatus) => {
   line-height: 1.4;
   color: var(--text-primary);
   word-wrap: break-word;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.close-btn:active {
+  transform: scale(0.95);
 }
 
 /* Transition animations */
