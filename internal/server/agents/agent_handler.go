@@ -221,6 +221,9 @@ func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, r
 	case MessageTypeEndSession:
 		return h.handleFiberEndSession(c, rawMsg)
 
+	case MessageTypeInterruptSession:
+		return h.handleFiberInterruptSession(c, rawMsg)
+
 	case MessageTypeDeleteSession:
 		return h.handleFiberDeleteSession(c, rawMsg)
 
@@ -860,6 +863,32 @@ func (h *AgentHandler) handleFiberEndSession(c *fiberws.Conn, rawMsg map[string]
 
 	// Send session ended response
 	response := BaseMessage{Type: MessageTypeSessionEnded}
+	return c.WriteJSON(response)
+}
+
+// handleFiberInterruptSession interrupts an agent session (Fiber version)
+func (h *AgentHandler) handleFiberInterruptSession(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+	var msg InterruptSessionMessage
+	msgBytes, _ := json.Marshal(rawMsg)
+	if err := json.Unmarshal(msgBytes, &msg); err != nil {
+		return fmt.Errorf("invalid interrupt_session message: %w", err)
+	}
+
+	logging.Info("Interrupting session: %s", msg.SessionID)
+
+	// Interrupt session (cancels context but keeps session alive)
+	if err := h.SessionManager.InterruptSession(msg.SessionID); err != nil {
+		logging.Error("Failed to interrupt session %s: %v", msg.SessionID, err)
+		h.sendFiberError(c, fmt.Sprintf("failed to interrupt session: %v", err))
+		return err
+	}
+
+	// Send session interrupted response
+	response := SessionInterruptedMessage{
+		BaseMessage: BaseMessage{Type: MessageTypeSessionInterrupted},
+		SessionID:   msg.SessionID,
+		Status:      "interrupted",
+	}
 	return c.WriteJSON(response)
 }
 

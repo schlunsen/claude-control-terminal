@@ -219,12 +219,36 @@ export function useMessaging(params: MessagingParams) {
     }
   }
 
+  // Interrupt current session
+  const interruptSession = async () => {
+    if (!agentWs.connected || !activeSessionId.value) return
+
+    try {
+      console.log('Interrupting session:', activeSessionId.value)
+      agentWs.send({
+        type: 'interrupt_session',
+        session_id: activeSessionId.value
+      })
+
+      // Don't update processing state here - wait for backend confirmation
+      // This ensures the ESC hint stays visible until interrupt is confirmed
+      // The onSessionInterrupted handler will set isProcessing = false
+
+      // Don't add system message here - backend will confirm the interruption
+      // This prevents showing an interruption message if the backend fails to interrupt
+    } catch (error) {
+      console.error('Failed to interrupt session:', error)
+      alert('Failed to interrupt session. Please try again.')
+    }
+  }
+
   return {
     sendMessage,
     approvePermission,
     denyPermission,
     sendPermissionResponse,
     deleteAllSessions,
-    killAllAgents
+    killAllAgents,
+    interruptSession
   }
 }

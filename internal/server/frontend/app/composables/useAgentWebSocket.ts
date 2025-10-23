@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 
 interface AgentWebSocketCallbacks {
   onSessionCreated: ((data: any) => void) | null
+  onSessionInterrupted: ((data: any) => void) | null
   onAgentMessage: ((data: any) => void) | null
   onAgentThinking: ((data: any) => void) | null
   onAgentToolUse: ((data: any) => void) | null
@@ -24,6 +25,7 @@ export const useAgentWebSocket = () => {
   // Event callback registry
   const callbacks = reactive<AgentWebSocketCallbacks>({
     onSessionCreated: null,
+    onSessionInterrupted: null,
     onAgentMessage: null,
     onAgentThinking: null,
     onAgentToolUse: null,
@@ -87,6 +89,10 @@ export const useAgentWebSocket = () => {
           switch (message.type) {
             case 'session_created':
               callbacks.onSessionCreated?.(message)
+              break
+
+            case 'session_interrupted':
+              callbacks.onSessionInterrupted?.(message)
               break
 
             case 'agent_message':

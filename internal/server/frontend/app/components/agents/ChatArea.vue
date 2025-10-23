@@ -98,9 +98,16 @@
               @change="handleFileSelect"
               style="display: none"
             />
-            <span class="char-counter" :class="{ 'warning': charCount > 4000 }">
-              {{ charCount }} / 5000 characters
-            </span>
+            <div class="toolbar-right">
+              <transition name="fade">
+                <span v-if="isProcessing" class="interrupt-hint">
+                  <kbd>ESC</kbd> to interrupt
+                </span>
+              </transition>
+              <span class="char-counter" :class="{ 'warning': charCount > 4000 }">
+                {{ charCount }} / 5000 characters
+              </span>
+            </div>
           </div>
 
           <!-- Textarea & Buttons Row -->
@@ -286,6 +293,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:input-message': [value: string]
   'send': []
+  'interrupt': []
   'images-attached': [images: AttachedImage[]]
 }>()
 
@@ -494,10 +502,17 @@ function handleKeydown(event: KeyboardEvent) {
     return
   }
 
-  // Escape to cancel recording
+  // Escape to cancel recording (when modal is open)
   if (event.code === 'Escape' && showRecordingModal.value) {
     event.preventDefault()
     cancelVoiceRecording()
+    return
+  }
+
+  // Escape to interrupt processing (when not in modal)
+  if (event.code === 'Escape' && !showRecordingModal.value && props.isProcessing && props.connected) {
+    event.preventDefault()
+    emit('interrupt')
     return
   }
 }
@@ -825,6 +840,12 @@ defineExpose({
   margin-bottom: 12px;
 }
 
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .btn-upload {
   display: flex;
   align-items: center;
@@ -854,6 +875,28 @@ defineExpose({
 
 .upload-text {
   font-weight: 500;
+}
+
+.interrupt-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.interrupt-hint kbd {
+  display: inline-block;
+  padding: 3px 8px;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #dc3545;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .char-counter {
