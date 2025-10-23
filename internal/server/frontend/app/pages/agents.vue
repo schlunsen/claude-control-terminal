@@ -135,6 +135,7 @@
                 v-for="permission in activeSessionPermissions"
                 :key="permission.request_id"
                 :permission="permission"
+                :connected="agentWs.connected"
                 @approve="approvePermission"
                 @deny="denyPermission"
               />

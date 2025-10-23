@@ -151,6 +151,15 @@ export const useAgentWebSocket = () => {
         connected.value = false
         authenticated.value = false
 
+        // Notify about connection loss via error callback
+        // This allows components to clean up stale state like pending permissions
+        if (callbacks.onError) {
+          callbacks.onError({
+            type: 'error',
+            message: 'WebSocket connection lost - pending permissions have been cleared'
+          })
+        }
+
         // Reconnect after 5 seconds
         if (!reconnectTimer.value) {
           reconnectTimer.value = setTimeout(() => {

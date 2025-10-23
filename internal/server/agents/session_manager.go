@@ -51,6 +51,8 @@ type AgentSession struct {
 	permMu                 sync.Mutex
 	permForwarderRunning   bool // Track if permission forwarder goroutine is running
 	permForwarderMu        sync.Mutex
+	wsConnected            bool // Track WebSocket connection state
+	wsConnMu               sync.Mutex
 	active                 bool
 	client                 *claude.Client // Streaming client for this session
 	mu                     sync.Mutex     // Protects client field
@@ -120,6 +122,7 @@ func (sm *SessionManager) loadSessionsFromDB() error {
 		session.permissionReqChan = make(chan *PermissionRequest, 10)
 		session.permissionRespChan = make(chan *PermissionResponse, 10)
 		session.pendingPermissions = make(map[string]chan PermissionResponse)
+		session.wsConnected = false // Will be set to true when WebSocket connects
 
 		sm.sessions[sessionMeta.ID] = session
 
@@ -239,6 +242,7 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 		session.permissionReqChan = make(chan *PermissionRequest, 10)
 		session.permissionRespChan = make(chan *PermissionResponse, 10)
 		session.pendingPermissions = make(map[string]chan PermissionResponse)
+		session.wsConnected = false // Will be set to true when WebSocket connects
 
 		sm.sessions[sessionID] = session
 
@@ -281,6 +285,7 @@ func (sm *SessionManager) CreateSession(sessionID uuid.UUID, options SessionOpti
 	session.permissionReqChan = make(chan *PermissionRequest, 10)
 	session.permissionRespChan = make(chan *PermissionResponse, 10)
 	session.pendingPermissions = make(map[string]chan PermissionResponse)
+	session.wsConnected = false // Will be set to true when WebSocket connects
 
 	sm.sessions[sessionID] = session
 
@@ -593,6 +598,12 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 		requestID := uuid.New().String()
 		logging.Info("🔐🔐🔐 CALLBACK INVOKED: tool=%s, requestID=%s, input=%+v", toolName, requestID, input)
 
+		// Check if WebSocket is connected before proceeding
+		if !session.IsWebSocketConnected() {
+			logging.Warning("Permission request rejected: WebSocket not connected (tool=%s, requestID=%s)", toolName, requestID)
+			return types.PermissionResultDeny{Message: "WebSocket connection lost - cannot request permission"}, nil
+		}
+
 		// Create response channel for this specific request
 		responseChan := make(chan PermissionResponse, 1)
 
@@ -624,12 +635,15 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 			logging.Info("✅ Permission request sent to channel successfully: %s", requestID)
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		case <-session.ctx.Done():
+			logging.Warning("Session context cancelled while sending permission request")
+			return types.PermissionResultDeny{Message: "Session ended"}, nil
 		case <-time.After(5 * time.Second):
 			logging.Warning("Timeout sending permission request to frontend")
 			return types.PermissionResultDeny{Message: "Permission request timeout"}, nil
 		}
 
-		// Wait for response from frontend
+		// Wait for response from frontend with reduced timeout (60 seconds instead of 5 minutes)
 		select {
 		case response := <-responseChan:
 			logging.Info("Permission response received: approved=%v, requestID=%s", response.Approved, requestID)
@@ -646,9 +660,12 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(300 * time.Second): // 5 minute timeout for user response
-			logging.Warning("Timeout waiting for permission response from user")
-			return types.PermissionResultDeny{Message: "Permission response timeout"}, nil
+		case <-session.ctx.Done():
+			logging.Warning("Session context cancelled while waiting for permission response")
+			return types.PermissionResultDeny{Message: "Session ended"}, nil
+		case <-time.After(60 * time.Second): // Reduced from 5 minutes to 60 seconds
+			logging.Warning("Timeout waiting for permission response from user (tool=%s, requestID=%s)", toolName, requestID)
+			return types.PermissionResultDeny{Message: "Permission request timed out after 60 seconds"}, nil
 		}
 	}
 
@@ -982,6 +999,12 @@ func (sm *SessionManager) createPermissionCallback(session *AgentSession) types.
 		requestID := uuid.New().String()
 		logging.Info("🔐 PERMISSION CALLBACK: tool=%s, requestID=%s", toolName, requestID)
 
+		// Check if WebSocket is connected before proceeding
+		if !session.IsWebSocketConnected() {
+			logging.Warning("Permission request rejected: WebSocket not connected (tool=%s, requestID=%s)", toolName, requestID)
+			return types.PermissionResultDeny{Message: "WebSocket connection lost - cannot request permission"}, nil
+		}
+
 		responseChan := make(chan PermissionResponse, 1)
 
 		session.permMu.Lock()
@@ -995,30 +1018,49 @@ func (sm *SessionManager) createPermissionCallback(session *AgentSession) types.
 		}()
 
 		// Send permission request to frontend via channel
-		session.permissionReqChan <- &PermissionRequest{
+		select {
+		case session.permissionReqChan <- &PermissionRequest{
 			RequestID:    requestID,
 			ToolName:     toolName,
 			Input:        input,
 			Context:      permCtx,
 			ResponseChan: responseChan,
+		}:
+			logging.Info("✅ Permission request sent to channel: %s", requestID)
+		case <-ctx.Done():
+			logging.Warning("Context cancelled while sending permission request")
+			return types.PermissionResultDeny{Message: "Context cancelled"}, nil
+		case <-session.ctx.Done():
+			logging.Warning("Session context cancelled while sending permission request")
+			return types.PermissionResultDeny{Message: "Session ended"}, nil
+		case <-time.After(5 * time.Second):
+			logging.Warning("Timeout sending permission request to channel")
+			return types.PermissionResultDeny{Message: "Permission request timeout"}, nil
 		}
 
-		// Wait for response from frontend
+		// Wait for response from frontend with reduced timeout (60 seconds instead of unlimited)
 		select {
 		case response := <-responseChan:
 			if response.Approved {
 				logging.Info("✅ Permission APPROVED for %s (request %s)", toolName, requestID)
+				result := types.PermissionResultAllow{}
 				if response.UpdatedInput != nil {
-					return *response.UpdatedInput, nil
+					result.UpdatedInput = response.UpdatedInput
 				}
-				return nil, nil
+				return result, nil
 			} else {
 				logging.Info("❌ Permission DENIED for %s (request %s): %s", toolName, requestID, response.DenyMessage)
-				return nil, fmt.Errorf("permission denied: %s", response.DenyMessage)
+				return types.PermissionResultDeny{Message: response.DenyMessage}, nil
 			}
 		case <-ctx.Done():
+			logging.Warning("⏱️ Context cancelled while waiting for permission (tool=%s, request %s)", toolName, requestID)
+			return types.PermissionResultDeny{Message: "Context cancelled"}, nil
+		case <-session.ctx.Done():
+			logging.Warning("⏱️ Session ended while waiting for permission (tool=%s, request %s)", toolName, requestID)
+			return types.PermissionResultDeny{Message: "Session ended"}, nil
+		case <-time.After(60 * time.Second): // Reduced from unlimited to 60 seconds
 			logging.Warning("⏱️ Permission request TIMEOUT for %s (request %s)", toolName, requestID)
-			return nil, fmt.Errorf("permission request timeout")
+			return types.PermissionResultDeny{Message: "Permission request timed out after 60 seconds"}, nil
 		}
 	}
 }
@@ -1153,6 +1195,46 @@ func (s *AgentSession) StartPermissionForwarder() bool {
 
 	s.permForwarderRunning = true
 	return true // Started by this call
+}
+
+// StopPermissionForwarder marks that the permission forwarder has stopped
+func (s *AgentSession) StopPermissionForwarder() {
+	s.permForwarderMu.Lock()
+	defer s.permForwarderMu.Unlock()
+	s.permForwarderRunning = false
+}
+
+// SetWebSocketConnected updates the WebSocket connection state
+func (s *AgentSession) SetWebSocketConnected(connected bool) {
+	s.wsConnMu.Lock()
+	defer s.wsConnMu.Unlock()
+	s.wsConnected = connected
+}
+
+// IsWebSocketConnected returns the current WebSocket connection state
+func (s *AgentSession) IsWebSocketConnected() bool {
+	s.wsConnMu.Lock()
+	defer s.wsConnMu.Unlock()
+	return s.wsConnected
+}
+
+// CleanupPendingPermissions cancels all pending permissions with a disconnect message
+func (s *AgentSession) CleanupPendingPermissions() {
+	s.permMu.Lock()
+	defer s.permMu.Unlock()
+
+	for requestID, responseChan := range s.pendingPermissions {
+		logging.Info("Cleaning up pending permission: %s (WebSocket disconnected)", requestID)
+		select {
+		case responseChan <- PermissionResponse{
+			Approved:    false,
+			DenyMessage: "WebSocket connection lost",
+		}:
+		default:
+			// Channel might be closed or full, ignore
+		}
+		delete(s.pendingPermissions, requestID)
+	}
 }
 
 // saveMessageToDB persists a message to the database

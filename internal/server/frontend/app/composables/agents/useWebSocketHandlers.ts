@@ -614,6 +614,24 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Show success message
       alert(`Successfully killed ${data.killed_count} agents`)
     })
+
+    agentWs.on('onError', (data) => {
+      console.error('WebSocket error:', data)
+
+      // Check if this is a connection loss error
+      if (data.message && data.message.includes('WebSocket connection lost')) {
+        console.warn('WebSocket disconnected, clearing all pending permissions')
+
+        // Clear all pending permissions from all sessions
+        sessionPermissions.value.clear()
+
+        // Optionally show a toast notification to the user
+        // This helps them understand why permissions might disappear
+        if (typeof window !== 'undefined' && activeSessionId.value) {
+          console.warn('⚠️ Connection lost - pending permission requests have been cleared')
+        }
+      }
+    })
   }
 
   return {
