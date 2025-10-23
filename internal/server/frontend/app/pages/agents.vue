@@ -309,32 +309,8 @@ const getEditToolForMessage = (messageId: string) => {
     tool => tool.name === 'Edit' && tool.messageId === messageId
   )
 
-  // Debug logging
-  if (editTool) {
-    console.log('Found Edit tool for message:', messageId, editTool)
-  }
-
   return editTool
 }
-
-// Debug: Watch diffDisplayLocation
-watch(diffDisplayLocation, (newVal) => {
-  console.log('diffDisplayLocation changed to:', newVal)
-}, { immediate: true })
-
-// Debug: Watch activeSessionTools
-watch(activeSessionTools, (newVal) => {
-  console.log('activeSessionTools:', newVal)
-  console.log('Edit tools:', newVal.filter(t => t.name === 'Edit'))
-}, { deep: true })
-
-// Debug: Watch activeMessages for editToolData
-watch(activeMessages, (newVal) => {
-  const messagesWithEditData = newVal.filter(m => m.editToolData)
-  if (messagesWithEditData.length > 0) {
-    console.log('Messages with editToolData:', messagesWithEditData)
-  }
-}, { deep: true })
 
 // Composables - Provider & Agent Selection
 const {
