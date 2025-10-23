@@ -878,6 +878,8 @@ func (h *AgentHandler) handleFiberInterruptSession(c *fiberws.Conn, rawMsg map[s
 
 	// Interrupt session (cancels context but keeps session alive)
 	if err := h.SessionManager.InterruptSession(msg.SessionID); err != nil {
+		logging.Error("Failed to interrupt session %s: %v", msg.SessionID, err)
+		h.sendFiberError(c, fmt.Sprintf("failed to interrupt session: %v", err))
 		return err
 	}
 

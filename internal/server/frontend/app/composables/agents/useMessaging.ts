@@ -230,24 +230,12 @@ export function useMessaging(params: MessagingParams) {
         session_id: activeSessionId.value
       })
 
-      // Update processing state
-      isProcessing.value = false
+      // Don't update processing state here - wait for backend confirmation
+      // This ensures the ESC hint stays visible until interrupt is confirmed
+      // The onSessionInterrupted handler will set isProcessing = false
 
-      // Add system message to indicate interruption
-      if (!messages.value[activeSessionId.value]) {
-        messages.value[activeSessionId.value] = []
-      }
-
-      messages.value[activeSessionId.value].push({
-        id: crypto.randomUUID(),
-        role: 'system',
-        content: '⚠️ Session interrupted by user',
-        timestamp: new Date(),
-        isInterruption: true
-      })
-
-      // Auto-scroll to bottom
-      autoScrollIfNearBottom(messagesContainer)
+      // Don't add system message here - backend will confirm the interruption
+      // This prevents showing an interruption message if the backend fails to interrupt
     } catch (error) {
       console.error('Failed to interrupt session:', error)
       alert('Failed to interrupt session. Please try again.')

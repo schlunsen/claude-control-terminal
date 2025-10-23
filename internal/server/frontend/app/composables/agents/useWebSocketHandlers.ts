@@ -135,6 +135,22 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       // Clear any pending tool execution state for this session
       clearSessionToolExecution(data.session_id)
 
+      // Add system message to indicate interruption (confirmed by backend)
+      if (!messages.value[data.session_id]) {
+        messages.value[data.session_id] = []
+      }
+
+      messages.value[data.session_id].push({
+        id: crypto.randomUUID(),
+        role: 'system',
+        content: '⚠️ Session interrupted by user',
+        timestamp: new Date(),
+        isInterruption: true
+      })
+
+      // Auto-scroll to show interruption message
+      autoScrollIfNearBottom(messagesContainer.value)
+
       // Focus the input after interruption so user can send another message
       focusMessageInput()
     })
