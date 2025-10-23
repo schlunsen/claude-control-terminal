@@ -29,27 +29,29 @@ import (
 // Server wraps the Fiber app and analytics components.
 // It provides a complete analytics backend with WebSocket support for real-time updates.
 type Server struct {
-	app                  *fiber.App
-	conversationAnalyzer *analytics.ConversationAnalyzer
-	conversationParser   *analytics.ConversationParser
-	stateCalculator      *analytics.StateCalculator
-	processDetector      *analytics.ProcessDetector
-	shellDetector        *analytics.ShellDetector
-	fileWatcher          *analytics.FileWatcher
-	wsHub                *ws.Hub
-	resetTracker         *analytics.ResetTracker
-	modelProviderLookup  *analytics.ModelProviderLookup
-	db                   *database.Database
-	repo                 *database.Repository
-	config               *Config
-	tlsConfig            *TLSConfig
-	authMiddleware       *AuthMiddleware
-	agentHandler         *agents.AgentHandler
-	agentConfig          *agents.Config
-	claudeDir            string
-	port                 int
-	quiet                bool // Suppress output when running in TUI
-	verbose              bool // Enable verbose/debug logging
+	app                   *fiber.App
+	conversationAnalyzer  *analytics.ConversationAnalyzer
+	conversationParser    *analytics.ConversationParser
+	stateCalculator       *analytics.StateCalculator
+	processDetector       *analytics.ProcessDetector
+	shellDetector         *analytics.ShellDetector
+	fileWatcher           *analytics.FileWatcher
+	wsHub                 *ws.Hub
+	resetTracker          *analytics.ResetTracker
+	modelProviderLookup   *analytics.ModelProviderLookup
+	db                    *database.Database
+	repo                  *database.Repository
+	config                *Config
+	tlsConfig             *TLSConfig
+	authMiddleware        *AuthMiddleware
+	sessionAuthMiddleware *SessionAuthMiddleware
+	userStore             *UserStore
+	agentHandler          *agents.AgentHandler
+	agentConfig           *agents.Config
+	claudeDir             string
+	port                  int
+	quiet                 bool // Suppress output when running in TUI
+	verbose               bool // Enable verbose/debug logging
 }
 
 // NewServer creates a new Fiber server instance
@@ -141,6 +143,27 @@ func (s *Server) Setup() error {
 		s.authMiddleware = NewAuthMiddleware(apiKey, true)
 	}
 
+	// Initialize user authentication if enabled
+	if config.Auth.UserAuthEnabled {
+		analyticsDir := filepath.Join(s.claudeDir, "analytics")
+		s.userStore = NewUserStore(analyticsDir)
+		if err := s.userStore.Initialize(); err != nil {
+			return fmt.Errorf("failed to initialize user store: %w", err)
+		}
+
+		// Create session auth middleware
+		s.sessionAuthMiddleware = NewSessionAuthMiddleware(s.userStore, config.Auth.RequireLogin)
+
+		if !s.quiet {
+			if s.userStore.HasUsers() {
+				fmt.Printf("🔐 User authentication enabled (%d users)\n", len(s.userStore.ListUsers()))
+			} else {
+				fmt.Printf("⚠️  User authentication enabled but no users configured\n")
+				fmt.Printf("   Use the TUI or API to create an admin user\n")
+			}
+		}
+	}
+
 	// Initialize agent configuration
 	agentAPIKey := os.Getenv("ANTHROPIC_API_KEY")
 	if agentAPIKey == "" {
@@ -202,7 +225,10 @@ func (s *Server) Setup() error {
 	}
 
 	// Apply authentication middleware globally if enabled
-	if s.authMiddleware != nil {
+	// Note: Session auth middleware is applied INSTEAD of API key middleware if user auth is enabled
+	if s.sessionAuthMiddleware != nil {
+		s.app.Use(s.sessionAuthMiddleware.Handler())
+	} else if s.authMiddleware != nil {
 		s.app.Use(s.authMiddleware.Handler())
 	}
 
@@ -262,6 +288,20 @@ func (s *Server) Setup() error {
 // setupRoutes configures all API endpoints
 func (s *Server) setupRoutes() {
 	api := s.app.Group("/api")
+
+	// Authentication endpoints (if user auth is enabled)
+	if s.config.Auth.UserAuthEnabled {
+		auth := api.Group("/auth")
+		auth.Post("/login", s.handleLogin)
+		auth.Post("/logout", s.handleLogout)
+		auth.Get("/status", s.handleAuthStatus)
+		auth.Post("/change-password", s.handleChangePassword)
+
+		// Admin-only endpoints
+		auth.Post("/users", s.handleCreateUser)
+		auth.Get("/users", s.handleListUsers)
+		auth.Delete("/users/:username", s.handleDeleteUser)
+	}
 
 	// Health check
 	api.Get("/health", s.handleHealth)

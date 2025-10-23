@@ -477,7 +477,19 @@ func (m Model) handleMainScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o", "O":
 		// Open analytics dashboard in browser
 		if m.analyticsEnabled {
+			// Check if user auth is enabled but no admin user exists
+			if err := CheckAndSetupAuthBeforeOpen(m.claudeDir); err != nil {
+				return m, nil
+			}
 			openBrowser("https://localhost:3333")
+		}
+		return m, nil
+	case "u", "U":
+		// Setup user authentication - run synchronously
+		// This exits the TUI temporarily to interact with the user
+		if err := SetupUserAuth(m.claudeDir); err != nil {
+			// Error will be printed by SetupUserAuth
+			return m, nil
 		}
 		return m, nil
 	}
@@ -924,9 +936,9 @@ func (m Model) viewMainScreen() string {
 
 	b.WriteString("\n")
 	if m.analyticsEnabled {
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • O: Open Dashboard • H: Hooks • Q/Esc: Quit"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • O: Open Dashboard • H: Hooks • U: User Auth • Q/Esc: Quit"))
 	} else {
-		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Logging Hooks • Q/Esc: Quit"))
+		b.WriteString(HelpStyle.Render("↑/↓: Navigate • Enter: Select • T: Theme • A: Analytics • H: Logging Hooks • U: User Auth • Q/Esc: Quit"))
 	}
 
 	content := BoxStyle.Render(b.String())
