@@ -98,9 +98,16 @@
               @change="handleFileSelect"
               style="display: none"
             />
-            <span class="char-counter" :class="{ 'warning': charCount > 4000 }">
-              {{ charCount }} / 5000 characters
-            </span>
+            <div class="toolbar-right">
+              <transition name="fade">
+                <span v-if="isProcessing" class="interrupt-hint">
+                  <kbd>ESC</kbd> to interrupt
+                </span>
+              </transition>
+              <span class="char-counter" :class="{ 'warning': charCount > 4000 }">
+                {{ charCount }} / 5000 characters
+              </span>
+            </div>
           </div>
 
           <!-- Textarea & Buttons Row -->
@@ -134,17 +141,6 @@
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                   <line x1="12" y1="19" x2="12" y2="23"></line>
                   <line x1="8" y1="23" x2="16" y2="23"></line>
-                </svg>
-              </button>
-              <button
-                v-if="isProcessing"
-                @click="$emit('interrupt')"
-                class="btn-interrupt"
-                :disabled="!connected"
-                title="Interrupt current response"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="6" y="6" width="12" height="12"></rect>
                 </svg>
               </button>
               <button
@@ -297,6 +293,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'update:input-message': [value: string]
   'send': []
+  'interrupt': []
   'images-attached': [images: AttachedImage[]]
 }>()
 
@@ -505,10 +502,17 @@ function handleKeydown(event: KeyboardEvent) {
     return
   }
 
-  // Escape to cancel recording
+  // Escape to cancel recording (when modal is open)
   if (event.code === 'Escape' && showRecordingModal.value) {
     event.preventDefault()
     cancelVoiceRecording()
+    return
+  }
+
+  // Escape to interrupt processing (when not in modal)
+  if (event.code === 'Escape' && !showRecordingModal.value && props.isProcessing && props.connected) {
+    event.preventDefault()
+    emit('interrupt')
     return
   }
 }
@@ -836,6 +840,12 @@ defineExpose({
   margin-bottom: 12px;
 }
 
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .btn-upload {
   display: flex;
   align-items: center;
@@ -865,6 +875,28 @@ defineExpose({
 
 .upload-text {
   font-weight: 500;
+}
+
+.interrupt-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.interrupt-hint kbd {
+  display: inline-block;
+  padding: 3px 8px;
+  background: rgba(220, 53, 69, 0.1);
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #dc3545;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .char-counter {
@@ -947,38 +979,6 @@ defineExpose({
 }
 
 .btn-send:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.btn-interrupt {
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #ff6b6b, #ee5a52);
-  color: white;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
-  height: 48px;
-  width: 100%;
-}
-
-.btn-interrupt:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(255, 107, 107, 0.4);
-  background: linear-gradient(135deg, #ee5a52, #dc3545);
-}
-
-.btn-interrupt:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.btn-interrupt:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
