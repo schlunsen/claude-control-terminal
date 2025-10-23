@@ -7,6 +7,98 @@
         <p class="subtitle">Configure your Claude Control Terminal experience</p>
       </header>
 
+      <!-- Voice Recording Section -->
+      <section class="section">
+        <h2 class="section-title">Voice Recording</h2>
+        <div class="settings-group">
+          <!-- Whisper Model Selection -->
+          <div class="setting-item">
+            <div class="setting-info">
+              <h3 class="setting-title">Whisper Model</h3>
+              <p class="setting-description">
+                Choose the Whisper speech recognition model. Larger models are more accurate but slower and require more download time.
+                The model is downloaded once and cached in your browser.
+              </p>
+            </div>
+            <div class="setting-control">
+              <div class="radio-group">
+                <label class="radio-option" :class="{ 'active': whisperModel === 'tiny' }">
+                  <input
+                    type="radio"
+                    name="whisper-model"
+                    value="tiny"
+                    v-model="whisperModel"
+                    @change="saveWhisperModel"
+                  />
+                  <div class="radio-content">
+                    <div class="radio-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    </div>
+                    <div class="radio-text">
+                      <strong>Tiny</strong>
+                      <span>~35MB • Fast • Good accuracy • Recommended</span>
+                    </div>
+                  </div>
+                </label>
+                <label class="radio-option" :class="{ 'active': whisperModel === 'base' }">
+                  <input
+                    type="radio"
+                    name="whisper-model"
+                    value="base"
+                    v-model="whisperModel"
+                    @change="saveWhisperModel"
+                  />
+                  <div class="radio-content">
+                    <div class="radio-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="6"></circle>
+                      </svg>
+                    </div>
+                    <div class="radio-text">
+                      <strong>Base</strong>
+                      <span>~75MB • Balanced • Better accuracy</span>
+                    </div>
+                  </div>
+                </label>
+                <label class="radio-option" :class="{ 'active': whisperModel === 'small' }">
+                  <input
+                    type="radio"
+                    name="whisper-model"
+                    value="small"
+                    v-model="whisperModel"
+                    @change="saveWhisperModel"
+                  />
+                  <div class="radio-content">
+                    <div class="radio-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <circle cx="12" cy="12" r="9"></circle>
+                      </svg>
+                    </div>
+                    <div class="radio-text">
+                      <strong>Small</strong>
+                      <span>~150MB • Slower • Best accuracy</span>
+                    </div>
+                  </div>
+                </label>
+              </div>
+              <div class="model-note">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <span>Changing models will trigger a download on next recording. The old model cache will be kept.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Agent Behavior Section -->
       <section class="section">
         <h2 class="section-title">Agent Behavior</h2>
@@ -98,23 +190,36 @@ const { fetchWithAuth } = useAuthenticatedFetch()
 
 // Settings state
 const diffDisplayLocation = ref('chat')
+const whisperModel = ref('tiny')
 const showSaveStatus = ref(false)
 
 // Fetch current settings from API
 const fetchSettings = async () => {
   try {
-    const response = await fetchWithAuth('/api/settings/diff_display_location', {
+    // Fetch diff display location
+    const diffResponse = await fetchWithAuth('/api/settings/diff_display_location', {
       method: 'GET',
     })
 
-    if (response.ok) {
-      const setting = await response.json()
+    if (diffResponse.ok) {
+      const setting = await diffResponse.json()
       diffDisplayLocation.value = setting.value || 'chat'
+    }
+
+    // Fetch whisper model
+    const whisperResponse = await fetchWithAuth('/api/settings/whisper_model', {
+      method: 'GET',
+    })
+
+    if (whisperResponse.ok) {
+      const setting = await whisperResponse.json()
+      whisperModel.value = setting.value || 'tiny'
     }
   } catch (error) {
     console.error('Failed to fetch settings:', error)
-    // Default to 'chat' if fetch fails
+    // Defaults if fetch fails
     diffDisplayLocation.value = 'chat'
+    whisperModel.value = 'tiny'
   }
 }
 
@@ -144,6 +249,35 @@ const saveDiffDisplayLocation = async () => {
     }
   } catch (error) {
     console.error('Error saving setting:', error)
+  }
+}
+
+// Save whisper model setting
+const saveWhisperModel = async () => {
+  try {
+    const response = await fetchWithAuth('/api/settings/whisper_model', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        value: whisperModel.value,
+        value_type: 'string',
+        description: 'Whisper speech recognition model: "tiny", "base", or "small"',
+      }),
+    })
+
+    if (response.ok) {
+      // Show save status
+      showSaveStatus.value = true
+      setTimeout(() => {
+        showSaveStatus.value = false
+      }, 2000)
+    } else {
+      console.error('Failed to save whisper model setting:', await response.text())
+    }
+  } catch (error) {
+    console.error('Error saving whisper model setting:', error)
   }
 }
 
@@ -302,6 +436,26 @@ header h1 {
 .radio-text span {
   color: var(--text-secondary);
   font-size: 0.9rem;
+}
+
+.model-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--accent-purple);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.model-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent-purple);
 }
 
 .save-status {

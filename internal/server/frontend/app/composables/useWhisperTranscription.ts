@@ -24,19 +24,67 @@ export function useWhisperTranscription() {
   const transcription = ref<string>('')
 
   let transcriber: any = null
+  let currentModel: string | null = null
+
+  // Model size mapping
+  const modelSizeMap: Record<string, string> = {
+    'tiny': 'onnx-community/whisper-tiny.en',
+    'base': 'onnx-community/whisper-base.en',
+    'small': 'onnx-community/whisper-small.en'
+  }
+
+  /**
+   * Fetch the selected Whisper model from settings
+   */
+  async function getSelectedModel(): Promise<string> {
+    try {
+      // Use authenticated fetch
+      const { fetchWithAuth } = useAuthenticatedFetch()
+      const response = await fetchWithAuth('/api/settings/whisper_model', {
+        method: 'GET',
+      })
+
+      if (response.ok) {
+        const setting = await response.json()
+        const modelSize = setting.value || 'tiny'
+        return modelSizeMap[modelSize] || modelSizeMap['tiny']
+      }
+    } catch (error) {
+      console.error('Failed to fetch whisper model setting, using default:', error)
+    }
+
+    // Default to tiny model
+    return modelSizeMap['tiny']
+  }
 
   /**
    * Initialize the Whisper model
-   * Using Whisper Tiny for faster inference on client-side
+   * Model is selected based on user settings
    */
   async function initializeModel(): Promise<void> {
-    if (transcriber) return // Already initialized
-
     try {
       isModelLoading.value = true
       error.value = null
+      transcriptionProgress.value = 0 // Reset progress
 
-      console.log('Loading Whisper model from HuggingFace...')
+      // Get the selected model from settings
+      const selectedModel = await getSelectedModel()
+
+      // If model is already loaded and it's the same model, skip reloading
+      if (transcriber && currentModel === selectedModel) {
+        console.log('Whisper model already loaded:', selectedModel)
+        isModelLoading.value = false
+        return
+      }
+
+      // If switching models, clear the old transcriber
+      if (transcriber && currentModel !== selectedModel) {
+        console.log('Switching from', currentModel, 'to', selectedModel)
+        transcriber = null
+        currentModel = null
+      }
+
+      console.log('Loading Whisper model from HuggingFace:', selectedModel)
       console.log('Model config:', {
         allowRemoteModels: env.allowRemoteModels,
         allowLocalModels: env.allowLocalModels,
@@ -45,25 +93,45 @@ export function useWhisperTranscription() {
 
       // Use onnx-community models which have better CORS support for web usage
       // These models are specifically optimized for browser environments
+
+      // Track downloaded files for progress calculation
+      const downloadedFiles = new Set<string>()
+      const fileProgress = new Map<string, number>()
+
       transcriber = await pipeline(
         'automatic-speech-recognition',
-        'onnx-community/whisper-tiny.en',
+        selectedModel,
         {
           quantized: true, // Use quantized version for faster loading
           progress_callback: (progress: any) => {
             console.log('Model loading progress:', progress)
-            if (progress.status === 'progress') {
-              const percent = Math.round((progress.progress || 0) * 100)
+
+            if (progress.status === 'progress' && progress.file) {
+              // Store individual file progress
+              fileProgress.set(progress.file, progress.progress || 0)
+
+              // Calculate overall progress as average of all files
+              const progressValues = Array.from(fileProgress.values())
+              const avgProgress = progressValues.reduce((a, b) => a + b, 0) / Math.max(progressValues.length, 1)
+              const percent = Math.min(Math.round(avgProgress * 100), 100)
+
               transcriptionProgress.value = percent
-              console.log(`Downloading model: ${percent}%`)
-            } else if (progress.status === 'download') {
-              console.log(`Downloading: ${progress.name || progress.file}`)
+              console.log(`Downloading model: ${percent}% (file: ${progress.file})`)
+            } else if (progress.status === 'download' && progress.file) {
+              console.log(`Starting download: ${progress.file}`)
+            } else if (progress.status === 'done' && progress.file) {
+              downloadedFiles.add(progress.file)
+              fileProgress.set(progress.file, 1.0)
+              console.log(`Completed: ${progress.file}`)
             }
           }
         }
       )
 
-      console.log('Whisper model loaded successfully')
+      // Store the current model and mark as loaded
+      currentModel = selectedModel
+      transcriptionProgress.value = 100 // Ensure progress shows complete
+      console.log('Whisper model loaded successfully:', selectedModel)
     } catch (err) {
       console.error('Failed to initialize Whisper model:', err)
       // Log the full error with stack trace
@@ -188,6 +256,13 @@ export function useWhisperTranscription() {
     )
   }
 
+  /**
+   * Get the currently loaded model name
+   */
+  function getCurrentModel(): string | null {
+    return currentModel
+  }
+
   return {
     // State
     isTranscribing,
@@ -199,6 +274,7 @@ export function useWhisperTranscription() {
     // Methods
     initializeModel,
     transcribe,
-    isSupported
+    isSupported,
+    getCurrentModel
   }
 }
