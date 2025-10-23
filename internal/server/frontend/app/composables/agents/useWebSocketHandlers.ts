@@ -343,9 +343,9 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
       messages.value[data.session_id].push(newMessage)
 
-      // Reset processing state when we receive content
-      isProcessing.value = false
-      isThinking.value = false
+      // Don't reset processing state when receiving content - only reset on completion
+      // This ensures the ESC interrupt hint remains visible throughout the conversation
+      // isProcessing will be reset when result message arrives (line 251)
 
       // Auto-scroll to bottom if user is near bottom
       autoScrollIfNearBottom(messagesContainer.value)
@@ -354,16 +354,14 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     agentWs.on('onAgentThinking', (data) => {
       if (data.session_id === activeSessionId.value) {
         isThinking.value = data.thinking
-        // When thinking stops, ensure processing is also reset
-        if (!data.thinking) {
-          isProcessing.value = false
-        }
+        // Don't reset isProcessing when thinking stops - let the result message handle that
+        // This keeps the ESC interrupt hint visible throughout the entire conversation
       }
 
       // Update session status based on thinking state
       const session = sessions.value.find(s => s.id === data.session_id)
       if (session) {
-        session.status = data.thinking ? 'processing' : 'idle'
+        session.status = data.thinking ? 'processing' : session.status
       }
     })
 
