@@ -184,3 +184,61 @@ CREATE INDEX IF NOT EXISTS idx_notifications_model
 
 CREATE INDEX IF NOT EXISTS idx_conversations_model
     ON conversations(model_provider, model_name);
+
+-- ============================================
+-- Agent Session Tables
+-- ============================================
+
+-- Table for agent session persistence
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'idle',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ended_at TIMESTAMP,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0.0,
+    num_turns INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    model_name TEXT,
+    claude_session_id TEXT,
+    git_branch TEXT,
+    options TEXT,
+    CONSTRAINT status_check CHECK (status IN ('idle', 'active', 'processing', 'error', 'ended'))
+);
+
+-- Table for agent messages
+CREATE TABLE IF NOT EXISTS agent_messages (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    sequence INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    thinking_content TEXT,
+    tool_uses TEXT,
+    timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    tokens_used INTEGER DEFAULT 0,
+    FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE,
+    CONSTRAINT role_check CHECK (role IN ('user', 'assistant', 'system'))
+);
+
+-- Indexes for agent sessions
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_status
+    ON agent_sessions(status, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_created
+    ON agent_sessions(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_ended
+    ON agent_sessions(ended_at DESC) WHERE ended_at IS NOT NULL;
+
+-- Indexes for agent messages
+CREATE INDEX IF NOT EXISTS idx_agent_messages_session
+    ON agent_messages(session_id, sequence ASC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_messages_timestamp
+    ON agent_messages(timestamp DESC);
+
+CREATE INDEX IF NOT EXISTS idx_agent_messages_sequence
+    ON agent_messages(session_id, sequence DESC);

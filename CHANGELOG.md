@@ -571,7 +571,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced provider configuration screen with improved layout and usability
 
 ### Changed
-- Provider tokens and configurations now persist across sessions in ~/.claude/cct_history.db
+- Provider tokens and configurations now persist across sessions in ~/.claude/cct/cct.db
 - Provider UI now displays in compact mode on smaller terminals for better accessibility
 - Improved provider model selection with custom input option
 

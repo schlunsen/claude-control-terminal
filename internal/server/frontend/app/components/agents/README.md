@@ -146,7 +146,7 @@ const sessionForm = ref({
   workingDirectory: '',
   permissionMode: 'default',
   modelProvider: 'anthropic',
-  model: 'claude-sonnet-4.5-20250514',
+  model: 'sonnet',
   systemPrompt: '',
   promptMode: 'agent',
   selectedAgent: '',

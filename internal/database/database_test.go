@@ -31,7 +31,7 @@ func TestDatabaseInitialization(t *testing.T) {
 	}
 
 	// Verify database file exists
-	dbPath := filepath.Join(tempDir, "cct_history.db")
+	dbPath := filepath.Join(tempDir, "cct.db")
 	fileInfo, err := os.Stat(dbPath)
 	if os.IsNotExist(err) {
 		t.Errorf("Database file was not created")

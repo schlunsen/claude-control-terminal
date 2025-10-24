@@ -181,7 +181,7 @@ func NewModelWithServer(targetDir, claudeDir string, analyticsServer *server.Ser
 
 	// Initialize database for provider storage
 	homeDir, _ := os.UserHomeDir()
-	dataDir := filepath.Join(homeDir, ".claude")
+	dataDir := filepath.Join(homeDir, ".claude", "cct")
 	db, err := database.Initialize(dataDir)
 	var repo *database.Repository
 	if err == nil {

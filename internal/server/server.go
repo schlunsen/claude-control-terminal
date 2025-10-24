@@ -234,7 +234,7 @@ func (s *Server) Setup() error {
 	}
 
 	// Initialize database
-	dataDir := filepath.Join(s.claudeDir, "analytics_data")
+	dataDir := filepath.Join(s.claudeDir, "cct")
 	db, err := database.Initialize(dataDir)
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)

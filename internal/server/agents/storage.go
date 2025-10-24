@@ -67,10 +67,8 @@ type SQLiteSessionStorage struct {
 func NewSQLiteSessionStorage(db *sql.DB) (*SQLiteSessionStorage, error) {
 	storage := &SQLiteSessionStorage{db: db}
 
-	// Initialize tables if they don't exist
-	if err := InitializeAgentTables(db); err != nil {
-		return nil, fmt.Errorf("failed to initialize agent tables: %w", err)
-	}
+	// Note: Agent tables are now created by the main database schema (schema.sql)
+	// No need to initialize them separately
 
 	// Run migration to fix message sequences (idempotent)
 	if err := storage.FixMessageSequences(); err != nil {
@@ -485,7 +483,23 @@ func (s *SQLiteSessionStorage) GetMessageCount(sessionID uuid.UUID) (int, error)
 
 // DeleteOldSessions removes sessions older than retentionDays
 func (s *SQLiteSessionStorage) DeleteOldSessions(retentionDays int) (int64, error) {
-	return CleanupOldSessions(s.db, retentionDays)
+	query := `
+		DELETE FROM agent_sessions
+		WHERE ended_at IS NOT NULL
+		AND ended_at < datetime('now', '-' || ? || ' days')
+	`
+
+	result, err := s.db.Exec(query, retentionDays)
+	if err != nil {
+		return 0, fmt.Errorf("failed to cleanup old sessions: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	return rowsAffected, nil
 }
 
 // FixMessageSequences resequences all messages based on timestamp order
