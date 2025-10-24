@@ -5,8 +5,8 @@ export function useAgentProviders() {
   const sessionForm = ref({
     workingDirectory: '',
     permissionMode: 'default',
-    modelProvider: 'anthropic',
-    model: 'sonnet',
+    modelProvider: '', // Will be set by loadProviders()
+    model: '', // Will be set by loadProviders()
     systemPrompt: '',
     promptMode: 'agent', // 'agent' or 'custom'
     selectedAgent: '',
