@@ -47,7 +47,7 @@ func Initialize(dataDir string) (*Database, error) {
 		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	dbPath := filepath.Join(dataDir, "cct_history.db")
+	dbPath := filepath.Join(dataDir, "cct.db")
 
 	// Check if database file exists before opening
 	dbExists := false

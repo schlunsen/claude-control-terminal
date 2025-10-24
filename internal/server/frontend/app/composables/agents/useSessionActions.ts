@@ -80,7 +80,7 @@ export function useSessionActions(params: SessionActionParams) {
 
     // Determine provider and model from currentProvider if available
     let defaultProvider = 'anthropic'
-    let defaultModel = 'claude-sonnet-4.5-20250514'
+    let defaultModel = 'sonnet'
 
     if (currentProvider.value) {
       // Find the provider in availableProviders

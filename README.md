@@ -280,7 +280,7 @@ cct
 
 When you configure a provider, CCT:
 
-1. **Saves Configuration**: Stores API key, base URL, and model in `~/.claude/cct_history.db`
+1. **Saves Configuration**: Stores API key, base URL, and model in `~/.claude/cct/cct.db`
 2. **Generates Script**: Creates `~/.claude/provider-env.sh` with environment variables
 3. **Sets Variables**: Exports `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_MODEL`
 

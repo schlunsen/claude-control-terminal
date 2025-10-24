@@ -6,7 +6,7 @@ export function useAgentProviders() {
     workingDirectory: '',
     permissionMode: 'default',
     modelProvider: 'anthropic',
-    model: 'claude-sonnet-4.5-20250514',
+    model: 'sonnet',
     systemPrompt: '',
     promptMode: 'agent', // 'agent' or 'custom'
     selectedAgent: '',
