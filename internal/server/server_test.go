@@ -313,6 +313,14 @@ func TestSetupRoutes(t *testing.T) {
 	tmpDir := t.TempDir()
 	server := NewServer(tmpDir, 3333)
 
+	// Initialize configuration (required by setupRoutes)
+	configManager := NewConfigManager(tmpDir)
+	config, err := configManager.LoadOrCreateConfig()
+	if err != nil {
+		t.Fatalf("failed to load configuration: %v", err)
+	}
+	server.config = config
+
 	// Initialize components needed by handlers
 	server.stateCalculator = analytics.NewStateCalculator()
 	server.processDetector = analytics.NewProcessDetector()
