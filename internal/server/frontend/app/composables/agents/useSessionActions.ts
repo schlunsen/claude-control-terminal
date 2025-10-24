@@ -78,30 +78,17 @@ export function useSessionActions(params: SessionActionParams) {
       return
     }
 
-    // Determine provider and model from currentProvider if available
-    let defaultProvider = 'anthropic'
-    let defaultModel = 'sonnet'
+    // Preserve the current provider/model that was set by loadProviders()
+    // This ensures the form uses the TUI settings or the first available provider
+    const preservedProvider = sessionForm.value.modelProvider
+    const preservedModel = sessionForm.value.model
 
-    if (currentProvider.value) {
-      // Find the provider in availableProviders
-      const provider = availableProviders.value.find(p => p.id === currentProvider.value.provider_id)
-      if (provider) {
-        defaultProvider = provider.id
-        // Use the model from currentProvider if set, otherwise use the provider's default
-        if (currentProvider.value.model_name) {
-          defaultModel = currentProvider.value.model_name
-        } else if (provider.default_model) {
-          defaultModel = provider.default_model
-        }
-      }
-    }
-
-    // Reset form to defaults (preserving provider/model from TUI settings)
+    // Reset form to defaults while preserving provider/model
     sessionForm.value = {
       workingDirectory: '',
       permissionMode: 'default',
-      modelProvider: defaultProvider,
-      model: defaultModel,
+      modelProvider: preservedProvider,
+      model: preservedModel,
       systemPrompt: '',
       promptMode: 'agent',
       selectedAgent: '',
@@ -210,6 +197,11 @@ export function useSessionActions(params: SessionActionParams) {
             sessionForm.value.model = provider.default_model
           }
         }
+      } else if (availableProviders.value.length > 0) {
+        // No current provider, so use the first available provider as default
+        const firstProvider = availableProviders.value[0]
+        sessionForm.value.modelProvider = firstProvider.id
+        sessionForm.value.model = firstProvider.default_model || (firstProvider.models && firstProvider.models[0]) || ''
       }
     } catch (error) {
       console.error('Error loading providers:', error)
