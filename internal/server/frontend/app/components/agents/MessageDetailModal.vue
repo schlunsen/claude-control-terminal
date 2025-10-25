@@ -334,9 +334,8 @@ const displayToolUses = computed(() => {
           const filename = tool.input.file_path.split('/').pop() || tool.input.file_path
           detail = filename
         } else if (tool.name === 'Bash' && tool.input.command) {
-          detail = tool.input.command.length > 50
-            ? tool.input.command.substring(0, 50) + '...'
-            : tool.input.command
+          // Show full command in modal (no truncation)
+          detail = tool.input.command
         } else if (tool.name === 'Grep' && tool.input.pattern) {
           detail = tool.input.pattern
         }
@@ -731,6 +730,9 @@ const copyContent = async () => {
   background: var(--bg-primary);
   padding: 2px 8px;
   border-radius: 6px;
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-width: 100%;
 }
 
 .expand-icon {
