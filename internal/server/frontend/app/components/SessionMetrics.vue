@@ -141,21 +141,6 @@
       </div>
     </div>
 
-    <!-- Quick Stats -->
-    <div class="quick-stats">
-      <div class="stat">
-        <span class="stat-icon">⚡</span>
-        <span class="stat-text">Avg. Message Size: <strong>{{ avgMessageSize }}</strong> chars</span>
-      </div>
-      <div class="stat" v-if="permissionStats.total > 0">
-        <span class="stat-icon">✓</span>
-        <span class="stat-text">Approval Rate: <strong>{{ approvalPercentage.toFixed(0) }}%</strong></span>
-      </div>
-      <div class="stat">
-        <span class="stat-icon">🎯</span>
-        <span class="stat-text">Status: <strong>{{ session.status }}</strong></span>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -209,13 +194,6 @@ const messagePercentage = computed(() => {
 const approvalPercentage = computed(() => {
   if (permissionStats.value.total === 0) return 0
   return (permissionStats.value.approved / permissionStats.value.total) * 100
-})
-
-const avgMessageSize = computed(() => {
-  const count = props.messageCount ?? props.session?.message_count ?? 0
-  if (count === 0) return '0'
-  // Estimate based on typical message sizes
-  return Math.round((count * 150) / Math.max(count, 1))
 })
 
 // Methods
@@ -739,40 +717,6 @@ watch(sessionStartTime, (newVal) => {
   transition: width 0.3s ease;
 }
 
-/* Quick Stats */
-.quick-stats {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.stat {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  font-size: 0.85rem;
-  flex: 1;
-  min-width: 200px;
-}
-
-.stat-icon {
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
-.stat-text {
-  color: var(--text-secondary);
-}
-
-.stat-text strong {
-  color: var(--accent-purple);
-  font-weight: 600;
-}
-
 /* Animations */
 @keyframes pulse {
   0%, 100% {
@@ -946,14 +890,6 @@ watch(sessionStartTime, (newVal) => {
   .metric-values {
     flex-direction: column;
     gap: 4px;
-  }
-
-  .quick-stats {
-    flex-direction: column;
-  }
-
-  .stat {
-    min-width: auto;
   }
 }
 </style>
