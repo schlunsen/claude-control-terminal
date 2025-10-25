@@ -27,12 +27,24 @@
       />
     </div>
 
-    <!-- Tool use indicator -->
-    <div v-if="message.toolUse" class="tool-use">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-      </svg>
-      Using {{ message.toolUse }}
+    <!-- Tool use indicators -->
+    <div v-if="displayToolUses.length > 0" class="tool-uses">
+      <div
+        v-for="(tool, idx) in displayToolUses"
+        :key="idx"
+        class="tool-use"
+        :class="{ clickable: tool.isClickable }"
+        @click="handleToolClick(tool)"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
+        <span>Using {{ tool.name }}</span>
+        <span v-if="tool.detail" class="tool-detail">{{ tool.detail }}</span>
+        <svg v-if="tool.isClickable" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="click-icon">
+          <polyline points="9 18 15 12 9 6"></polyline>
+        </svg>
+      </div>
     </div>
 
     <!-- Expandable Edit Diff (when diffDisplayLocation is 'chat') -->
@@ -53,12 +65,18 @@ interface ContentBlock {
   }
 }
 
+interface ToolUse {
+  name: string
+  input?: any
+}
+
 interface Message {
   id: string
   role: string
   content: string | ContentBlock[]
   timestamp: Date
-  toolUse?: string
+  toolUse?: string  // Legacy: single tool name (deprecated)
+  toolUses?: ToolUse[]  // New: array of tool uses with details
   isToolResult?: boolean
   isExecutionStatus?: boolean
   isPermissionDecision?: boolean
@@ -74,8 +92,9 @@ interface Props {
 
 const props = defineProps<Props>()
 
-defineEmits<{
+const emit = defineEmits<{
   'open-lightbox': [{ images: any[], startIndex: number }]
+  'tool-click': [{ tool: any }]
 }>()
 
 const roleName = computed(() => {
@@ -127,6 +146,66 @@ const formattedContent = computed(() => {
   if (!textContent.value) return ''
   return props.formatMessage(textContent.value)
 })
+
+// Extract tool uses for display
+const displayToolUses = computed(() => {
+  // Prefer new toolUses array format
+  if (props.message.toolUses && Array.isArray(props.message.toolUses)) {
+    return props.message.toolUses.map(tool => {
+      let detail = ''
+      let isClickable = false
+
+      // Extract relevant details based on tool type
+      if (tool.input) {
+        if (tool.name === 'Edit' && tool.input.file_path) {
+          // Extract filename from path
+          const filename = tool.input.file_path.split('/').pop() || tool.input.file_path
+          detail = filename
+          isClickable = true // Edit operations are clickable to show diff
+        } else if (tool.name === 'Read' && tool.input.file_path) {
+          const filename = tool.input.file_path.split('/').pop() || tool.input.file_path
+          detail = filename
+        } else if (tool.name === 'Write' && tool.input.file_path) {
+          const filename = tool.input.file_path.split('/').pop() || tool.input.file_path
+          detail = filename
+        } else if (tool.name === 'Bash' && tool.input.command) {
+          // Show first 30 chars of command
+          detail = tool.input.command.length > 30
+            ? tool.input.command.substring(0, 30) + '...'
+            : tool.input.command
+        } else if (tool.name === 'Grep' && tool.input.pattern) {
+          detail = tool.input.pattern
+        }
+      }
+
+      return {
+        name: tool.name,
+        detail,
+        isClickable,
+        fullData: tool // Keep full tool data for click handler
+      }
+    })
+  }
+
+  // Fall back to legacy single toolUse string
+  if (props.message.toolUse) {
+    return [{
+      name: props.message.toolUse,
+      detail: '',
+      isClickable: false,
+      fullData: null
+    }]
+  }
+
+  return []
+})
+
+// Handle tool click
+const handleToolClick = (tool: any) => {
+  if (tool.isClickable) {
+    emit('tool-click', { tool: tool.fullData })
+  }
+}
 </script>
 
 <style scoped>
@@ -257,16 +336,50 @@ const formattedContent = computed(() => {
   font-size: 0.9rem;
 }
 
+.tool-uses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .tool-use {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-top: 8px;
   padding: 4px 12px;
   background: var(--bg-secondary);
   border-radius: 12px;
   font-size: 0.85rem;
   color: var(--text-secondary);
+  transition: all 0.2s;
+}
+
+.tool-use.clickable {
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.tool-use.clickable:hover {
+  background: var(--accent-purple);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.tool-use.clickable:hover .tool-detail {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.tool-detail {
+  color: var(--accent-purple);
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.click-icon {
+  margin-left: 4px;
+  opacity: 0.6;
 }
 
 /* Message Images */

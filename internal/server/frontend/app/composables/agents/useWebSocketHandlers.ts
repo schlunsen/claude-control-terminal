@@ -39,6 +39,7 @@ interface WebSocketHandlerParams {
   parseTodoWrite: (content: string) => TodoItem[] | null
   parseToolUse: (tool: string) => ToolExecution | null
   extractToolName: (toolUses: any) => string | undefined
+  extractToolUses: (toolUses: any) => Array<{ name: string; input?: any }>
   isCompleteSignal: (content: any) => boolean
   extractCostData: (content: any) => any
   extractTextContent: (content: any) => string
@@ -79,6 +80,7 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     parseTodoWrite,
     parseToolUse,
     extractToolName,
+    extractToolUses,
     isCompleteSignal,
     extractCostData,
     extractTextContent,
@@ -675,16 +677,22 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
           return true
         })
-        .map((dbMsg: any) => ({
-          id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
-          role: dbMsg.role,
-          content: dbMsg.content,
-          timestamp: new Date(dbMsg.timestamp),
-          sequence: dbMsg.sequence,
-          isHistorical: true,
-          toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,
-          thinkingContent: dbMsg.thinking_content || undefined
-        }))
+        .map((dbMsg: any) => {
+          // Extract all tool uses (new format)
+          const toolUses = dbMsg.tool_uses ? extractToolUses(dbMsg.tool_uses) : []
+
+          return {
+            id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
+            role: dbMsg.role,
+            content: dbMsg.content,
+            timestamp: new Date(dbMsg.timestamp),
+            sequence: dbMsg.sequence,
+            isHistorical: true,
+            toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,  // Legacy fallback
+            toolUses: toolUses.length > 0 ? toolUses : undefined,  // New format
+            thinkingContent: dbMsg.thinking_content || undefined
+          }
+        })
 
       // Sort messages by sequence number first, then by timestamp for stable ordering
       // This handles cases where multiple messages have the same sequence number
