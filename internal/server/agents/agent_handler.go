@@ -1266,8 +1266,7 @@ func (h *AgentHandler) handleFiberAddAlwaysAllowRule(c *fiberws.Conn, rawMsg map
 	}
 
 	// IMPORTANT: If there's a pending permission request (from the UI that triggered this),
-	// we need to approve it now so the SDK can continue
-	// The frontend will optimistically remove the permission from the UI
+	// we need to approve it FIRST, let Claude process it, THEN reload to pick up the new rule
 	if msg.PermissionID != "" {
 		logging.Info("📤 Approving pending permission request: %s", msg.PermissionID)
 
@@ -1277,60 +1276,57 @@ func (h *AgentHandler) handleFiberAddAlwaysAllowRule(c *fiberws.Conn, rawMsg map
 		session.permMu.Unlock()
 
 		if exists {
-			// Create permission update to tell SDK about the new rule
-			// This allows the SDK to apply the rule immediately without restarting
-			allowBehavior := types.PermissionBehaviorAllow
-			sessionDest := types.DestinationSession
-			permUpdate := types.PermissionUpdate{
-				Type:     "addRules",
-				Behavior: &allowBehavior,
-				Rules: []types.PermissionRuleValue{
-					{
-						ToolName:    msg.Rule.Tool,
-						RuleContent: &permissionStr,
-					},
-				},
-				Destination: &sessionDest,
-			}
-
-			// Send approval response to the SDK's callback with the updated permissions
-			// This allows the SDK to continue execution with the newly added permission
+			// Send simple approval first (without the rule update)
+			// This lets Claude continue with the current request
 			select {
 			case responseChan <- PermissionResponse{
-				Approved:           true,
-				UpdatedPermissions: []types.PermissionUpdate{permUpdate},
-				DenyMessage:        "",
+				Approved:    true,
+				DenyMessage: "",
 			}:
-				logging.Info("✅ Permission approval sent to SDK for request: %s (with permission update)", msg.PermissionID)
+				logging.Info("✅ Permission approved - Claude will continue processing")
 				// Clean up the pending permission immediately after approval
 				session.permMu.Lock()
 				delete(session.pendingPermissions, msg.PermissionID)
 				session.permMu.Unlock()
-			case <-time.After(2 * time.Second):
+
+				// Set flag to reload after next message
+				// This ensures Claude completes the current action before we reload
+				session.pendingReloadMu.Lock()
+				session.pendingReload = true
+				session.pendingReloadMu.Unlock()
+				logging.Info("📋 Marked session for reload after next message")
+
+			case <-time.After(3 * time.Second):
 				logging.Warning("⚠️ Timeout sending permission approval to SDK")
 			}
 		} else {
 			logging.Warning("⚠️ No pending permission found for ID: %s", msg.PermissionID)
-		}
-	}
-
-	// Reload session settings to pick up the new rule from settings.local.json
-	// This closes and recreates the client, forcing the CLI to reload settings
-	logging.Info("🔄 Reloading session settings to apply new always-allow rule")
-	if err := h.SessionManager.ReloadSessionSettings(msg.SessionID); err != nil {
-		logging.Error("Failed to reload session settings: %v", err)
-		// Don't fail the request - the rule is still saved and will work after restart
-	} else {
-		// After reloading (which interrupts the session), automatically send "continue"
-		// to resume execution with the new settings applied
-		logging.Info("▶️  Auto-resuming session with 'continue' command")
-		go func() {
-			// Small delay to ensure the response is sent first
-			time.Sleep(100 * time.Millisecond)
-			if err := h.SessionManager.SendPrompt(msg.SessionID, "continue"); err != nil {
-				logging.Error("Failed to auto-continue session: %v", err)
+			// No pending permission, so just reload the session immediately
+			logging.Info("🔄 Reloading session settings to apply new always-allow rule")
+			if err := h.SessionManager.ReloadSessionSettings(msg.SessionID); err != nil {
+				logging.Error("Failed to reload session settings: %v", err)
+			} else {
+				go func() {
+					time.Sleep(200 * time.Millisecond)
+					if err := h.SessionManager.SendPrompt(msg.SessionID, "continue"); err != nil {
+						logging.Error("Failed to auto-continue session: %v", err)
+					}
+				}()
 			}
-		}()
+		}
+	} else {
+		// No permission ID provided - just reload the session immediately
+		logging.Info("🔄 Reloading session settings to apply new always-allow rule")
+		if err := h.SessionManager.ReloadSessionSettings(msg.SessionID); err != nil {
+			logging.Error("Failed to reload session settings: %v", err)
+		} else {
+			go func() {
+				time.Sleep(200 * time.Millisecond)
+				if err := h.SessionManager.SendPrompt(msg.SessionID, "continue"); err != nil {
+					logging.Error("Failed to auto-continue session: %v", err)
+				}
+			}()
+		}
 	}
 
 	// Send confirmation with the full rule (including generated ID)
