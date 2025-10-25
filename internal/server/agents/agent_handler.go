@@ -1251,10 +1251,19 @@ func (h *AgentHandler) handleFiberAddAlwaysAllowRule(c *fiberws.Conn, rawMsg map
 	h.SessionManager.mu.Lock()
 	session.Options.AlwaysAllowRules = append(session.Options.AlwaysAllowRules, msg.Rule)
 	totalRules := len(session.Options.AlwaysAllowRules)
+	session.UpdatedAt = time.Now()
 	h.SessionManager.mu.Unlock()
 
 	logging.Info("✅ Rule added to session in-memory cache (total rules: %d)", totalRules)
 	logging.Info("   Rule details: tool=%s, mode=%s, pattern=%v", msg.Rule.Tool, msg.Rule.MatchMode, msg.Rule.Pattern)
+
+	// Persist updated session to database to preserve all options (including working_directory)
+	if err := h.SessionManager.updateSessionInDB(&session.Session); err != nil {
+		logging.Error("Failed to update session in database: %v", err)
+		// Don't fail the request - the in-memory session is updated
+	} else {
+		logging.Info("💾 Session persisted to database with updated rules")
+	}
 
 	// IMPORTANT: If there's a pending permission request (from the UI that triggered this),
 	// we need to approve it now so the SDK can continue
@@ -1371,6 +1380,7 @@ func (h *AgentHandler) handleFiberRemoveAlwaysAllowRule(c *fiberws.Conn, rawMsg 
 		}
 	}
 	session.Options.AlwaysAllowRules = newRules
+	session.UpdatedAt = time.Now()
 	h.SessionManager.mu.Unlock()
 
 	// Remove from settings.local.json
@@ -1380,6 +1390,14 @@ func (h *AgentHandler) handleFiberRemoveAlwaysAllowRule(c *fiberws.Conn, rawMsg 
 		if err := settingsManager.RemovePermission(permissionStr); err != nil {
 			logging.Error("Failed to remove permission from settings: %v", err)
 		}
+	}
+
+	// Persist updated session to database to preserve all options (including working_directory)
+	if err := h.SessionManager.updateSessionInDB(&session.Session); err != nil {
+		logging.Error("Failed to update session in database: %v", err)
+		// Don't fail the request - the in-memory session is updated
+	} else {
+		logging.Info("💾 Session persisted to database after removing rule")
 	}
 
 	// Send updated rules list
