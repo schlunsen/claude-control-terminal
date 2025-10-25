@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - CI/CD Infrastructure & Permission Flow Improvements - 2025-10-25
+
+### Fixed
+- Permission approval flow now completes immediately, with session reload deferred until after Claude finishes current action
+- "Allow Similar" permission requests no longer interrupt Claude's execution, improving workflow smoothness
+
+### Added
+- Comprehensive CI/CD pipeline with GitHub Actions for automated testing and linting
+- Test matrix covering 3 operating systems (Ubuntu, macOS, Windows) × 2 Go versions (1.23.x, 1.24.x)
+- Race condition detection enabled in test runs for improved reliability
+- Coverage tracking with automatic report generation
+- golangci-lint integration with proper fallback to `go install` when apt installation fails
+- Enhanced CONTRIBUTING.md documentation with CI/CD workflow details
+
+### Changed
+- GitHub Actions workflow README added to document CI/CD pipeline configuration
+
 ## [0.7.0] - Permission Management & Database Consolidation - 2025-10-25
 
 ### Added
