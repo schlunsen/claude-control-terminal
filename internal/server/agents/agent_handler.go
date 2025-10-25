@@ -1264,14 +1264,31 @@ func (h *AgentHandler) handleFiberAddAlwaysAllowRule(c *fiberws.Conn, rawMsg map
 		session.permMu.Unlock()
 
 		if exists {
-			// Send approval response to the SDK's callback
+			// Create permission update to tell SDK about the new rule
+			// This allows the SDK to apply the rule immediately without restarting
+			allowBehavior := types.PermissionBehaviorAllow
+			sessionDest := types.DestinationSession
+			permUpdate := types.PermissionUpdate{
+				Type:     "addRules",
+				Behavior: &allowBehavior,
+				Rules: []types.PermissionRuleValue{
+					{
+						ToolName:    msg.Rule.Tool,
+						RuleContent: &permissionStr,
+					},
+				},
+				Destination: &sessionDest,
+			}
+
+			// Send approval response to the SDK's callback with the updated permissions
 			// This allows the SDK to continue execution with the newly added permission
 			select {
 			case responseChan <- PermissionResponse{
-				Approved:    true,
-				DenyMessage: "",
+				Approved:           true,
+				UpdatedPermissions: []types.PermissionUpdate{permUpdate},
+				DenyMessage:        "",
 			}:
-				logging.Info("✅ Permission approval sent to SDK for request: %s", msg.PermissionID)
+				logging.Info("✅ Permission approval sent to SDK for request: %s (with permission update)", msg.PermissionID)
 				// Clean up the pending permission immediately after approval
 				session.permMu.Lock()
 				delete(session.pendingPermissions, msg.PermissionID)

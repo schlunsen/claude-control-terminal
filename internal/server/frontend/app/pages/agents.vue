@@ -468,7 +468,8 @@ const {
   sessionPermissions,
   sessionPermissionStats,
   autoScrollIfNearBottom,
-  messagesContainer
+  messagesContainer,
+  refreshProjectPermissions: fetchProjectPermissions
 })
 
 // Handle send message with image attachments
@@ -800,8 +801,6 @@ watch(activeSessionId, (newSessionId, oldSessionId) => {
 .permission-requests {
   padding: 16px 24px;
   border-top: 1px solid var(--border-color);
-  max-height: 200px;
-  overflow-y: auto;
   flex-shrink: 0;
 }
 </style>

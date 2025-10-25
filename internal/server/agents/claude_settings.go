@@ -153,7 +153,7 @@ func (csm *ClaudeSettingsManager) GetAllowedPermissions() ([]string, error) {
 // FormatPermissionString formats a tool and pattern into Claude Desktop permission format
 // Examples:
 //   - "Bash", "*" -> "Bash(*)"
-//   - "Write", "*" -> "Write(*)"
+//   - "Write", "*" -> "Write(**)"
 //   - "Read", "/path/to/dir/*" -> "Read(//path/to/dir/**)"
 func FormatPermissionString(toolName string, pattern *RulePattern) string {
 	if pattern == nil {
@@ -174,13 +174,9 @@ func FormatPermissionString(toolName string, pattern *RulePattern) string {
 		if pattern.DirectoryPath != nil {
 			dirPath := *pattern.DirectoryPath
 			// Handle wildcard patterns
-			if dirPath == "*" {
-				// Legacy single wildcard - convert to proper format
-				return fmt.Sprintf("%s(/**)", toolName)
-			}
-			if dirPath == "/**" {
-				// Recursive wildcard from root - this is the correct format
-				return fmt.Sprintf("%s(/**)", toolName)
+			if dirPath == "*" || dirPath == "/**" {
+				// Wildcard - allow all files (use ** format for Read/Write/Edit)
+				return fmt.Sprintf("%s(**)", toolName)
 			}
 			// Specific directory path - convert to absolute path with double slash prefix
 			return fmt.Sprintf("%s(//%s/**)", toolName, dirPath)

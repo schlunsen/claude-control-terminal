@@ -125,13 +125,13 @@ const similarPattern = computed(() => {
     }
 
     case 'Read':
-      return `Read(/**)`
+      return `Read(**)`
 
     case 'Write':
-      return `Write(/**)`
+      return `Write(**)`
 
     case 'Edit':
-      return `Edit(/**)`
+      return `Edit(**)`
 
     case 'Grep':
       return `Grep(*)`

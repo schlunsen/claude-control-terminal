@@ -512,6 +512,8 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
       const sessionPerms = sessionPermissions.value.get(data.session_id) || []
       sessionPerms.push({
         ...data,
+        // Map permission_id to request_id for frontend consistency
+        request_id: data.permission_id || data.request_id,
         timestamp: new Date()
       })
       sessionPermissions.value.set(data.session_id, sessionPerms)

@@ -20,6 +20,7 @@ interface MessagingParams {
   // Helper functions
   autoScrollIfNearBottom: (container: any) => void
   messagesContainer: any
+  refreshProjectPermissions?: () => Promise<void>
 }
 
 export function useMessaging(params: MessagingParams) {
@@ -36,7 +37,8 @@ export function useMessaging(params: MessagingParams) {
     sessionPermissions,
     sessionPermissionStats,
     autoScrollIfNearBottom,
-    messagesContainer
+    messagesContainer,
+    refreshProjectPermissions
   } = params
 
   // Messaging
@@ -126,22 +128,22 @@ export function useMessaging(params: MessagingParams) {
     sendPermissionResponse(request, true)
   }
 
-  const approvePermissionExact = (request: any) => {
+  const approvePermissionExact = async (request: any) => {
     // Optimistically remove the permission from UI before backend responds
     removePermissionFromUI(request)
 
     // Add an exact-match always-allow rule
     // The backend will handle approving the current permission request
-    addAlwaysAllowRule(request, 'exact')
+    await addAlwaysAllowRule(request, 'exact')
   }
 
-  const approvePermissionSimilar = (request: any) => {
+  const approvePermissionSimilar = async (request: any) => {
     // Optimistically remove the permission from UI before backend responds
     removePermissionFromUI(request)
 
     // Add a pattern-match always-allow rule
     // The backend will handle approving the current permission request
-    addAlwaysAllowRule(request, 'pattern')
+    await addAlwaysAllowRule(request, 'pattern')
   }
 
   const removePermissionFromUI = (request: any) => {
@@ -153,7 +155,7 @@ export function useMessaging(params: MessagingParams) {
     )
   }
 
-  const addAlwaysAllowRule = (request: any, matchMode: 'exact' | 'pattern') => {
+  const addAlwaysAllowRule = async (request: any, matchMode: 'exact' | 'pattern') => {
     try {
       // Generate pattern if needed
       let pattern = null
@@ -195,6 +197,11 @@ export function useMessaging(params: MessagingParams) {
         autoScrollIfNearBottom(messagesContainer)
       }
 
+      // Refresh project permissions to show the new rule
+      if (refreshProjectPermissions) {
+        await refreshProjectPermissions()
+      }
+
     } catch (error) {
       console.error('Failed to add always-allow rule:', error)
       alert('Failed to add always-allow rule. Please try again.')
@@ -222,7 +229,7 @@ export function useMessaging(params: MessagingParams) {
       case 'Read':
       case 'Write':
       case 'Edit':
-        // Use '/**' pattern for recursive wildcard (like .gitignore)
+        // Use wildcard pattern for all files (backend will format as ToolName(**))
         pattern.directory_path = '/**'
         break
 

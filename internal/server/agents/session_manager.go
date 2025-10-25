@@ -34,9 +34,10 @@ type PermissionRequest struct {
 
 // PermissionResponse represents the user's response to a permission request
 type PermissionResponse struct {
-	Approved      bool
-	UpdatedInput  *map[string]interface{}
-	DenyMessage   string
+	Approved           bool
+	UpdatedInput       *map[string]interface{}
+	UpdatedPermissions []types.PermissionUpdate
+	DenyMessage        string
 }
 
 // AgentSession represents an active agent session
@@ -694,14 +695,21 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 		case response := <-responseChan:
 			logging.Info("Permission response received: approved=%v, requestID=%s", response.Approved, requestID)
 			if response.Approved {
-				result := types.PermissionResultAllow{}
+				result := types.PermissionResultAllow{
+					Behavior: "allow",
+				}
 				if response.UpdatedInput != nil {
 					result.UpdatedInput = response.UpdatedInput
+				}
+				if response.UpdatedPermissions != nil && len(response.UpdatedPermissions) > 0 {
+					result.UpdatedPermissions = response.UpdatedPermissions
+					logging.Info("✨ Including %d permission update(s) in approval response", len(response.UpdatedPermissions))
 				}
 				return result, nil
 			} else {
 				return types.PermissionResultDeny{
-					Message: response.DenyMessage,
+					Behavior: "deny",
+					Message:  response.DenyMessage,
 				}, nil
 			}
 		case <-ctx.Done():
@@ -1136,14 +1144,23 @@ func (sm *SessionManager) createPermissionCallback(session *AgentSession) types.
 		case response := <-responseChan:
 			if response.Approved {
 				logging.Info("✅ Permission APPROVED for %s (request %s)", toolName, requestID)
-				result := types.PermissionResultAllow{}
+				result := types.PermissionResultAllow{
+					Behavior: "allow",
+				}
 				if response.UpdatedInput != nil {
 					result.UpdatedInput = response.UpdatedInput
+				}
+				if response.UpdatedPermissions != nil && len(response.UpdatedPermissions) > 0 {
+					result.UpdatedPermissions = response.UpdatedPermissions
+					logging.Info("✨ Including %d permission update(s) in approval response", len(response.UpdatedPermissions))
 				}
 				return result, nil
 			} else {
 				logging.Info("❌ Permission DENIED for %s (request %s): %s", toolName, requestID, response.DenyMessage)
-				return types.PermissionResultDeny{Message: response.DenyMessage}, nil
+				return types.PermissionResultDeny{
+					Behavior: "deny",
+					Message:  response.DenyMessage,
+				}, nil
 			}
 		case <-ctx.Done():
 			logging.Warning("⏱️ Context cancelled while waiting for permission (tool=%s, request %s)", toolName, requestID)
