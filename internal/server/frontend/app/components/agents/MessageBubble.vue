@@ -30,7 +30,7 @@
     <div v-if="textContent" class="message-content" v-html="formattedContent"></div>
 
     <!-- Images -->
-    <div v-if="imageBlocks.length > 0" class="message-images">
+    <div v-if="imageBlocks.length > 0" class="message-images" @click.stop>
       <img
         v-for="(img, idx) in imageBlocks"
         :key="idx"
@@ -42,7 +42,7 @@
     </div>
 
     <!-- Tool use indicators -->
-    <div v-if="displayToolUses.length > 0" class="tool-uses">
+    <div v-if="displayToolUses.length > 0" class="tool-uses" @click.stop>
       <div
         v-for="(tool, idx) in displayToolUses"
         :key="idx"
@@ -62,7 +62,9 @@
     </div>
 
     <!-- Expandable Edit Diff (when diffDisplayLocation is 'chat') -->
-    <slot name="edit-diff"></slot>
+    <div @click.stop>
+      <slot name="edit-diff"></slot>
+    </div>
   </div>
 </template>
 
