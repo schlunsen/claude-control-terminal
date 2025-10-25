@@ -1,8 +1,6 @@
 # golangci-lint configuration
 # Documentation: https://golangci-lint.run/usage/configuration/
 
-version: 2
-
 run:
   timeout: 5m
   tests: true
@@ -36,7 +34,6 @@ linters-settings:
     check-blank: false
 
   govet:
-    check-shadowing: true
     enable-all: true
 
   revive:
@@ -84,6 +81,10 @@ linters-settings:
 
 issues:
   exclude-use-default: false
+  exclude-dirs:
+    - vendor
+    - website/node_modules
+    - internal/server/frontend/node_modules
   exclude-rules:
     # Exclude some linters from running on tests
     - path: _test\.go
@@ -110,10 +111,11 @@ issues:
 
   max-issues-per-linter: 0
   max-same-issues: 0
+  uniq-by-line: true
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   sort-results: true

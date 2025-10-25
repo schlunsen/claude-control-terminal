@@ -107,27 +107,27 @@ func TestConversationAnalyzer_extractProjectFromPath(t *testing.T) {
 	}{
 		{
 			name:     "path with projects directory",
-			filePath: "/home/user/projects/my-app/.claude/conversations/test.jsonl",
+			filePath: filepath.Join("home", "user", "projects", "my-app", ".claude", "conversations", "test.jsonl"),
 			expected: "my-app",
 		},
 		{
 			name:     "path without projects directory",
-			filePath: "/home/user/code/my-app/.claude/conversations/test.jsonl",
+			filePath: filepath.Join("home", "user", "code", "my-app", ".claude", "conversations", "test.jsonl"),
 			expected: "conversations", // Uses parent directory
 		},
 		{
 			name:     "root path",
-			filePath: "/test.jsonl",
-			expected: "/",
+			filePath: filepath.Join(string(filepath.Separator), "test.jsonl"),
+			expected: string(filepath.Separator),
 		},
 		{
 			name:     "multiple projects in path",
-			filePath: "/projects/workspace/projects/my-app/.claude/test.jsonl",
+			filePath: filepath.Join("projects", "workspace", "projects", "my-app", ".claude", "test.jsonl"),
 			expected: "workspace", // Returns first match
 		},
 		{
 			name:     "projects at end",
-			filePath: "/home/projects",
+			filePath: filepath.Join("home", "projects"),
 			expected: "home",
 		},
 	}
