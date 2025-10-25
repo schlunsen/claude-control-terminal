@@ -1,15 +1,29 @@
 <template>
-  <div class="message" :class="{
-    [message.role]: true,
-    isToolResult: message.isToolResult,
-    isExecutionStatus: message.isExecutionStatus,
-    isPermissionDecision: message.isPermissionDecision,
-    isHistorical: message.isHistorical,
-    isError: message.isError
-  }">
+  <div
+    class="message"
+    :class="{
+      [message.role]: true,
+      isToolResult: message.isToolResult,
+      isExecutionStatus: message.isExecutionStatus,
+      isPermissionDecision: message.isPermissionDecision,
+      isHistorical: message.isHistorical,
+      isError: message.isError
+    }"
+    @click="handleMessageClick"
+    role="button"
+    tabindex="0"
+    @keydown.enter="handleMessageClick"
+    @keydown.space.prevent="handleMessageClick"
+    aria-label="View message details"
+  >
     <div class="message-header">
       <span class="message-role">{{ roleName }}</span>
       <span class="message-time">{{ formattedTime }}</span>
+      <svg class="click-hint-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="16" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      </svg>
     </div>
 
     <!-- Text content -->
@@ -95,6 +109,7 @@ const props = defineProps<Props>()
 const emit = defineEmits<{
   'open-lightbox': [{ images: any[], startIndex: number }]
   'tool-click': [{ tool: any }]
+  'message-click': [{ message: Message }]
 }>()
 
 const roleName = computed(() => {
@@ -198,7 +213,12 @@ const displayToolUses = computed(() => {
   return []
 })
 
-// Handle tool click
+// Handle message click
+const handleMessageClick = (event: Event) => {
+  emit('message-click', { message: props.message })
+}
+
+// Handle tool click (for backward compatibility)
 const handleToolClick = (tool: any) => {
   if (tool.isClickable) {
     emit('tool-click', { tool: tool.fullData })
@@ -209,6 +229,25 @@ const handleToolClick = (tool: any) => {
 <style scoped>
 .message {
   margin-bottom: 24px;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+  padding: 8px;
+  margin-left: -8px;
+  margin-right: -8px;
+  border-radius: 12px;
+}
+
+.message:hover {
+  background-color: rgba(139, 92, 246, 0.05);
+}
+
+.message:active {
+  transform: scale(0.995);
+}
+
+.message:focus {
+  outline: 2px solid var(--accent-purple);
+  outline-offset: 2px;
 }
 
 .message-header {
@@ -231,6 +270,17 @@ const handleToolClick = (tool: any) => {
 .message-time {
   font-size: 0.8rem;
   color: var(--text-secondary);
+}
+
+.click-hint-icon {
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.2s;
+  margin-left: auto;
+}
+
+.message:hover .click-hint-icon {
+  opacity: 0.5;
 }
 
 .message-content {

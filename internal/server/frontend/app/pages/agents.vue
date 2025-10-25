@@ -71,7 +71,7 @@
           :connected="agentWs.connected"
           :is-thinking="isThinking"
           :is-processing="isProcessing"
-          :has-modal-open="showToolDiffOverlay || showLightbox"
+          :has-modal-open="showMessageDetailModal || showLightbox"
           @send="handleSendMessage"
           @interrupt="interruptSession"
         >
@@ -115,6 +115,7 @@
               :format-time="formatTime"
               :format-message="formatMessage"
               @open-lightbox="openLightbox"
+              @message-click="handleMessageClick"
               @tool-click="handleToolClick"
             >
               <!-- Edit Diff Slot (only when diffDisplayLocation is 'chat') -->
@@ -207,33 +208,15 @@
       @close="closeLightbox"
     />
 
-    <!-- Tool Diff Overlay Modal -->
-    <Teleport to="body">
-      <transition name="fade">
-        <div v-if="showToolDiffOverlay && selectedToolData" class="tool-diff-modal-backdrop" @click="closeToolDiffOverlay">
-          <div class="tool-diff-modal" @click.stop>
-            <div class="modal-header">
-              <h3>Edit Diff</h3>
-              <button class="close-btn" @click="closeToolDiffOverlay">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="18" y1="6" x2="6" y2="18"></line>
-                  <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-              </button>
-            </div>
-            <div class="modal-body">
-              <EditDiffMessage
-                :file-path="selectedToolData.input?.file_path || 'Unknown file'"
-                :old-string="selectedToolData.input?.old_string || ''"
-                :new-string="selectedToolData.input?.new_string || ''"
-                :replace-all="selectedToolData.input?.replace_all || false"
-                status="completed"
-              />
-            </div>
-          </div>
-        </div>
-      </transition>
-    </Teleport>
+    <!-- Message Detail Modal -->
+    <MessageDetailModal
+      :show="showMessageDetailModal"
+      :message="selectedMessage"
+      :format-time="formatTime"
+      :format-message="formatMessage"
+      @close="closeMessageDetailModal"
+      @open-lightbox="openLightbox"
+    />
 
   </div>
 </template>
@@ -259,6 +242,7 @@ import TodoWriteBox from '~/components/agents/TodoWriteBox.vue'
 import ToolOverlaysContainer from '~/components/agents/ToolOverlaysContainer.vue'
 import ImageLightbox from '~/components/agents/ImageLightbox.vue'
 import EditDiffMessage from '~/components/agents/EditDiffMessage.vue'
+import MessageDetailModal from '~/components/agents/MessageDetailModal.vue'
 
 // Utilities
 import { formatTime, formatMessage } from '~/utils/agents/messageFormatters'
@@ -529,23 +513,36 @@ const openLightbox = ({ images, startIndex }: { images: any[], startIndex: numbe
   showLightbox.value = true
 }
 
-// Tool diff overlay state
-const showToolDiffOverlay = ref(false)
-const selectedToolData = ref<any>(null)
+// Message detail modal state
+const showMessageDetailModal = ref(false)
+const selectedMessage = ref<any>(null)
 
-// Handle tool click (for showing diff overlay)
+// Handle message click (for showing message detail modal)
+const handleMessageClick = ({ message }: { message: any }) => {
+  selectedMessage.value = message
+  showMessageDetailModal.value = true
+}
+
+// Handle tool click (for backward compatibility - opens message modal)
 const handleToolClick = ({ tool }: { tool: any }) => {
+  // For now, we'll keep the old behavior for Edit tools
+  // But you could also open the message modal instead
   if (tool && tool.name === 'Edit') {
-    selectedToolData.value = tool
-    showToolDiffOverlay.value = true
+    // Find the message that contains this tool
+    const messageWithTool = messages.value.get(activeSessionId.value)?.find(msg =>
+      msg.toolUses?.some((t: any) => t === tool)
+    )
+    if (messageWithTool) {
+      handleMessageClick({ message: messageWithTool })
+    }
   }
 }
 
-// Close tool diff overlay
-const closeToolDiffOverlay = () => {
-  showToolDiffOverlay.value = false
+// Close message detail modal
+const closeMessageDetailModal = () => {
+  showMessageDetailModal.value = false
   setTimeout(() => {
-    selectedToolData.value = null
+    selectedMessage.value = null
   }, 300)
 }
 
@@ -681,12 +678,12 @@ watch(activeSessionTodos, (todos) => {
   }
 }, { deep: true })
 
-// Handle ESC key to close tool diff modal
+// Handle ESC key to close modals
 const handleEscKey = (event: KeyboardEvent) => {
   if (event.key === 'Escape') {
-    // Priority 1: Close tool diff modal if open (don't interrupt session)
-    if (showToolDiffOverlay.value) {
-      closeToolDiffOverlay()
+    // Priority 1: Close message detail modal if open (don't interrupt session)
+    if (showMessageDetailModal.value) {
+      closeMessageDetailModal()
       event.preventDefault()
       event.stopPropagation()
       return
@@ -883,70 +880,7 @@ watch(activeSessionId, (newSessionId, oldSessionId) => {
   flex-shrink: 0;
 }
 
-/* Tool Diff Modal */
-.tool-diff-modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  padding: 20px;
-}
-
-.tool-diff-modal {
-  background: var(--card-bg);
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-  max-width: 900px;
-  width: 100%;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.tool-diff-modal .modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.tool-diff-modal .modal-header h3 {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.tool-diff-modal .close-btn {
-  background: none;
-  border: none;
-  padding: 4px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: all 0.2s;
-  border-radius: 8px;
-}
-
-.tool-diff-modal .close-btn:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.tool-diff-modal .modal-body {
-  padding: 24px;
-  overflow-y: auto;
-  flex: 1;
-}
-
-/* Fade transition for modal */
+/* Fade transition for modals */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.3s;
