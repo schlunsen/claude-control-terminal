@@ -1,10 +1,5 @@
 <template>
   <div class="project-permissions">
-    <div class="permissions-header">
-      <h3>Project Permissions</h3>
-      <span v-if="totalCount > 0" class="permissions-count">{{ totalCount }}</span>
-    </div>
-
     <div v-if="error" class="no-permissions">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -312,6 +307,7 @@ const toggleCategory = (category: string) => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 .category-section {

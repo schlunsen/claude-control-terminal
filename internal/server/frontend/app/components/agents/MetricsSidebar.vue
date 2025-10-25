@@ -38,6 +38,9 @@
               <span class="status-dot"></span>
               {{ session.status }}
             </div>
+            <div class="messages-label">
+              💬 {{ messageCount }}
+            </div>
           </div>
         </div>
       </div>
@@ -50,27 +53,16 @@
         </div>
       </div>
 
-      <!-- Context Usage Bar -->
-      <div class="context-usage-section">
-        <ContextUsageBar
-          :usage="contextUsage"
-          :loading="contextLoading"
-          @refresh="$emit('refresh-context')"
-        />
-      </div>
-
       <SessionMetrics
         :session="session"
         :message-count="messageCount"
         :tool-executions="toolExecutions"
         :permission-stats="permissionStats"
-        :hide-header="true"
+        :project-permissions="projectPermissions"
+        :context-usage="contextUsage"
+        :context-loading="contextLoading"
+        @refresh-context="$emit('refresh-context')"
       />
-
-      <!-- Project Permissions Section -->
-      <div v-if="projectPermissions" class="project-permissions-section">
-        <ProjectPermissions :permissions="projectPermissions" />
-      </div>
     </div>
   </aside>
 </template>
@@ -78,8 +70,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import SessionMetrics from '~/components/SessionMetrics.vue'
-import ContextUsageBar from '~/components/agents/ContextUsageBar.vue'
-import ProjectPermissions from '~/components/agents/ProjectPermissions.vue'
 
 interface Props {
   show: boolean
@@ -364,6 +354,17 @@ watch(sessionStartTime, (newVal) => {
   white-space: nowrap;
 }
 
+.messages-label {
+  padding: 8px 14px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--accent-purple);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
 @keyframes pulse {
   0%, 100% {
     opacity: 1;
@@ -415,11 +416,6 @@ watch(sessionStartTime, (newVal) => {
   width: 100%;
 }
 
-/* Context Usage Section */
-.context-usage-section {
-  padding: 12px;
-}
-
 /* Responsive */
 @media (max-width: 1200px) {
   .metrics-sidebar {
@@ -429,12 +425,6 @@ watch(sessionStartTime, (newVal) => {
   .metrics-sidebar.collapsed {
     width: 48px;
   }
-}
-
-.project-permissions-section {
-  padding: 0.75rem;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
 }
 
 @media (max-width: 768px) {

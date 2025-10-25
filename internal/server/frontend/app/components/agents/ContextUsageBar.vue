@@ -23,6 +23,7 @@
           <polyline points="23 4 23 10 17 10"></polyline>
           <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
         </svg>
+        <span class="refresh-text">Refresh context info</span>
       </button>
     </div>
 
@@ -251,13 +252,20 @@ const formatModelName = (model: string): string => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 8px;
+  gap: 8px;
+  padding: 8px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: var(--text-secondary);
+}
+
+.refresh-text {
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .refresh-button:hover:not(:disabled) {

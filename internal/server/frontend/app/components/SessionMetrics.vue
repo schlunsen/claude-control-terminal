@@ -1,141 +1,169 @@
 <template>
   <div class="session-metrics" v-if="session">
-    <!-- Header with Session ID and Status -->
-    <div v-if="!hideHeader" class="metrics-header">
-      <div class="header-row">
-        <div class="session-badge">
-          <span class="badge-label">Session</span>
-          <span class="badge-value">{{ session.id.slice(0, 8) }}</span>
-        </div>
-        <div class="duration" v-if="sessionDuration">
-          ⏱️ {{ sessionDuration }}
-        </div>
-      </div>
-      <div class="header-row">
-        <div class="status-badge" :class="session.status">
-          <span class="status-dot"></span>
-          {{ session.status }}
-        </div>
-      </div>
-    </div>
+    <!-- Session Info Section (Collapsible) -->
+    <div class="collapsible-section">
+      <button class="section-header" @click="toggleSection('sessionInfo')">
+        <span class="header-content">
+          <span class="section-icon">ℹ️</span>
+          <span class="section-title">Session Info</span>
+        </span>
+        <svg class="toggle-arrow" :class="{ 'collapsed': !expandedSections.sessionInfo }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+      <div v-show="expandedSections.sessionInfo" class="section-content">
+        <!-- Context Usage Bar -->
+        <ContextUsageBar
+          :usage="contextUsage"
+          :loading="contextLoading"
+          @refresh="$emit('refresh-context')"
+        />
 
-    <!-- Working Directory & Git Branch Section -->
-    <div class="environment-section">
-      <div class="environment-header">
-        <span class="environment-icon">📂</span>
-        <span class="environment-title">Environment</span>
-      </div>
-      <div class="environment-details">
-        <div class="environment-row" v-if="session.options?.working_directory">
-          <span class="env-label">Working Directory</span>
-          <div class="env-value-wrapper">
-            <code class="env-value" :title="session.options.working_directory">{{ session.options.working_directory }}</code>
-          </div>
-        </div>
-        <div class="environment-row" v-else>
-          <span class="env-label">Working Directory</span>
-          <span class="env-not-available">No working directory set</span>
-        </div>
-        <div class="environment-row" v-if="session.git_branch">
-          <span class="env-label">Git Branch</span>
-          <div class="git-branch-badge">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="6" y1="3" x2="6" y2="15"></line>
-              <circle cx="18" cy="6" r="3"></circle>
-              <circle cx="6" cy="18" r="3"></circle>
-              <path d="M18 9a9 9 0 0 1-9 9"></path>
-            </svg>
-            <span>{{ session.git_branch }}</span>
-          </div>
-        </div>
-        <div class="environment-row" v-else>
-          <span class="env-label">Git Branch</span>
-          <span class="env-not-available">{{ session.options?.working_directory ? 'Not a git repository' : 'No working directory set' }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Main Metrics Grid -->
-    <div class="metrics-grid">
-      <!-- Message Count Card -->
-      <div class="metric-card message-metric">
-        <div class="metric-icon">💬</div>
-        <div class="metric-content">
-          <div class="metric-label">Messages</div>
-          <div class="metric-value">{{ messageCount }}</div>
-          <div class="metric-bar">
-            <div class="metric-fill" :style="{ width: messagePercentage + '%' }"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Tools Used Card -->
-      <div class="metric-card tools-metric">
-        <div class="metric-icon">🛠️</div>
-        <div class="metric-content">
-          <div class="metric-label">Tools Used</div>
-          <div class="metric-value">{{ toolStats.count }}</div>
-          <div class="tools-list">
-            <span
-              v-for="(count, tool) in toolStats.byName"
-              :key="tool"
-              class="tool-badge-wrapper"
-            >
-              <span class="tool-badge">
-                {{ getToolIcon(tool) }} {{ tool }}
-              </span>
-              <span class="tool-tooltip">{{ count }} use{{ count !== 1 ? 's' : '' }}</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Permissions Card -->
-      <div class="metric-card permissions-metric">
-        <div class="metric-icon">🔐</div>
-        <div class="metric-content">
-          <div class="metric-label">Permissions</div>
-          <div class="metric-values">
-            <span class="approved">✅ {{ permissionStats.approved }}</span>
-            <span class="denied">❌ {{ permissionStats.denied }}</span>
-          </div>
-          <div class="permission-bar">
-            <div class="approved-bar" :style="{ width: approvalPercentage + '%' }" v-if="permissionStats.total > 0"></div>
-            <div v-else class="empty-bar">No permissions yet</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Status Details Card -->
-      <div class="metric-card status-metric">
-        <div class="metric-icon">📊</div>
-        <div class="metric-content">
-          <div class="metric-label">Details</div>
-          <div class="status-details">
-            <div class="detail-row">
-              <span class="detail-label">Mode:</span>
-              <span class="detail-value permission-mode">{{ session.options?.permission_mode }}</span>
+        <!-- Environment Card -->
+        <div class="metric-card environment-metric">
+          <div class="metric-content">
+            <div class="metric-label">
+              <span class="metric-label-icon">📂</span>
+              <span>Environment</span>
             </div>
-            <div class="detail-row">
-              <span class="detail-label">Tools:</span>
-              <span class="detail-value">{{ (session.options?.tools || []).length }}</span>
+            <div class="environment-details">
+              <div class="environment-row" v-if="session.options?.working_directory">
+                <span class="env-label">Working Directory</span>
+                <div class="env-value-wrapper">
+                  <code class="env-value" :title="session.options.working_directory">{{ session.options.working_directory }}</code>
+                </div>
+              </div>
+              <div class="environment-row" v-else>
+                <span class="env-label">Working Directory</span>
+                <span class="env-not-available">No working directory set</span>
+              </div>
+              <div class="environment-row" v-if="session.git_branch">
+                <span class="env-label">Git Branch</span>
+                <div class="git-branch-badge">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="6" y1="3" x2="6" y2="15"></line>
+                    <circle cx="18" cy="6" r="3"></circle>
+                    <circle cx="6" cy="18" r="3"></circle>
+                    <path d="M18 9a9 9 0 0 1-9 9"></path>
+                  </svg>
+                  <span>{{ session.git_branch }}</span>
+                </div>
+              </div>
+              <div class="environment-row" v-else>
+                <span class="env-label">Git Branch</span>
+                <span class="env-not-available">{{ session.options?.working_directory ? 'Not a git repository' : 'No working directory set' }}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Tool Breakdown Section -->
-    <div class="tools-breakdown" v-if="Object.keys(toolStats.byName).length > 0">
-      <div class="breakdown-title">Tool Breakdown</div>
-      <div class="tool-list">
-        <div v-for="(count, tool) in toolStats.byName" :key="tool" class="tool-item">
-          <div class="tool-header">
-            <span class="tool-name">{{ getToolIcon(tool) }} {{ tool }}</span>
-            <span class="tool-count">{{ count }} use{{ count !== 1 ? 's' : '' }}</span>
+    <!-- Tools and Permissions Section (Collapsible) -->
+    <div class="collapsible-section" v-if="Object.keys(toolStats.byName).length > 0">
+      <button class="section-header" @click="toggleSection('toolsPermissions')">
+        <span class="header-content">
+          <span class="section-icon">🔧</span>
+          <span class="section-title">Tools & Permissions</span>
+        </span>
+        <svg class="toggle-arrow" :class="{ 'collapsed': !expandedSections.toolsPermissions }" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+      <div v-show="expandedSections.toolsPermissions" class="section-content">
+        <!-- Project Permissions Card (First) -->
+        <div v-if="projectPermissions" class="metric-card project-permissions-metric">
+          <div class="metric-content">
+            <div class="metric-label">
+              <span class="metric-label-icon">🔐</span>
+              <span>Project Permissions</span>
+            </div>
+            <ProjectPermissions :permissions="projectPermissions" />
           </div>
-          <div class="tool-bar">
-            <div class="tool-fill" :style="{ width: getToolPercentage(count) + '%' }"></div>
+        </div>
+
+        <!-- Summary Cards Grid -->
+        <div class="metrics-grid">
+          <!-- Tools Used Card -->
+          <div class="metric-card tools-metric">
+            <div class="metric-content">
+              <div class="metric-label">
+                <span class="metric-label-icon">🛠️</span>
+                <span>Tools Used</span>
+              </div>
+              <div class="metric-value">{{ toolStats.count }}</div>
+              <div class="tools-list">
+                <span
+                  v-for="(count, tool) in toolStats.byName"
+                  :key="tool"
+                  class="tool-badge-wrapper"
+                >
+                  <span class="tool-badge">
+                    {{ getToolIcon(tool) }} {{ tool }}
+                  </span>
+                  <span class="tool-tooltip">{{ count }} use{{ count !== 1 ? 's' : '' }}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Permissions Card -->
+          <div class="metric-card permissions-metric">
+            <div class="metric-content">
+              <div class="metric-label">
+                <span class="metric-label-icon">🔐</span>
+                <span>Permissions</span>
+              </div>
+              <div class="metric-values">
+                <span class="approved">✅ {{ permissionStats.approved }}</span>
+                <span class="denied">❌ {{ permissionStats.denied }}</span>
+              </div>
+              <div class="permission-bar">
+                <div class="approved-bar" :style="{ width: approvalPercentage + '%' }" v-if="permissionStats.total > 0"></div>
+                <div v-else class="empty-bar">No permissions yet</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Status Details Card -->
+          <div class="metric-card status-metric">
+            <div class="metric-content">
+              <div class="metric-label">
+                <span class="metric-label-icon">⚙️</span>
+                <span>Details</span>
+              </div>
+              <div class="status-details">
+                <div class="detail-row">
+                  <span class="detail-label">Mode:</span>
+                  <span class="detail-value permission-mode">{{ session.options?.permission_mode }}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Tools:</span>
+                  <span class="detail-value">{{ (session.options?.tools || []).length }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tool Breakdown Card -->
+        <div class="metric-card tool-breakdown-metric">
+          <div class="metric-content">
+            <div class="metric-label">
+              <span class="metric-label-icon">📊</span>
+              <span>Tool Breakdown</span>
+            </div>
+            <div class="tool-list">
+              <div v-for="(count, tool) in toolStats.byName" :key="tool" class="tool-item">
+                <div class="tool-header">
+                  <span class="tool-name">{{ getToolIcon(tool) }} {{ tool }}</span>
+                  <span class="tool-count">{{ count }} use{{ count !== 1 ? 's' : '' }}</span>
+                </div>
+                <div class="tool-bar">
+                  <div class="tool-fill" :style="{ width: getToolPercentage(count) + '%' }"></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -145,7 +173,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
+import ProjectPermissions from '~/components/agents/ProjectPermissions.vue'
+import ContextUsageBar from '~/components/agents/ContextUsageBar.vue'
 
 interface SessionMetricsData {
   id: string
@@ -175,14 +205,28 @@ const props = defineProps<{
     denied: number
     total: number
   }
-  hideHeader?: boolean
+  projectPermissions?: any
+  contextUsage?: any
+  contextLoading?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'refresh-context'): void
 }>()
 
 // Reactive data
 const toolStats = ref({ count: 0, byName: {} as Record<string, number> })
 const permissionStats = ref({ approved: 0, denied: 0, total: 0 })
-const sessionStartTime = ref<Date | null>(null)
-const sessionDuration = ref('')
+
+// Collapsible sections state
+const expandedSections = ref({
+  sessionInfo: true,
+  toolsPermissions: true
+})
+
+const toggleSection = (section: keyof typeof expandedSections.value) => {
+  expandedSections.value[section] = !expandedSections.value[section]
+}
 
 // Computed values
 const messagePercentage = computed(() => {
@@ -226,40 +270,6 @@ const truncatePath = (path?: string): string => {
   return `${start}...${end}`
 }
 
-const getProviderDisplay = (provider?: string): string => {
-  // Default to Anthropic if no provider is set (for backward compatibility)
-  const actualProvider = provider || 'anthropic'
-
-  const providerMap: Record<string, string> = {
-    'anthropic': '🟣 Anthropic',
-    'glm': '🤖 GLM',
-    'deepseek': '🔍 DeepSeek',
-    'openai': '🟢 OpenAI',
-    'google': '🔵 Google',
-    'azure': '☁️ Azure',
-    'cohere': '🟠 Cohere',
-    'custom': '⚙️ Custom'
-  }
-
-  return providerMap[actualProvider.toLowerCase()] || `🔧 ${actualProvider}`
-}
-
-const formatDuration = (startTime: Date): string => {
-  const now = new Date()
-  const diff = now.getTime() - startTime.getTime()
-  const seconds = Math.floor(diff / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-
-  if (hours > 0) {
-    return `${hours}h ${minutes % 60}m`
-  } else if (minutes > 0) {
-    return `${minutes}m ${seconds % 60}s`
-  } else {
-    return `${seconds}s`
-  }
-}
-
 // Watch for prop changes
 watch(
   () => props.toolExecutions,
@@ -291,149 +301,85 @@ watch(
   },
   { immediate: true }
 )
-
-watch(
-  () => props.session?.created_at,
-  (newVal) => {
-    if (newVal) {
-      sessionStartTime.value = new Date(newVal)
-    }
-  },
-  { immediate: true }
-)
-
-// Update duration every second
-onMounted(() => {
-  const interval = setInterval(() => {
-    if (sessionStartTime.value && props.session?.status !== 'ended') {
-      sessionDuration.value = formatDuration(sessionStartTime.value)
-    }
-  }, 1000)
-
-  return () => clearInterval(interval)
-})
-
-// Initial duration calculation
-watch(sessionStartTime, (newVal) => {
-  if (newVal && props.session?.status !== 'ended') {
-    sessionDuration.value = formatDuration(newVal)
-  }
-})
 </script>
 
 <style scoped>
 .session-metrics {
-  background: linear-gradient(135deg, var(--card-bg), var(--bg-secondary));
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-}
-
-.session-metrics:hover {
-  border-color: var(--accent-purple);
-  box-shadow: 0 8px 24px rgba(139, 92, 246, 0.15);
-}
-
-/* Header */
-.metrics-header {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
+  gap: 0;
 }
 
-.header-row {
+/* Collapsible Sections */
+.collapsible-section {
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.section-header {
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  padding: 16px;
+  background: var(--bg-primary);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
 }
 
-.session-badge {
+.section-header:hover {
+  background: var(--bg-secondary);
+}
+
+.header-content {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
+  gap: 10px;
   flex: 1;
 }
 
-.badge-label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
+.section-icon {
+  font-size: 1.2rem;
+}
+
+.section-title {
   text-transform: uppercase;
-  font-weight: 600;
   letter-spacing: 0.5px;
 }
 
-.badge-value {
-  font-size: 0.9rem;
-  color: var(--accent-purple);
-  font-weight: 700;
-  font-family: 'Monaco', 'Menlo', monospace;
-}
-
-.status-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-transform: capitalize;
-  border: 1px solid var(--border-color);
-  flex: 1;
-}
-
-.status-badge.idle {
-  background: rgba(40, 167, 69, 0.1);
-  color: #28a745;
-  border-color: rgba(40, 167, 69, 0.3);
-}
-
-.status-badge.processing {
-  background: rgba(23, 162, 184, 0.1);
-  color: #17a2b8;
-  border-color: rgba(23, 162, 184, 0.3);
-  animation: pulse 2s infinite;
-}
-
-.status-badge.error {
-  background: rgba(220, 53, 69, 0.1);
-  color: #dc3545;
-  border-color: rgba(220, 53, 69, 0.3);
-}
-
-.status-badge.ended {
-  background: rgba(108, 117, 125, 0.1);
-  color: #6c757d;
-  border-color: rgba(108, 117, 125, 0.3);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: statusPulse 2s infinite;
-}
-
-.duration {
-  padding: 8px 14px;
-  background: var(--bg-secondary);
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.85rem;
+.toggle-arrow {
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
   color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-  white-space: nowrap;
+}
+
+.toggle-arrow.collapsed {
+  transform: rotate(-90deg);
+}
+
+.section-content {
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
 }
 
 /* Metrics Grid */
@@ -441,12 +387,12 @@ watch(sessionStartTime, (newVal) => {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 0;
 }
 
 .metric-card {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: 12px;
   padding: 16px;
   background: var(--bg-primary);
@@ -460,14 +406,9 @@ watch(sessionStartTime, (newVal) => {
   background: var(--card-bg);
 }
 
-.metric-icon {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
 .metric-content {
   flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 
 .metric-label {
@@ -476,8 +417,15 @@ watch(sessionStartTime, (newVal) => {
   text-transform: uppercase;
   font-weight: 600;
   letter-spacing: 0.5px;
-  margin-bottom: 6px;
-  display: block;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric-label-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
 }
 
 .metric-value {
@@ -677,6 +625,7 @@ watch(sessionStartTime, (newVal) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: 8px;
 }
 
 .tool-item {
@@ -751,40 +700,17 @@ watch(sessionStartTime, (newVal) => {
   width: fit-content;
 }
 
-/* Environment Section */
-.environment-section {
-  padding: 16px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  margin-bottom: 16px;
+/* Environment Card */
+.environment-metric {
+  margin-top: 16px;
 }
 
-.environment-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.environment-icon {
-  font-size: 1.2rem;
-}
-
-.environment-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
+/* Environment Details (inside metric card) */
 .environment-details {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 8px;
 }
 
 .environment-row {
@@ -860,6 +786,15 @@ watch(sessionStartTime, (newVal) => {
   font-size: 0.85rem;
   color: var(--text-secondary);
   font-style: italic;
+}
+
+/* Project Permissions Card */
+.project-permissions-metric {
+  margin-bottom: 16px;
+}
+
+.project-permissions-metric .metric-content {
+  width: 100%;
 }
 
 /* Responsive */
