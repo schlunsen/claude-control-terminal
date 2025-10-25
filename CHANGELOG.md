@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - Permission Management & Database Consolidation - 2025-10-25
+
+### Added
+- Advanced permission management system with "Allow Similar" functionality for streamlined agent permissions
+- Support for allowing similar commands/patterns without requiring approval each time
+- Permission profiles for common command patterns (git operations, npm commands, etc.)
+
+### Changed
+- Consolidated database architecture to single unified schema for improved performance and maintainability
+- Reorganized metrics sidebar with collapsible sections for better space utilization
+- Enhanced session state management with provider/model settings persistence
+- Improved UI layout with cleaner session list presentation
+
+### Fixed
+- Session options now persist to database when adding/removing always-allow rules
+- Provider and model settings correctly preserved when resetting session form
+- Session list items no longer show redundant message count for cleaner UI
+
+### Documentation
+- Comprehensive database architecture documentation added to CLAUDE.md
+- Enhanced git workflow documentation with branch protection policy
+
 ## [0.6.0] - Agent Session Control & UI Polish - 2025-10-24
 
 ### Added
@@ -888,6 +910,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version Comparison Links
 
+[0.7.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.15...v0.6.0
 [0.5.15]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.14...v0.5.15
 [0.5.14]: https://github.com/schlunsen/claude-control-terminal/compare/v0.5.13...v0.5.14
