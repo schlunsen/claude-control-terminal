@@ -633,8 +633,10 @@ defineExpose({
 .messages-container {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 24px;
   min-height: 0;
+  max-width: 100%;
 }
 
 .thinking-indicator,
