@@ -657,18 +657,19 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
           // Filter out system messages
           if (dbMsg.role === 'system') return false
 
-          // Filter out /context user messages
+          // Filter out /context and continue user messages
           if (dbMsg.role === 'user' && dbMsg.content) {
             // Handle both string and array content formats
             if (typeof dbMsg.content === 'string') {
-              return dbMsg.content.trim() !== '/context'
+              const trimmed = dbMsg.content.trim()
+              return trimmed !== '/context' && trimmed !== 'continue'
             }
             if (Array.isArray(dbMsg.content)) {
-              // Check if content is a single text block with /context
-              const hasOnlyContextCommand = dbMsg.content.length === 1 &&
+              // Check if content is a single text block with /context or continue
+              const hasOnlyHiddenCommand = dbMsg.content.length === 1 &&
                 dbMsg.content[0].type === 'text' &&
-                dbMsg.content[0].text?.trim() === '/context'
-              return !hasOnlyContextCommand
+                (dbMsg.content[0].text?.trim() === '/context' || dbMsg.content[0].text?.trim() === 'continue')
+              return !hasOnlyHiddenCommand
             }
           }
 

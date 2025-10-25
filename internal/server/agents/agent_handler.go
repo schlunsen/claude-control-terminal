@@ -1311,6 +1311,17 @@ func (h *AgentHandler) handleFiberAddAlwaysAllowRule(c *fiberws.Conn, rawMsg map
 	if err := h.SessionManager.ReloadSessionSettings(msg.SessionID); err != nil {
 		logging.Error("Failed to reload session settings: %v", err)
 		// Don't fail the request - the rule is still saved and will work after restart
+	} else {
+		// After reloading (which interrupts the session), automatically send "continue"
+		// to resume execution with the new settings applied
+		logging.Info("▶️  Auto-resuming session with 'continue' command")
+		go func() {
+			// Small delay to ensure the response is sent first
+			time.Sleep(100 * time.Millisecond)
+			if err := h.SessionManager.SendPrompt(msg.SessionID, "continue"); err != nil {
+				logging.Error("Failed to auto-continue session: %v", err)
+			}
+		}()
 	}
 
 	// Send confirmation with the full rule (including generated ID)
