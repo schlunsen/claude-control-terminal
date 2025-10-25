@@ -180,7 +180,7 @@ onUnmounted(() => {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.95);
-  z-index: 10000;
+  z-index: 10100;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -213,7 +213,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  z-index: 10001;
+  z-index: 10101;
 }
 
 .close-btn:hover {
