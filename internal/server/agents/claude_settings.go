@@ -61,6 +61,9 @@ func (csm *ClaudeSettingsManager) LoadSettings() (*ClaudeSettings, error) {
 		return nil, fmt.Errorf("failed to parse settings file: %w", err)
 	}
 
+	// Deduplicate permissions on load to clean up any existing duplicates
+	settings.Permissions.Allow = deduplicatePermissions(settings.Permissions.Allow)
+
 	return &settings, nil
 }
 
@@ -76,6 +79,9 @@ func (csm *ClaudeSettingsManager) SaveSettings(settings *ClaudeSettings) error {
 	if err := os.MkdirAll(claudeDir, 0755); err != nil {
 		return fmt.Errorf("failed to create .claude directory: %w", err)
 	}
+
+	// Deduplicate permissions before saving
+	settings.Permissions.Allow = deduplicatePermissions(settings.Permissions.Allow)
 
 	// Marshal with pretty printing
 	data, err := json.MarshalIndent(settings, "", "  ")
@@ -266,4 +272,24 @@ func ParsePermissionString(permStr string) (toolName string, pattern *RulePatter
 	}
 
 	return toolName, pattern, nil
+}
+
+// deduplicatePermissions removes duplicate permission strings from a slice
+// while preserving the order of first occurrence
+func deduplicatePermissions(permissions []string) []string {
+	if len(permissions) == 0 {
+		return permissions
+	}
+
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(permissions))
+
+	for _, perm := range permissions {
+		if !seen[perm] {
+			seen[perm] = true
+			result = append(result, perm)
+		}
+	}
+
+	return result
 }

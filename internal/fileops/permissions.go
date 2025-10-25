@@ -181,6 +181,13 @@ func loadSettingsFromPath(settingsPath string) (*ClaudeSettings, error) {
 		return nil, fmt.Errorf("failed to parse settings file: %w", err)
 	}
 
+	// Deduplicate permissions on load to clean up any existing duplicates
+	if settings.Permissions != nil {
+		settings.Permissions.Allow = deduplicateStringSlice(settings.Permissions.Allow)
+		settings.Permissions.Ask = deduplicateStringSlice(settings.Permissions.Ask)
+		settings.Permissions.Deny = deduplicateStringSlice(settings.Permissions.Deny)
+	}
+
 	return &settings, nil
 }
 
@@ -318,6 +325,11 @@ func saveSettingsToPath(settings *ClaudeSettings, settingsPath string) error {
 
 	// Clean up empty permissions object and default values
 	if settings.Permissions != nil {
+		// Deduplicate all permission lists before saving
+		settings.Permissions.Allow = deduplicateStringSlice(settings.Permissions.Allow)
+		settings.Permissions.Ask = deduplicateStringSlice(settings.Permissions.Ask)
+		settings.Permissions.Deny = deduplicateStringSlice(settings.Permissions.Deny)
+
 		// Remove defaultMode if it's the default value
 		if settings.Permissions.DefaultMode == PermissionModeDefault {
 			settings.Permissions.DefaultMode = ""
@@ -484,4 +496,24 @@ func GetPermissionSummary(settings *ClaudeSettings) string {
 	}
 
 	return fmt.Sprintf("%d permission rule(s) active", allowCount)
+}
+
+// deduplicateStringSlice removes duplicate strings from a slice
+// while preserving the order of first occurrence
+func deduplicateStringSlice(slice []string) []string {
+	if len(slice) == 0 {
+		return slice
+	}
+
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(slice))
+
+	for _, item := range slice {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+
+	return result
 }
