@@ -203,6 +203,29 @@ const formattedContent = computed(() => {
   opacity: 0.7;
 }
 
+.message-content :deep(.message-link) {
+  color: var(--accent-purple);
+  text-decoration: underline;
+  transition: all 0.2s;
+  word-break: break-all;
+}
+
+.message-content :deep(.message-link:hover) {
+  color: var(--accent-purple-hover);
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.message.user .message-content :deep(.message-link) {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: underline;
+}
+
+.message.user .message-content :deep(.message-link:hover) {
+  color: white;
+  text-decoration: none;
+}
+
 .message.isError .message-content {
   background: rgba(220, 53, 69, 0.1);
   border-color: rgba(220, 53, 69, 0.3);
