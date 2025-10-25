@@ -1417,10 +1417,14 @@ func (m Model) viewCompleteScreen() string {
 		b.WriteString(StatusErrorStyle.Render(titleText) + "\n\n")
 		b.WriteString(m.installError.Error() + "\n")
 	} else if len(m.installFailed) > 0 {
-		titleText := fmt.Sprintf("Partial %s Complete", strings.Title(operationNoun))
+		// Capitalize first letter of operation noun
+		capitalizedNoun := strings.ToUpper(operationNoun[:1]) + operationNoun[1:]
+		titleText := fmt.Sprintf("Partial %s Complete", capitalizedNoun)
 		b.WriteString(StatusSuccessStyle.Render(titleText) + "\n\n")
 	} else {
-		titleText := fmt.Sprintf("%s Complete!", strings.Title(operationNoun))
+		// Capitalize first letter of operation noun
+		capitalizedNoun := strings.ToUpper(operationNoun[:1]) + operationNoun[1:]
+		titleText := fmt.Sprintf("%s Complete!", capitalizedNoun)
 		b.WriteString(StatusSuccessStyle.Render(titleText) + "\n\n")
 	}
 

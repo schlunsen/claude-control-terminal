@@ -732,7 +732,7 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 				if response.UpdatedInput != nil {
 					result.UpdatedInput = response.UpdatedInput
 				}
-				if response.UpdatedPermissions != nil && len(response.UpdatedPermissions) > 0 {
+				if len(response.UpdatedPermissions) > 0 {
 					result.UpdatedPermissions = response.UpdatedPermissions
 					logging.Info("✨ Including %d permission update(s) in approval response", len(response.UpdatedPermissions))
 				}
@@ -1181,7 +1181,7 @@ func (sm *SessionManager) createPermissionCallback(session *AgentSession) types.
 				if response.UpdatedInput != nil {
 					result.UpdatedInput = response.UpdatedInput
 				}
-				if response.UpdatedPermissions != nil && len(response.UpdatedPermissions) > 0 {
+				if len(response.UpdatedPermissions) > 0 {
 					result.UpdatedPermissions = response.UpdatedPermissions
 					logging.Info("✨ Including %d permission update(s) in approval response", len(response.UpdatedPermissions))
 				}

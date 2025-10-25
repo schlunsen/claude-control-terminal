@@ -68,7 +68,7 @@ func SaveMCPConfig(configPath string, config *ClaudeConfig) error {
 	}
 
 	// If the config is empty (no MCP servers), handle specially
-	if config.MCPServers == nil || len(config.MCPServers) == 0 {
+	if len(config.MCPServers) == 0 {
 		// For .mcp.json files (project scope), delete the file if it exists
 		if filepath.Base(configPath) == ".mcp.json" {
 			if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {

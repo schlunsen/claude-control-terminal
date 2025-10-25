@@ -83,7 +83,7 @@ func SaveMCPMetadata(scope MCPScope, projectDir string, metadata *MCPMetadata) e
 	}
 
 	// If the metadata is empty, delete the file
-	if metadata.Installations == nil || len(metadata.Installations) == 0 {
+	if len(metadata.Installations) == 0 {
 		if err := os.Remove(metadataPath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove empty metadata file: %w", err)
 		}

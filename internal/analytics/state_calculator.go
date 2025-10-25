@@ -213,7 +213,7 @@ func (sc *StateCalculator) detectRealClaudeActivity(messages []Message, lastModi
 	now := time.Now()
 	fileMinutesAgo := now.Sub(lastModified).Minutes()
 
-	if messages == nil || len(messages) == 0 {
+	if len(messages) == 0 {
 		return ActivityDetection{IsActive: false, Status: "No messages"}
 	}
 
@@ -245,7 +245,7 @@ func (sc *StateCalculator) detectRealClaudeActivity(messages []Message, lastModi
 
 	hasRecentTools := false
 	for _, msg := range recentMessages {
-		if msg.ToolResults != nil && len(msg.ToolResults) > 0 {
+		if len(msg.ToolResults) > 0 {
 			hasRecentTools = true
 			break
 		}
