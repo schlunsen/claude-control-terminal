@@ -2,6 +2,8 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.23%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/schlunsen/claude-control-terminal/actions/workflows/ci.yml/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions/workflows/ci.yml)
+[![Security Scan](https://github.com/schlunsen/claude-control-terminal/actions/workflows/ci.yml/badge.svg?job=security)](https://github.com/schlunsen/claude-control-terminal/actions/workflows/ci.yml)
 [![Build Status](https://github.com/schlunsen/claude-control-terminal/workflows/Build%20and%20Release/badge.svg)](https://github.com/schlunsen/claude-control-terminal/actions)
 [![Coverage](https://img.shields.io/badge/coverage-19.3%25%20filtered-red)](https://github.com/schlunsen/claude-control-terminal)
 [![Release](https://img.shields.io/github/v/release/schlunsen/claude-control-terminal)](https://github.com/schlunsen/claude-control-terminal/releases)
