@@ -169,10 +169,8 @@ const displayToolUses = computed(() => {
           const filename = tool.input.file_path.split('/').pop() || tool.input.file_path
           detail = filename
         } else if (tool.name === 'Bash' && tool.input.command) {
-          // Show first 30 chars of command
-          detail = tool.input.command.length > 30
-            ? tool.input.command.substring(0, 30) + '...'
-            : tool.input.command
+          // Show full command (will wrap if needed)
+          detail = tool.input.command
         } else if (tool.name === 'Grep' && tool.input.pattern) {
           detail = tool.input.pattern
         }
@@ -353,6 +351,8 @@ const handleToolClick = (tool: any) => {
   font-size: 0.85rem;
   color: var(--text-secondary);
   transition: all 0.2s;
+  max-width: 100%;
+  word-break: break-word;
 }
 
 .tool-use.clickable {
