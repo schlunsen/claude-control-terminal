@@ -68,6 +68,12 @@ claude-control-terminal/
 │   │   ├── agent.go           # Agent installation
 │   │   ├── command.go         # Command installation
 │   │   └── mcp.go             # MCP installation
+│   ├── database/               # Database layer (SQLite)
+│   │   ├── database.go        # Database initialization & connection management
+│   │   ├── schema.sql         # Complete unified database schema (embedded)
+│   │   ├── models.go          # Data model structs
+│   │   ├── repository.go      # Data access layer (CRUD operations)
+│   │   └── git_utils.go       # Git metadata extraction helpers
 │   ├── docker/                 # Docker support (NEW in v0.2.0)
 │   │   ├── docker.go          # Docker operations
 │   │   ├── dockerfile_generator.go  # Dockerfile generation
@@ -85,6 +91,317 @@ claude-control-terminal/
 ├── go.mod                      # Go module definition
 ├── go.sum                      # Dependency checksums
 └── README.md                   # User documentation
+```
+
+## Database Architecture
+
+### Overview
+
+CCT uses **SQLite** as its embedded database for persistent storage of command history, user messages, provider configurations, agent sessions, and more. The database provides a unified data layer shared between the TUI, analytics server, and agent handler.
+
+**Database Location**: `~/.claude/cct/cct.db`
+
+**Database Engine**: SQLite 3 with WAL mode enabled for concurrent access
+
+### Key Features
+
+- ✅ **Single Database File**: All data consolidated in one location
+- ✅ **WAL Mode**: Write-Ahead Logging for concurrent read/write access
+- ✅ **Automatic Migrations**: Schema evolves automatically on startup
+- ✅ **Singleton Pattern**: Single database connection shared across components
+- ✅ **Repository Pattern**: Clean data access layer with type-safe operations
+- ✅ **Embedded Schema**: Schema definition compiled into binary via `//go:embed`
+- ✅ **Secure Permissions**: Database file has 0600 permissions (user read/write only)
+
+### Database Tables
+
+The database schema includes 11 core tables organized by functionality:
+
+#### Command History Tables
+- **`shell_commands`**: Records of all Bash tool executions
+  - Tracks: command, exit code, stdout/stderr, duration, working directory, git branch
+  - Used for: Command history, analytics, debugging
+
+- **`claude_commands`**: Records of all Claude Code tool invocations
+  - Tracks: tool name, parameters (JSON), results (JSON), success/error status
+  - Used for: Tool usage analytics, audit trail
+
+- **`command_stats`**: Aggregated command statistics
+  - Tracks: execution count, success rate, average duration
+  - Used for: Performance monitoring, most-used commands
+
+#### Conversation & Session Tables
+- **`conversations`**: Metadata for Claude Code conversation sessions
+  - Tracks: project path, start/end times, total commands, token usage, status
+  - Used for: Session management, analytics dashboard
+
+- **`user_messages`**: User input messages intercepted by hooks
+  - Tracks: message content, length, timestamps, context metadata
+  - Used for: Prompt analytics, conversation history
+
+- **`notifications`**: Permission requests and idle alerts
+  - Tracks: notification type, tool name, command details, timestamps
+  - Used for: Permission analytics, user interaction patterns
+
+#### Agent Session Tables (Persistent Agent Conversations)
+- **`agent_sessions`**: Agent conversation sessions from unified server
+  - Tracks: session ID, status, cost, duration, message count, model info
+  - Used for: Agent session persistence, cost tracking, session restoration
+
+- **`agent_messages`**: Individual messages within agent sessions
+  - Tracks: role (user/assistant/system), content, thinking, tool uses, tokens
+  - Used for: Conversation history, message replay, debugging
+
+#### Configuration Tables
+- **`providers`**: AI provider configurations (Anthropic, OpenRouter, etc.)
+  - Tracks: provider ID, API key, custom URL, model name, is_current flag
+  - Used for: Multi-provider support, API key persistence
+
+- **`user_settings`**: User preferences and application settings
+  - Tracks: key/value pairs with type metadata
+  - Used for: Settings persistence (e.g., diff display location)
+
+### Database Schema
+
+The complete schema is defined in `internal/database/schema.sql` and embedded into the binary:
+
+```go
+//go:embed schema.sql
+var schemaSQL string
+```
+
+Key schema features:
+- **Foreign Keys**: Enabled with `PRAGMA foreign_keys = ON`
+- **Indexes**: 23+ indexes for optimal query performance
+- **Constraints**: CHECK constraints for data validation
+- **Timestamps**: Automatic `created_at` and `updated_at` tracking
+- **JSON Support**: Stores complex data as JSON strings
+
+### Database Initialization
+
+Database initialization happens automatically when any component starts:
+
+```go
+// internal/tui/model.go (line 184)
+dataDir := filepath.Join(homeDir, ".claude", "cct")
+db, err := database.Initialize(dataDir)
+
+// internal/server/server.go (line 238)
+dataDir := filepath.Join(s.claudeDir, "cct")
+db, err := database.Initialize(dataDir)
+```
+
+The `Initialize()` function:
+1. Creates `~/.claude/cct/` directory if it doesn't exist
+2. Opens/creates `cct.db` with SQLite driver
+3. Sets secure file permissions (0600)
+4. Enables WAL mode and performance pragmas
+5. Executes embedded schema (idempotent with `IF NOT EXISTS`)
+6. Runs migration system to upgrade existing databases
+7. Returns singleton Database instance
+
+### Migration System
+
+CCT uses an **inline migration system** for schema evolution:
+
+**Current Approach** (`internal/database/database.go:230-413`):
+- Migrations run automatically on startup via `runMigrations()`
+- Each migration checks if changes are needed before applying
+- Uses `pragma_table_info()` to detect missing columns
+- Migrations are idempotent (safe to run multiple times)
+
+**Migration Examples**:
+```go
+// Migration 1: Add model_name column to providers table
+var columnExists bool
+query := `SELECT COUNT(*) > 0 FROM pragma_table_info('providers') WHERE name='model_name'`
+db.QueryRow(query).Scan(&columnExists)
+if !columnExists {
+    db.Exec("ALTER TABLE providers ADD COLUMN model_name TEXT")
+}
+
+// Migration 7: Add model tracking to all tables
+for _, table := range []string{"shell_commands", "claude_commands", "conversations", ...} {
+    db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN model_provider TEXT", table))
+    db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN model_name TEXT", table))
+}
+```
+
+**Current Migrations** (7 total):
+1. Add `model_name` to `providers` table
+2. Add `session_name` to `user_messages` table
+3. Add `session_name` to `shell_commands` table
+4. Add `session_name` to `claude_commands` table
+5. Create `notifications` table and indexes
+6. Add `command_details` column to `notifications` table
+7. Add `model_provider` and `model_name` to all tracking tables
+
+### Repository Pattern
+
+Data access uses the Repository pattern for clean separation of concerns:
+
+```go
+// Get repository instance
+repo := database.NewRepository(db)
+
+// Record a shell command
+cmd := &database.ShellCommand{
+    ConversationID:   "conv-123",
+    Command:          "git status",
+    WorkingDirectory: "/path/to/project",
+    GitBranch:        "main",
+    ExitCode:         &exitCode,
+    ExecutedAt:       time.Now(),
+}
+repo.RecordShellCommand(cmd)
+
+// Query commands with filters
+query := &database.CommandHistoryQuery{
+    ConversationID: "conv-123",
+    Limit:          50,
+    StartDate:      &startTime,
+}
+commands, err := repo.GetShellCommands(query)
+
+// Provider management
+provider := &database.ProviderConfig{
+    ProviderID: "anthropic",
+    APIKey:     "sk-ant-...",
+    ModelName:  "claude-sonnet-4-20250514",
+}
+repo.SaveProvider(provider) // Auto-sets as current, unsets others
+```
+
+### Database Performance
+
+**Optimizations**:
+- **WAL Mode**: Allows concurrent readers with single writer
+- **Cache Size**: 64MB cache (`PRAGMA cache_size = -64000`)
+- **Synchronous Mode**: NORMAL for balance of safety and speed
+- **Memory Temp Store**: Faster temporary table operations
+- **Strategic Indexes**: 23+ indexes covering common query patterns
+
+**Connection Pooling**:
+- Single connection via singleton pattern
+- Thread-safe with `sync.RWMutex` locking
+- Shared across TUI, server, and agent handler
+
+### Database Operations
+
+#### Health Check
+```go
+db := database.GetInstance()
+err := db.HealthCheck() // Verifies connectivity
+```
+
+#### Statistics
+```go
+stats, err := db.Stats()
+// Returns: {
+//   "shell_commands_count": 1234,
+//   "claude_commands_count": 5678,
+//   "conversations_count": 42,
+//   "db_size_bytes": 2097152
+// }
+```
+
+#### Vacuum (Space Reclamation)
+```go
+db.Vacuum() // Rebuilds database, reclaims unused space
+```
+
+### Database File Structure
+
+```text
+~/.claude/cct/
+├── cct.db           # Main database file
+├── cct.db-wal       # Write-Ahead Log (WAL mode)
+└── cct.db-shm       # Shared memory file (WAL mode)
+```
+
+**File Permissions**:
+- All files: 0600 (user read/write only)
+- Set automatically on creation
+- Protects sensitive data (API keys, command history)
+
+### Hook Integration
+
+The hook system automatically logs data to the database:
+
+**user-prompt-logger.sh**: Records user messages
+```bash
+# Logs to user_messages table
+curl -X POST https://localhost:3333/api/user-messages \
+  -H "Authorization: Bearer $API_KEY" \
+  -d '{"message":"...", "conversation_id":"..."}'
+```
+
+**tool-logger.sh**: Records tool invocations
+```bash
+# Logs to claude_commands table
+curl -X POST https://localhost:3333/api/claude-commands \
+  -d '{"tool_name":"Read", "parameters":"{...}"}'
+```
+
+**notification-logger.sh**: Records permission requests
+```bash
+# Logs to notifications table
+curl -X POST https://localhost:3333/api/notifications \
+  -d '{"type":"permission_request", "tool_name":"Bash"}'
+```
+
+### Database Testing
+
+```go
+// internal/database/database_test.go
+
+func TestDatabaseInitialization(t *testing.T) {
+    tempDir := t.TempDir()
+    db, err := database.Initialize(tempDir)
+    assert.NoError(t, err)
+    assert.NotNil(t, db)
+
+    // Verify schema
+    stats, _ := db.Stats()
+    assert.Greater(t, stats["shell_commands_count"], 0)
+}
+```
+
+### Troubleshooting Database Issues
+
+**Database locked errors:**
+```bash
+# Check for stale lock
+lsof ~/.claude/cct/cct.db
+
+# Force checkpoint WAL
+sqlite3 ~/.claude/cct/cct.db "PRAGMA wal_checkpoint(TRUNCATE);"
+```
+
+**Inspect database manually:**
+```bash
+sqlite3 ~/.claude/cct/cct.db
+
+# List tables
+.tables
+
+# Check schema
+.schema shell_commands
+
+# Query data
+SELECT * FROM conversations LIMIT 10;
+```
+
+**Reset database (nuclear option):**
+```bash
+# Backup first!
+cp ~/.claude/cct/cct.db ~/.claude/cct/cct.db.backup
+
+# Remove database
+rm ~/.claude/cct/cct.db*
+
+# Restart CCT - will recreate fresh database
+cct
 ```
 
 ## Development Commands
