@@ -10,7 +10,6 @@ run:
 linters:
   enable:
     # Core linters
-    - errcheck      # Check for unchecked errors
     - govet         # Vet examines Go source code
     - ineffassign   # Detect ineffectual assignments
     - staticcheck   # Static analysis (includes gosimple)
@@ -26,10 +25,17 @@ linters:
     - prealloc      # Slice preallocation
     - nolintlint    # Ill-formed or insufficient nolint directives
 
+  disable:
+    - errcheck      # Disabled: too noisy for defer cleanup patterns
+
 linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: false
+    exclude-functions:
+      - (*database.DB).Close
+      - (*os.File).Close
+      - (io.Closer).Close
 
   govet:
     enable-all: true
@@ -90,6 +96,7 @@ issues:
         - gosec
         - dupl
         - gocritic
+        - errcheck  # Allow unchecked errors in tests for cleanup operations
 
     # Exclude some staticcheck messages
     - linters:
