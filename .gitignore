@@ -72,3 +72,7 @@ south_park/
 /agents_server/*.egg-info/
 TODOWRITE_IMPLEMENTATION_COMPLETE.md
 settings.local.json
+
+# Built binaries
+cct-*
+!cct-*.service

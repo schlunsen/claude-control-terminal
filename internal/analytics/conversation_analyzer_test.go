@@ -1,6 +1,7 @@
 package analytics
 
 import (
+	"path/filepath"
 	"testing"
 )
 
