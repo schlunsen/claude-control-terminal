@@ -525,11 +525,10 @@ const handleMessageClick = ({ message }: { message: any }) => {
 
 // Handle tool click (for backward compatibility - opens message modal)
 const handleToolClick = ({ tool }: { tool: any }) => {
-  // For now, we'll keep the old behavior for Edit tools
-  // But you could also open the message modal instead
+  // For Edit tools, find the message that contains this tool and open modal
   if (tool && tool.name === 'Edit') {
-    // Find the message that contains this tool
-    const messageWithTool = messages.value.get(activeSessionId.value)?.find(msg =>
+    // Find the message that contains this tool in the active messages
+    const messageWithTool = activeMessages.value.find(msg =>
       msg.toolUses?.some((t: any) => t === tool)
     )
     if (messageWithTool) {
