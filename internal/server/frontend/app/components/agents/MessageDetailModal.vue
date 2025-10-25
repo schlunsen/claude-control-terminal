@@ -198,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import EditDiffMessage from './EditDiffMessage.vue'
 
 interface ContentBlock {
@@ -250,6 +250,23 @@ const emit = defineEmits<{
 const expandedThinking = ref(false)
 const expandedTools = ref<Record<number, boolean>>({})
 const copied = ref(false)
+
+// Auto-expand Edit tools when modal opens
+watch(() => props.show, (isShown) => {
+  if (isShown && props.message) {
+    // Expand all Edit tools by default
+    if (props.message.toolUses && Array.isArray(props.message.toolUses)) {
+      props.message.toolUses.forEach((tool, idx) => {
+        if (tool.name === 'Edit') {
+          expandedTools.value[idx] = true
+        }
+      })
+    }
+  } else {
+    // Reset expanded state when modal closes
+    expandedTools.value = {}
+  }
+})
 
 // Computed properties
 const roleName = computed(() => {
