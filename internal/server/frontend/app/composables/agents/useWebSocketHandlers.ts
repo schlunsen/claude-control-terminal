@@ -322,12 +322,19 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
         // Only create a message if we have tools to display
         if (formattedTools.length > 0) {
+          // Collect the original tool data for modal display
+          const toolsData = data.content.tool_results.map((toolResult: any) => {
+            const tool = sessionTools.find(t => t.id === toolResult.tool_use_id)
+            return tool ? { name: tool.name, input: tool.input } : null
+          }).filter(Boolean)
+
           const toolMessage = {
             id: `msg-${data.session_id}-${Date.now()}`,
             role: 'assistant',
             content: formattedTools.join(', '),
             timestamp: new Date(),
-            isToolResult: true
+            isToolResult: true,
+            toolUses: toolsData  // Attach full tool data for modal display
           }
 
           messages.value[data.session_id].push(toolMessage)
@@ -694,21 +701,79 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
           return true
         })
-        .map((dbMsg: any) => {
+        .map((dbMsg: any, index: number, array: any[]) => {
           // Extract all tool uses (new format)
           const toolUses = dbMsg.tool_uses ? extractToolUses(dbMsg.tool_uses) : []
+
+          // Check if this is likely a tool result message (user message with empty content between assistant messages with tools)
+          // This handles historical messages that were saved with empty content before the bug fix
+          const isEmpty = !dbMsg.content ||
+            (typeof dbMsg.content === 'string' && dbMsg.content.trim().length === 0)
+          const isToolResult = dbMsg.role === 'user' && isEmpty
+
+          // For empty user messages (tool results), try to find the previous assistant message's tool info
+          let inferredToolInfo = null
+          if (isToolResult && index > 0) {
+            // Look backwards for the most recent assistant message with tool uses
+            for (let i = index - 1; i >= 0; i--) {
+              const prevMsg = array[i]
+              if (prevMsg.role === 'assistant' && prevMsg.tool_uses) {
+                try {
+                  const prevTools = extractToolUses(prevMsg.tool_uses)
+                  if (prevTools.length > 0) {
+                    // Use the first tool (or could show all tools)
+                    inferredToolInfo = prevTools[0]
+                    break
+                  }
+                } catch (e) {
+                  // Ignore parsing errors
+                }
+              }
+            }
+          }
+
+          // Parse content if it's a JSON string (for messages with ContentBlocks like images)
+          let parsedContent = dbMsg.content
+          if (typeof dbMsg.content === 'string' && dbMsg.content.trim().startsWith('[')) {
+            try {
+              const parsed = JSON.parse(dbMsg.content)
+              if (Array.isArray(parsed)) {
+                parsedContent = parsed
+              }
+            } catch (e) {
+              // Not valid JSON, keep as string
+            }
+          }
 
           return {
             id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
             role: dbMsg.role,
-            content: dbMsg.content,
+            content: parsedContent,
             timestamp: new Date(dbMsg.timestamp),
             sequence: dbMsg.sequence,
             isHistorical: true,
+            isToolResult: isToolResult,  // Mark empty user messages as tool results
+            inferredToolInfo: inferredToolInfo,  // Store inferred tool info for display
             toolUse: dbMsg.tool_uses ? extractToolName(dbMsg.tool_uses) : undefined,  // Legacy fallback
             toolUses: toolUses.length > 0 ? toolUses : undefined,  // New format
             thinkingContent: dbMsg.thinking_content || undefined
           }
+        })
+        .filter((msg: any) => {
+          // Filter out empty messages (including empty tool results from historical data)
+          // Check if message has any displayable content
+          const hasTextContent = msg.content && (
+            (typeof msg.content === 'string' && msg.content.trim().length > 0) ||
+            (Array.isArray(msg.content) && msg.content.some((block: any) =>
+              (block.type === 'text' && block.text?.trim()) || block.type === 'image'
+            ))
+          )
+          const hasToolUses = msg.toolUses && msg.toolUses.length > 0
+          const hasThinking = msg.thinkingContent && msg.thinkingContent.trim().length > 0
+
+          // Keep message if it has ANY displayable content
+          // This filters out empty tool results and other malformed messages
+          return hasTextContent || hasToolUses || hasThinking
         })
 
       // Sort messages by sequence number first, then by timestamp for stable ordering

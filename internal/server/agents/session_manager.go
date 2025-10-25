@@ -1535,9 +1535,34 @@ func (sm *SessionManager) persistSDKMessage(sessionID uuid.UUID, sequence int, m
 		// User message (shouldn't normally come through here, but handle it)
 		if userMsg, ok := msg.(*types.UserMessage); ok {
 			content := ""
+
+			// Handle different content types:
+			// 1. String content (simple text prompt)
+			// 2. ContentBlocks (structured content with images, tool results, etc.)
 			if str, ok := userMsg.Content.(string); ok {
 				content = str
+			} else if contentBlocks, ok := userMsg.Content.([]types.ContentBlock); ok {
+				// User message contains ContentBlocks (e.g., tool results, images)
+				// Serialize to JSON for storage
+				contentJSON, err := json.Marshal(contentBlocks)
+				if err != nil {
+					logging.Error("Failed to marshal user content blocks: %v", err)
+					content = "" // Fallback to empty
+				} else {
+					content = string(contentJSON)
+				}
+			} else {
+				// Unknown content type - log warning and try to marshal as JSON
+				logging.Warning("Unknown user message content type: %T - attempting JSON marshal", userMsg.Content)
+				contentJSON, err := json.Marshal(userMsg.Content)
+				if err != nil {
+					logging.Error("Failed to marshal unknown user content: %v", err)
+					content = ""
+				} else {
+					content = string(contentJSON)
+				}
 			}
+
 			if err := sm.saveMessageToDB(sessionID, sequence, "user", content, "", nil); err != nil {
 				logging.Error("Failed to save user message: %v", err)
 			}
