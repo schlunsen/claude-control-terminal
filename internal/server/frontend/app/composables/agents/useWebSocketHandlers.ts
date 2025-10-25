@@ -732,10 +732,23 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
             }
           }
 
+          // Parse content if it's a JSON string (for messages with ContentBlocks like images)
+          let parsedContent = dbMsg.content
+          if (typeof dbMsg.content === 'string' && dbMsg.content.trim().startsWith('[')) {
+            try {
+              const parsed = JSON.parse(dbMsg.content)
+              if (Array.isArray(parsed)) {
+                parsedContent = parsed
+              }
+            } catch (e) {
+              // Not valid JSON, keep as string
+            }
+          }
+
           return {
             id: `msg-${dbMsg.session_id}-${dbMsg.sequence}`,
             role: dbMsg.role,
-            content: dbMsg.content,
+            content: parsedContent,
             timestamp: new Date(dbMsg.timestamp),
             sequence: dbMsg.sequence,
             isHistorical: true,
