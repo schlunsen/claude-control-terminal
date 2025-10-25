@@ -82,12 +82,19 @@ export const formatMessage = (content: any): string => {
   }
 
   // Convert markdown to HTML (basic)
-  return cleanContent
+  let formatted = cleanContent
     .replace(/```(.*?)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>')
+
+  // Convert URLs to clickable links (must be done before newline conversion)
+  // Match URLs but exclude those already in HTML tags (code blocks, etc.)
+  const urlRegex = /(?<!<[^>]*)(https?:\/\/[^\s<]+[^\s<.,;:!?)])/gi
+  formatted = formatted.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" class="message-link">$1</a>')
+
+  // Convert newlines to <br> last
+  return formatted.replace(/\n/g, '<br>')
 }
 
 /**

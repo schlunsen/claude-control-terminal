@@ -162,7 +162,7 @@ watch(() => props.tool.status, (newStatus) => {
 
 .tool-input {
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--text-primary);
   font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
   overflow: hidden;
   text-overflow: ellipsis;
