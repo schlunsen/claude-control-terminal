@@ -322,12 +322,19 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
 
         // Only create a message if we have tools to display
         if (formattedTools.length > 0) {
+          // Collect the original tool data for modal display
+          const toolsData = data.content.tool_results.map((toolResult: any) => {
+            const tool = sessionTools.find(t => t.id === toolResult.tool_use_id)
+            return tool ? { name: tool.name, input: tool.input } : null
+          }).filter(Boolean)
+
           const toolMessage = {
             id: `msg-${data.session_id}-${Date.now()}`,
             role: 'assistant',
             content: formattedTools.join(', '),
             timestamp: new Date(),
-            isToolResult: true
+            isToolResult: true,
+            toolUses: toolsData  // Attach full tool data for modal display
           }
 
           messages.value[data.session_id].push(toolMessage)
