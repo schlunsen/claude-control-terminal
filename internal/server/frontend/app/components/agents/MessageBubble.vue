@@ -305,6 +305,9 @@ const handleToolClick = (tool: any, event: Event) => {
   font-size: 0.95rem;
   line-height: 1.6;
   color: var(--text-primary);
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  max-width: 100%;
 }
 
 .message.user .message-content {
@@ -336,6 +339,9 @@ const handleToolClick = (tool: any, event: Event) => {
   border-radius: 8px;
   overflow-x: auto;
   margin: 8px 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .message-content :deep(.system-message) {

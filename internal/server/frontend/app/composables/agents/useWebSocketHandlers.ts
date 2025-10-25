@@ -588,6 +588,23 @@ export function useWebSocketHandlers(params: WebSocketHandlerParams) {
     agentWs.on('onSessionsList', (data) => {
       // Backend already returns sessions ordered by updated_at DESC (newest first)
       sessions.value = data.sessions
+
+      // Auto-select first session in active filter if no session is currently selected
+      if (!activeSessionId.value && data.sessions && data.sessions.length > 0) {
+        // Find first active session (non-ended)
+        const firstActiveSession = data.sessions.find((s: any) => s.status !== 'ended')
+        if (firstActiveSession) {
+          activeSessionId.value = firstActiveSession.id
+
+          // Load messages for the selected session if not already loaded
+          if (!messagesLoaded.value.has(firstActiveSession.id)) {
+            agentWs.send({
+              type: 'load_messages',
+              session_id: firstActiveSession.id
+            })
+          }
+        }
+      }
     })
 
     agentWs.on('onSessionDeleted', (data) => {
