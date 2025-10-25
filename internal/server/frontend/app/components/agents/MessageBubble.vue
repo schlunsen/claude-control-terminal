@@ -62,7 +62,8 @@
     </div>
 
     <!-- Expandable Edit Diff (when diffDisplayLocation is 'chat') -->
-    <div @click.stop>
+    <!-- Only prevent click bubbling for non-historical messages with inline diff -->
+    <div :class="{ 'no-click-bubble': !message.isHistorical }" @click="handleDiffClick">
       <slot name="edit-diff"></slot>
     </div>
   </div>
@@ -218,6 +219,15 @@ const displayToolUses = computed(() => {
 // Handle message click
 const handleMessageClick = (event: Event) => {
   emit('message-click', { message: props.message })
+}
+
+// Handle diff click
+const handleDiffClick = (event: Event) => {
+  // For historical messages, allow click to bubble up to open modal
+  // For real-time messages with inline diff, stop propagation
+  if (!props.message.isHistorical) {
+    event.stopPropagation()
+  }
 }
 
 // Handle tool click (for backward compatibility)
