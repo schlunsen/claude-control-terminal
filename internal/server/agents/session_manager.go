@@ -461,6 +461,35 @@ func (sm *SessionManager) InterruptSession(sessionID uuid.UUID) error {
 	return nil
 }
 
+// ReloadSessionSettings closes and recreates the client to reload settings from disk
+// This is useful after adding always-allow rules to settings.local.json
+func (sm *SessionManager) ReloadSessionSettings(sessionID uuid.UUID) error {
+	sm.mu.RLock()
+	session, exists := sm.sessions[sessionID]
+	sm.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	logging.Info("🔄 Reloading settings for session %s (closing and recreating client)", sessionID)
+
+	// Close existing client if exists
+	session.mu.Lock()
+	if session.client != nil {
+		session.client.Close(session.ctx)
+		session.client = nil
+		logging.Info("  ✅ Closed existing client")
+	}
+	session.mu.Unlock()
+
+	// The next SendPrompt/SendPromptWithContent will automatically create a new client
+	// with fresh settings loaded from disk (settings.local.json)
+	logging.Info("  ✅ Session settings will reload on next prompt")
+
+	return nil
+}
+
 // EndSession ends a session
 func (sm *SessionManager) EndSession(sessionID uuid.UUID) error {
 	sm.mu.Lock()

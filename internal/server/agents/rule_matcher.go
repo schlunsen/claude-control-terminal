@@ -92,8 +92,8 @@ func parametersMatchPattern(pattern *RulePattern, toolName string, input map[str
 
 	case "Read", "Write", "Edit":
 		if pattern.DirectoryPath != nil {
-			// Wildcard "*" means allow ALL file operations
-			if *pattern.DirectoryPath == "*" {
+			// Wildcard "*" or "/**" means allow ALL file operations
+			if *pattern.DirectoryPath == "*" || *pattern.DirectoryPath == "/**" {
 				return true
 			}
 

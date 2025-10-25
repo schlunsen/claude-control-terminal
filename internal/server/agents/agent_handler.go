@@ -1250,7 +1250,11 @@ func (h *AgentHandler) handleFiberAddAlwaysAllowRule(c *fiberws.Conn, rawMsg map
 	// Add rule to in-memory session for immediate effect
 	h.SessionManager.mu.Lock()
 	session.Options.AlwaysAllowRules = append(session.Options.AlwaysAllowRules, msg.Rule)
+	totalRules := len(session.Options.AlwaysAllowRules)
 	h.SessionManager.mu.Unlock()
+
+	logging.Info("✅ Rule added to session in-memory cache (total rules: %d)", totalRules)
+	logging.Info("   Rule details: tool=%s, mode=%s, pattern=%v", msg.Rule.Tool, msg.Rule.MatchMode, msg.Rule.Pattern)
 
 	// IMPORTANT: If there's a pending permission request (from the UI that triggered this),
 	// we need to approve it now so the SDK can continue
@@ -1299,6 +1303,14 @@ func (h *AgentHandler) handleFiberAddAlwaysAllowRule(c *fiberws.Conn, rawMsg map
 		} else {
 			logging.Warning("⚠️ No pending permission found for ID: %s", msg.PermissionID)
 		}
+	}
+
+	// Reload session settings to pick up the new rule from settings.local.json
+	// This closes and recreates the client, forcing the CLI to reload settings
+	logging.Info("🔄 Reloading session settings to apply new always-allow rule")
+	if err := h.SessionManager.ReloadSessionSettings(msg.SessionID); err != nil {
+		logging.Error("Failed to reload session settings: %v", err)
+		// Don't fail the request - the rule is still saved and will work after restart
 	}
 
 	// Send confirmation with the full rule (including generated ID)
