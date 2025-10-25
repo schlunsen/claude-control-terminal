@@ -84,7 +84,8 @@ func (sc *StateCalculator) DetermineConversationState(messages []Message, lastMo
 			lastMessage := sortedMessages[len(sortedMessages)-1]
 			lastMessageMinutesAgo := now.Sub(lastMessage.Timestamp).Minutes()
 
-			if lastMessage.Role == "user" {
+			switch lastMessage.Role {
+			case "user":
 				// User sent message
 				if lastMessageMinutesAgo < 3 {
 					return "Claude Code working..."
@@ -93,7 +94,7 @@ func (sc *StateCalculator) DetermineConversationState(messages []Message, lastMo
 				} else {
 					return "Active session"
 				}
-			} else if lastMessage.Role == "assistant" {
+			case "assistant":
 				// Claude responded
 				if lastMessageMinutesAgo < 10 {
 					return "Awaiting user input..."
@@ -119,7 +120,8 @@ func (sc *StateCalculator) DetermineConversationState(messages []Message, lastMo
 	lastMessageMinutesAgo := now.Sub(lastMessage.Timestamp).Minutes()
 
 	// More generous logic for active conversations
-	if lastMessage.Role == "user" {
+	switch lastMessage.Role {
+	case "user":
 		if lastMessageMinutesAgo < 3 {
 			return "Claude Code working..."
 		} else if lastMessageMinutesAgo < 10 {
@@ -129,7 +131,7 @@ func (sc *StateCalculator) DetermineConversationState(messages []Message, lastMo
 		} else {
 			return "Recently active"
 		}
-	} else if lastMessage.Role == "assistant" {
+	case "assistant":
 		if lastMessageMinutesAgo < 10 {
 			return "Awaiting user input..."
 		} else if lastMessageMinutesAgo < 30 {

@@ -3,6 +3,7 @@ package providers
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,7 +75,7 @@ func TestGetEnvScriptPath(t *testing.T) {
 		t.Error("expected non-empty script path")
 	}
 
-	if !filepath.IsAbs(path) && !filepath.HasPrefix(path, ".claude") {
+	if !filepath.IsAbs(path) && !strings.HasPrefix(path, ".claude") {
 		t.Errorf("expected absolute path or .claude prefix, got %q", path)
 	}
 }

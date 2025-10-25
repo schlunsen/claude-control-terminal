@@ -1223,7 +1223,7 @@ func (m Model) viewConfirmScreen() string {
 		comp := selected[0]
 		icon := m.getIconForType(comp.Type + "s")
 
-		b.WriteString(fmt.Sprintf("Are you sure you want to install:\n\n"))
+		b.WriteString("Are you sure you want to install:\n\n")
 		b.WriteString(fmt.Sprintf("  %s %s", icon, StatusInfoStyle.Render(comp.Name)))
 		if comp.Category != "root" && comp.Category != "" {
 			b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))
@@ -1317,7 +1317,7 @@ func (m Model) viewConfirmRemoveScreen() string {
 		comp := selected[0]
 		icon := m.getIconForType(comp.Type + "s")
 
-		b.WriteString(fmt.Sprintf("Are you sure you want to remove:\n\n"))
+		b.WriteString("Are you sure you want to remove:\n\n")
 		b.WriteString(fmt.Sprintf("  %s %s", icon, StatusWarningStyle.Render(comp.Name)))
 		if comp.Category != "root" && comp.Category != "" {
 			b.WriteString(CategoryStyle.Render(" ("+comp.Category+")"))

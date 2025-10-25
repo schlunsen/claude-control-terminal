@@ -233,7 +233,8 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 	var query string
 	var args []interface{}
 
-	if statusFilter == "all" || statusFilter == "" {
+	switch statusFilter {
+	case "all", "":
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
 			       message_count, cost_usd, num_turns, duration_ms,
@@ -241,7 +242,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 			FROM agent_sessions
 			ORDER BY updated_at DESC
 		`
-	} else if statusFilter == "active" {
+	case "active":
 		// Active means any session that hasn't ended
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
@@ -251,7 +252,7 @@ func (s *SQLiteSessionStorage) ListSessions(statusFilter string) ([]*SessionMeta
 			WHERE status != 'ended'
 			ORDER BY updated_at DESC
 		`
-	} else {
+	default:
 		query = `
 			SELECT id, status, created_at, updated_at, ended_at,
 			       message_count, cost_usd, num_turns, duration_ms,

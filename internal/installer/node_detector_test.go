@@ -358,8 +358,9 @@ func TestGetRecommendation(t *testing.T) {
 		// Note: We don't check exact text as it may change
 	} else if !info.VersionOK {
 		// Should mention version issue
-	} else if !info.NPMAvailable {
-		// Should mention npm missing
+	} else {
+		// NPM available case - no special handling needed
+		_ = info.NPMAvailable
 	}
 }
 
