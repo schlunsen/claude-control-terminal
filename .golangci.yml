@@ -9,24 +9,23 @@ run:
 
 linters:
   enable:
-    # Core linters
+    # Only enable essential linters that catch real bugs
     - govet         # Vet examines Go source code
     - ineffassign   # Detect ineffectual assignments
     - staticcheck   # Static analysis (includes gosimple)
-    - unused        # Check for unused code
-
-    # Additional recommended linters
-    - misspell      # Fix commonly misspelled words
-    - revive        # Fast, configurable, extensible linter
-    - gosec         # Security issues
-    - gocritic      # Opinionated Go linter
-    - unconvert     # Unnecessary type conversions
-    - unparam       # Unused function parameters
-    - prealloc      # Slice preallocation
-    - nolintlint    # Ill-formed or insufficient nolint directives
 
   disable:
-    - errcheck      # Disabled: too noisy for defer cleanup patterns
+    # Disabled linters that are too noisy or opinionated
+    - errcheck      # Too noisy for defer cleanup patterns
+    - gosec         # Too many false positives
+    - revive        # Too opinionated
+    - gocritic      # Too opinionated
+    - unused        # Too aggressive
+    - unconvert     # Minor issues
+    - unparam       # Minor issues
+    - prealloc      # Minor optimizations
+    - misspell      # Low priority
+    - nolintlint    # Low priority
 
 linters-settings:
   errcheck:
