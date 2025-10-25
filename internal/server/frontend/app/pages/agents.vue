@@ -71,6 +71,7 @@
           :connected="agentWs.connected"
           :is-thinking="isThinking"
           :is-processing="isProcessing"
+          :has-modal-open="showToolDiffOverlay || showLightbox"
           @send="handleSendMessage"
           @interrupt="interruptSession"
         >
