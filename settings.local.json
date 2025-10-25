@@ -1,0 +1,106 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(just test)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(just:*)",
+      "Read(*)",
+      "Edit(/**)",
+      "Write(/**)",
+      "Bash(make:*)",
+      "Bash(cat:*)",
+      "WebFetch(domain:github.com)",
+      "Read(//private/tmp/**)",
+      "Bash(shasum:*)",
+      "Read(//Users/schlunsen/projects/homebrew-cct/Formula/**)",
+      "Bash(go test:*)",
+      "Bash(awk:*)",
+      "Bash(go tool cover:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(npx nuxi:*)",
+      "Bash(mkdir:*)",
+      "Bash(go build:*)",
+      "Read(//Users/schlunsen/.claude/projects/-Users-schlunsen-projects-claude-control-terminal/**)",
+      "Bash(curl:*)",
+      "Bash(find:*)",
+      "Bash(rm:*)",
+      "Read(//Users/schlunsen/projects/homebrew-cct/**)",
+      "Bash(cp:*)",
+      "Read(//Users/schlunsen/.claude/**)",
+      "Bash(lsof:*)",
+      "Bash(./cct agents logs:*)",
+      "Bash(kill:*)",
+      "Bash(./cct agents start:*)",
+      "Bash(python3:*)",
+      "Read(//Users/schlunsen/projects/claude-agent-sdk-go/examples/claude-control-terminal-ws/**)",
+      "Bash(go get:*)",
+      "Read(//Users/schlunsen/go/pkg/mod/github.com/schlunsen/claude-agent-sdk-go@v0.1.0/**)",
+      "Bash(./cct agents status:*)",
+      "Bash(go mod graph:*)",
+      "Read(//Users/schlunsen/projects/claude-agent-sdk-go/**)",
+      "Read(//Users/schlunsen/projects/claude-agent-sdk-python/src/claude_agent_sdk/_internal/transport/**)",
+      "Read(//Users/schlunsen/projects/claude-agent-sdk-python/src/claude_agent_sdk/_internal/**)",
+      "Read(//Users/schlunsen/projects/claude-agent-sdk-python/examples/**)",
+      "Bash(sed -i '' 's/h\\.sessionManager/h.SessionManager/g' internal/server/agents/agent_handler.go)",
+      "Bash(sed -i '' 's/s\\.agentHandler\\.sessionManager/s.agentHandler.SessionManager/g' internal/server/server.go)",
+      "Bash(sed -i '' -e 's/h\\.config/h.Config/g' -e 's/h\\.mu\\./h.Mu./g' -e 's/h\\.active/h.Active/g' internal/server/agents/agent_handler.go)",
+      "Bash(sed -i '' -e 's/s\\.agentHandler\\.mu/s.agentHandler.Mu/g' -e 's/s\\.agentHandler\\.active/s.agentHandler.Active/g' -e 's/s\\.agentHandler\\.config/s.agentHandler.Config/g' internal/server/server.go)",
+      "Bash(sed -i '' '/net\\/url/d' internal/server/server.go)",
+      "Read(//Users/schlunsen/go/pkg/mod/github.com/schlunsen/claude-agent-sdk-go@v0.2.1/**)",
+      "Read(//Users/schlunsen/projects/claude-agent-sdk-python/e2e-tests/**)",
+      "Read(//Users/schlunsen/projects/claude-agent-sdk-python/src/claude_agent_sdk/**)",
+      "Bash(sqlite3 ~/.claude/cct_history.db \".schema providers\")",
+      "Bash(sqlite3 ~/.claude/analytics_data/analytics.db \".tables\")",
+      "Bash(sqlite3:*)",
+      "Bash(sips -g pixelWidth -g pixelHeight \"/Users/schlunsen/projects/claude-control-terminal/website/public/images/cct-live-agents.png\")",
+      "Bash(sed:*)",
+      "Bash(grep:*)",
+      "Bash(echo:*)",
+      "Bash(pwd:*)",
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "ExitPlanMode(*)",
+      "Bash(*)",
+      "WebSearch(*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "postgresql"
+  ],
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/schlunsen/projects/claude-control-terminal/.claude/hooks/notification-logger.sh",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/schlunsen/projects/claude-control-terminal/.claude/hooks/tool-logger.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "/Users/schlunsen/projects/claude-control-terminal/.claude/hooks/user-prompt-logger.sh",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

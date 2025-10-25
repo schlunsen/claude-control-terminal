@@ -40,6 +40,12 @@ const (
 	MessageTypePermissionResponse     MessageType = "permission_response"
 	MessageTypePermissionAcknowledged MessageType = "permission_acknowledged"
 
+	// Always-allow rules
+	MessageTypeAddAlwaysAllowRule    MessageType = "add_always_allow_rule"
+	MessageTypeRemoveAlwaysAllowRule MessageType = "remove_always_allow_rule"
+	MessageTypeListAlwaysAllowRules  MessageType = "list_always_allow_rules"
+	MessageTypeAlwaysAllowRulesList  MessageType = "always_allow_rules_list"
+
 	// Kill switch
 	MessageTypeKillAllAgents     MessageType = "kill_all_agents"
 	MessageTypeAgentsKilled      MessageType = "agents_killed"
@@ -66,19 +72,52 @@ const (
 	SessionStatusEnded      SessionStatus = "ended"
 )
 
+// RuleMatchMode defines how a rule matches against requests
+type RuleMatchMode string
+
+const (
+	RuleMatchExact   RuleMatchMode = "exact"   // Exact parameter match
+	RuleMatchPattern RuleMatchMode = "pattern" // Pattern-based match
+)
+
+// RulePattern defines pattern matching for different tool types
+type RulePattern struct {
+	// For Bash commands
+	CommandPrefix *string `json:"command_prefix,omitempty"` // e.g., "npm"
+
+	// For file operations (Read, Write, Edit)
+	FilePathPattern *string `json:"file_path_pattern,omitempty"` // e.g., "/tmp/*"
+	DirectoryPath   *string `json:"directory_path,omitempty"`    // e.g., "/home/user/project/"
+
+	// For Grep/Glob operations
+	PathPattern *string `json:"path_pattern,omitempty"`
+}
+
+// AlwaysAllowRule represents a rule for auto-approving specific tool requests
+type AlwaysAllowRule struct {
+	ID          string                 `json:"id"`
+	Tool        string                 `json:"tool"`
+	MatchMode   RuleMatchMode          `json:"match_mode"`
+	Parameters  map[string]interface{} `json:"parameters,omitempty"`  // For exact mode
+	Pattern     *RulePattern           `json:"pattern,omitempty"`     // For pattern mode
+	Description string                 `json:"description"`
+	CreatedAt   time.Time              `json:"created_at"`
+}
+
 // SessionOptions holds options for creating an agent session
 type SessionOptions struct {
-	SystemPrompt     *string  `json:"system_prompt,omitempty"`
-	AgentName        *string  `json:"agent_name,omitempty"`
-	Tools            []string `json:"tools,omitempty"`
-	WorkingDirectory *string  `json:"working_directory,omitempty"`
-	MaxTokens        *int     `json:"max_tokens,omitempty"`
-	Temperature      *float64 `json:"temperature,omitempty"`
-	PermissionMode   *string  `json:"permission_mode,omitempty"`
-	Provider         *string  `json:"provider,omitempty"`  // Provider ID (e.g., "glm", "deepseek")
-	Model            *string  `json:"model,omitempty"`     // Model name
-	BaseURL          *string  `json:"base_url,omitempty"`  // API base URL for custom providers
-	APIKey           *string  `json:"api_key,omitempty"`   // API key for the provider
+	SystemPrompt     *string           `json:"system_prompt,omitempty"`
+	AgentName        *string           `json:"agent_name,omitempty"`
+	Tools            []string          `json:"tools,omitempty"`
+	WorkingDirectory *string           `json:"working_directory,omitempty"`
+	MaxTokens        *int              `json:"max_tokens,omitempty"`
+	Temperature      *float64          `json:"temperature,omitempty"`
+	PermissionMode   *string           `json:"permission_mode,omitempty"`
+	Provider         *string           `json:"provider,omitempty"`  // Provider ID (e.g., "glm", "deepseek")
+	Model            *string           `json:"model,omitempty"`     // Model name
+	BaseURL          *string           `json:"base_url,omitempty"`  // API base URL for custom providers
+	APIKey           *string           `json:"api_key,omitempty"`   // API key for the provider
+	AlwaysAllowRules []AlwaysAllowRule `json:"always_allow_rules,omitempty"` // Auto-approval rules
 }
 
 // Session represents an agent conversation session
@@ -276,4 +315,32 @@ type SessionUpdatedMessage struct {
 	BaseMessage
 	SessionID uuid.UUID `json:"session_id"`
 	GitBranch *string   `json:"git_branch,omitempty"`
+}
+
+// AddAlwaysAllowRuleMessage represents adding an always-allow rule
+type AddAlwaysAllowRuleMessage struct {
+	BaseMessage
+	SessionID    uuid.UUID       `json:"session_id"`
+	Rule         AlwaysAllowRule `json:"rule"`
+	PermissionID string          `json:"permission_id,omitempty"` // Optional: ID of the pending permission to approve
+}
+
+// RemoveAlwaysAllowRuleMessage represents removing an always-allow rule
+type RemoveAlwaysAllowRuleMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+	RuleID    string    `json:"rule_id"`
+}
+
+// ListAlwaysAllowRulesMessage represents requesting list of rules
+type ListAlwaysAllowRulesMessage struct {
+	BaseMessage
+	SessionID uuid.UUID `json:"session_id"`
+}
+
+// AlwaysAllowRulesListMessage represents a list of always-allow rules
+type AlwaysAllowRulesListMessage struct {
+	BaseMessage
+	SessionID uuid.UUID         `json:"session_id"`
+	Rules     []AlwaysAllowRule `json:"rules"`
 }

@@ -126,6 +126,115 @@ export function useMessaging(params: MessagingParams) {
     sendPermissionResponse(request, true)
   }
 
+  const approvePermissionExact = (request: any) => {
+    // Optimistically remove the permission from UI before backend responds
+    removePermissionFromUI(request)
+
+    // Add an exact-match always-allow rule
+    // The backend will handle approving the current permission request
+    addAlwaysAllowRule(request, 'exact')
+  }
+
+  const approvePermissionSimilar = (request: any) => {
+    // Optimistically remove the permission from UI before backend responds
+    removePermissionFromUI(request)
+
+    // Add a pattern-match always-allow rule
+    // The backend will handle approving the current permission request
+    addAlwaysAllowRule(request, 'pattern')
+  }
+
+  const removePermissionFromUI = (request: any) => {
+    // Remove from session-specific permissions immediately (optimistic update)
+    const sessionPerms = sessionPermissions.value.get(request.session_id) || []
+    sessionPermissions.value.set(
+      request.session_id,
+      sessionPerms.filter(p => p.request_id !== request.request_id)
+    )
+  }
+
+  const addAlwaysAllowRule = (request: any, matchMode: 'exact' | 'pattern') => {
+    try {
+      // Generate pattern if needed
+      let pattern = null
+      if (matchMode === 'pattern') {
+        pattern = generatePattern(request.tool, request.details)
+      }
+
+      const rule = {
+        tool: request.tool,
+        match_mode: matchMode,
+        parameters: matchMode === 'exact' ? request.details : undefined,
+        pattern: matchMode === 'pattern' ? pattern : undefined,
+        description: request.description
+      }
+
+      agentWs.send({
+        type: 'add_always_allow_rule',
+        session_id: request.session_id,
+        rule: rule,
+        permission_id: request.request_id  // Include the pending permission ID so backend can approve it
+      })
+
+      // Show confirmation message
+      const modeText = matchMode === 'exact' ? 'exact match' : 'similar matches'
+      if (!messages.value[request.session_id]) {
+        messages.value[request.session_id] = []
+      }
+
+      messages.value[request.session_id].push({
+        id: crypto.randomUUID(),
+        role: 'system',
+        content: `🔓 Always-allow rule added (${modeText}): ${request.description}`,
+        timestamp: new Date(),
+        isPermissionDecision: true
+      })
+
+      // Auto-scroll if viewing this session
+      if (request.session_id === activeSessionId.value) {
+        autoScrollIfNearBottom(messagesContainer)
+      }
+
+    } catch (error) {
+      console.error('Failed to add always-allow rule:', error)
+      alert('Failed to add always-allow rule. Please try again.')
+    }
+  }
+
+  const generatePattern = (toolName: string, details: any) => {
+    const pattern: any = {}
+
+    // For "Allow Similar", we extract the command/path pattern
+    switch (toolName) {
+      case 'Bash':
+        // Extract the command from the full bash command
+        // e.g., "sed -i '' 's/foo/bar/g' file.txt" -> "sed"
+        if (details?.command) {
+          const command = details.command.trim()
+          const commandName = command.split(/\s+/)[0] // Get first word
+          // Backend will format this as "Bash(sed:*)"
+          pattern.command_prefix = commandName
+        } else {
+          pattern.command_prefix = '*'
+        }
+        break
+
+      case 'Read':
+      case 'Write':
+      case 'Edit':
+        // Use '/**' pattern for recursive wildcard (like .gitignore)
+        pattern.directory_path = '/**'
+        break
+
+      case 'Grep':
+      case 'Glob':
+        pattern.path_pattern = '*'
+        break
+    }
+
+    return pattern
+  }
+
   const denyPermission = (request: any, reason = '') => {
     sendPermissionResponse(request, false, reason)
   }
@@ -245,6 +354,8 @@ export function useMessaging(params: MessagingParams) {
   return {
     sendMessage,
     approvePermission,
+    approvePermissionExact,
+    approvePermissionSimilar,
     denyPermission,
     sendPermissionResponse,
     deleteAllSessions,

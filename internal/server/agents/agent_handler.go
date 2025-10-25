@@ -245,6 +245,15 @@ func (h *AgentHandler) routeFiberMessage(c *fiberws.Conn, msgType MessageType, r
 	case MessageTypePermissionResponse:
 		return h.handleFiberPermissionResponse(c, rawMsg)
 
+	case MessageTypeAddAlwaysAllowRule:
+		return h.handleFiberAddAlwaysAllowRule(c, rawMsg)
+
+	case MessageTypeRemoveAlwaysAllowRule:
+		return h.handleFiberRemoveAlwaysAllowRule(c, rawMsg)
+
+	case MessageTypeListAlwaysAllowRules:
+		return h.handleFiberListAlwaysAllowRules(c, rawMsg)
+
 	default:
 		return fmt.Errorf("unknown message type: %s", msgType)
 	}
@@ -1194,6 +1203,176 @@ func (h *AgentHandler) handleFiberPermissionResponse(c *fiberws.Conn, rawMsg map
 // handleFiberPing responds to ping with pong (Fiber version)
 func (h *AgentHandler) handleFiberPing(c *fiberws.Conn) error {
 	response := BaseMessage{Type: MessageTypePong}
+	return c.WriteJSON(response)
+}
+
+// handleFiberAddAlwaysAllowRule adds an always-allow rule to a session
+func (h *AgentHandler) handleFiberAddAlwaysAllowRule(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+	var msg AddAlwaysAllowRuleMessage
+	msgBytes, _ := json.Marshal(rawMsg)
+	if err := json.Unmarshal(msgBytes, &msg); err != nil {
+		return fmt.Errorf("invalid add_always_allow_rule message: %w", err)
+	}
+
+	logging.Info("Adding always-allow rule to session %s: %s (mode: %s)", msg.SessionID, msg.Rule.Description, msg.Rule.MatchMode)
+
+	// Get session to find working directory
+	session, err := h.SessionManager.GetSession(msg.SessionID)
+	if err != nil {
+		return fmt.Errorf("session not found: %w", err)
+	}
+
+	// Get working directory for this session
+	workingDir := "."
+	if session.Options.WorkingDirectory != nil {
+		workingDir = *session.Options.WorkingDirectory
+	}
+
+	// Create settings manager
+	settingsManager := NewClaudeSettingsManager(workingDir)
+
+	// Format permission string in Claude Desktop format
+	permissionStr := FormatPermissionString(msg.Rule.Tool, msg.Rule.Pattern)
+	logging.Info("📝 Adding permission to settings.local.json: %s", permissionStr)
+
+	// Add to settings.local.json
+	if err := settingsManager.AddPermission(permissionStr); err != nil {
+		logging.Error("Failed to add permission to settings: %v", err)
+		return fmt.Errorf("failed to add permission: %w", err)
+	}
+
+	// Generate ID and timestamp for response
+	if msg.Rule.ID == "" {
+		msg.Rule.ID = uuid.New().String()
+	}
+	msg.Rule.CreatedAt = time.Now()
+
+	// Add rule to in-memory session for immediate effect
+	h.SessionManager.mu.Lock()
+	session.Options.AlwaysAllowRules = append(session.Options.AlwaysAllowRules, msg.Rule)
+	h.SessionManager.mu.Unlock()
+
+	// IMPORTANT: If there's a pending permission request (from the UI that triggered this),
+	// we need to approve it now so the SDK can continue
+	// The frontend will optimistically remove the permission from the UI
+	if msg.PermissionID != "" {
+		logging.Info("📤 Approving pending permission request: %s", msg.PermissionID)
+
+		// Find the pending permission request
+		session.permMu.Lock()
+		responseChan, exists := session.pendingPermissions[msg.PermissionID]
+		session.permMu.Unlock()
+
+		if exists {
+			// Send approval response to the SDK's callback
+			// This allows the SDK to continue execution with the newly added permission
+			select {
+			case responseChan <- PermissionResponse{
+				Approved:    true,
+				DenyMessage: "",
+			}:
+				logging.Info("✅ Permission approval sent to SDK for request: %s", msg.PermissionID)
+				// Clean up the pending permission immediately after approval
+				session.permMu.Lock()
+				delete(session.pendingPermissions, msg.PermissionID)
+				session.permMu.Unlock()
+			case <-time.After(2 * time.Second):
+				logging.Warning("⚠️ Timeout sending permission approval to SDK")
+			}
+		} else {
+			logging.Warning("⚠️ No pending permission found for ID: %s", msg.PermissionID)
+		}
+	}
+
+	// Send confirmation with the full rule (including generated ID)
+	response := AlwaysAllowRulesListMessage{
+		BaseMessage: BaseMessage{Type: MessageTypeAlwaysAllowRulesList},
+		SessionID:   msg.SessionID,
+		Rules:       session.Options.AlwaysAllowRules,
+	}
+
+	return c.WriteJSON(response)
+}
+
+// handleFiberRemoveAlwaysAllowRule removes an always-allow rule from a session
+func (h *AgentHandler) handleFiberRemoveAlwaysAllowRule(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+	var msg RemoveAlwaysAllowRuleMessage
+	msgBytes, _ := json.Marshal(rawMsg)
+	if err := json.Unmarshal(msgBytes, &msg); err != nil {
+		return fmt.Errorf("invalid remove_always_allow_rule message: %w", err)
+	}
+
+	logging.Info("Removing always-allow rule %s from session %s", msg.RuleID, msg.SessionID)
+
+	// Get session
+	session, err := h.SessionManager.GetSession(msg.SessionID)
+	if err != nil {
+		return fmt.Errorf("session not found: %w", err)
+	}
+
+	// Get working directory for this session
+	workingDir := "."
+	if session.Options.WorkingDirectory != nil {
+		workingDir = *session.Options.WorkingDirectory
+	}
+
+	// Create settings manager
+	settingsManager := NewClaudeSettingsManager(workingDir)
+
+	// Find the rule to remove and format its permission string
+	h.SessionManager.mu.Lock()
+	var ruleToRemove *AlwaysAllowRule
+	newRules := []AlwaysAllowRule{}
+	for _, rule := range session.Options.AlwaysAllowRules {
+		if rule.ID != msg.RuleID {
+			newRules = append(newRules, rule)
+		} else {
+			ruleToRemove = &rule
+		}
+	}
+	session.Options.AlwaysAllowRules = newRules
+	h.SessionManager.mu.Unlock()
+
+	// Remove from settings.local.json
+	if ruleToRemove != nil {
+		permissionStr := FormatPermissionString(ruleToRemove.Tool, ruleToRemove.Pattern)
+		logging.Info("🗑️ Removing permission from settings.local.json: %s", permissionStr)
+		if err := settingsManager.RemovePermission(permissionStr); err != nil {
+			logging.Error("Failed to remove permission from settings: %v", err)
+		}
+	}
+
+	// Send updated rules list
+	response := AlwaysAllowRulesListMessage{
+		BaseMessage: BaseMessage{Type: MessageTypeAlwaysAllowRulesList},
+		SessionID:   msg.SessionID,
+		Rules:       session.Options.AlwaysAllowRules,
+	}
+
+	return c.WriteJSON(response)
+}
+
+// handleFiberListAlwaysAllowRules lists all always-allow rules for a session
+func (h *AgentHandler) handleFiberListAlwaysAllowRules(c *fiberws.Conn, rawMsg map[string]interface{}) error {
+	var msg ListAlwaysAllowRulesMessage
+	msgBytes, _ := json.Marshal(rawMsg)
+	if err := json.Unmarshal(msgBytes, &msg); err != nil {
+		return fmt.Errorf("invalid list_always_allow_rules message: %w", err)
+	}
+
+	// Get session
+	session, err := h.SessionManager.GetSession(msg.SessionID)
+	if err != nil {
+		return fmt.Errorf("session not found: %w", err)
+	}
+
+	// Send rules list
+	response := AlwaysAllowRulesListMessage{
+		BaseMessage: BaseMessage{Type: MessageTypeAlwaysAllowRulesList},
+		SessionID:   msg.SessionID,
+		Rules:       session.Options.AlwaysAllowRules,
+	}
+
 	return c.WriteJSON(response)
 }
 

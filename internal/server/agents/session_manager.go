@@ -1039,13 +1039,60 @@ func (sm *SessionManager) SendPromptWithContent(sessionID uuid.UUID, content []C
 	return nil
 }
 
+// RestartClient closes the current client and forces a new client to be created
+// on the next SendPrompt. This is useful after updating permissions in settings.local.json.
+func (sm *SessionManager) RestartClient(sessionID uuid.UUID) error {
+	sm.mu.Lock()
+	session, exists := sm.sessions[sessionID]
+	sm.mu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
+	if session.client != nil {
+		logging.Info("Closing existing client for session %s to reload permissions", sessionID)
+		// Close the existing client
+		if err := session.client.Close(session.ctx); err != nil {
+			logging.Warning("Error closing client: %v", err)
+		}
+		// Clear the client reference so a new one will be created
+		session.client = nil
+		logging.Info("✅ Client restarted for session %s - permissions will be reloaded", sessionID)
+	} else {
+		logging.Info("No active client for session %s - nothing to restart", sessionID)
+	}
+
+	return nil
+}
+
 // createPermissionCallback creates the permission callback function for a session
 func (sm *SessionManager) createPermissionCallback(session *AgentSession) types.CanUseToolFunc {
+	sessionID := session.ID // Capture session ID to look up latest rules
 	return func(ctx context.Context, toolName string, input map[string]interface{}, permCtx types.ToolPermissionContext) (interface{}, error) {
 		requestID := uuid.New().String()
 		logging.Info("🔐 PERMISSION CALLBACK: tool=%s, requestID=%s", toolName, requestID)
 
-		// Check if WebSocket is connected before proceeding
+		// Check always-allow rules first - get latest rules from session manager
+		sm.mu.RLock()
+		currentSession, exists := sm.sessions[sessionID]
+		if exists {
+			logging.Info("📋 Checking %d always-allow rules for tool %s", len(currentSession.Options.AlwaysAllowRules), toolName)
+			if matched, ruleDesc := CheckAlwaysAllowRules(currentSession.Options.AlwaysAllowRules, toolName, input); matched {
+				sm.mu.RUnlock()
+				logging.Info("✅ AUTO-APPROVED via always-allow rule: %s (rule: %s)", toolName, ruleDesc)
+				return types.PermissionResultAllow{}, nil
+			}
+			logging.Info("❌ No matching always-allow rule found for tool %s", toolName)
+		} else {
+			logging.Warning("⚠️ Session %s not found in session manager", sessionID)
+		}
+		sm.mu.RUnlock()
+
+		// Check if WebSocket is connected before proceeding with permission request
 		if !session.IsWebSocketConnected() {
 			logging.Warning("Permission request rejected: WebSocket not connected (tool=%s, requestID=%s)", toolName, requestID)
 			return types.PermissionResultDeny{Message: "WebSocket connection lost - cannot request permission"}, nil

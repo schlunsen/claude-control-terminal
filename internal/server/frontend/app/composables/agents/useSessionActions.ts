@@ -186,8 +186,26 @@ export function useSessionActions(params: SessionActionParams) {
       availableProviders.value = data.providers || []
       currentProvider.value = data.current
 
-      // Update form defaults based on current provider
-      if (currentProvider.value) {
+      // Prefer Anthropic provider with Sonnet model
+      const anthropicProvider = availableProviders.value.find(p => p.id === 'anthropic')
+
+      if (anthropicProvider) {
+        // Use Anthropic as the default provider
+        sessionForm.value.modelProvider = 'anthropic'
+
+        // Try to find a Sonnet model
+        const sonnetModel = anthropicProvider.models?.find((m: string) =>
+          m.includes('sonnet')
+        ) || anthropicProvider.default_model
+
+        if (sonnetModel) {
+          sessionForm.value.model = sonnetModel
+        } else if (anthropicProvider.models && anthropicProvider.models.length > 0) {
+          // Fallback to first available model if no Sonnet found
+          sessionForm.value.model = anthropicProvider.models[0]
+        }
+      } else if (currentProvider.value) {
+        // Fallback: Use the current provider if Anthropic is not available
         const provider = availableProviders.value.find(p => p.id === currentProvider.value.provider_id)
         if (provider) {
           sessionForm.value.modelProvider = provider.id
@@ -198,7 +216,7 @@ export function useSessionActions(params: SessionActionParams) {
           }
         }
       } else if (availableProviders.value.length > 0) {
-        // No current provider, so use the first available provider as default
+        // Final fallback: Use the first available provider
         const firstProvider = availableProviders.value[0]
         sessionForm.value.modelProvider = firstProvider.id
         sessionForm.value.model = firstProvider.default_model || (firstProvider.models && firstProvider.models[0]) || ''
