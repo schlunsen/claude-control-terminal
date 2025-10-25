@@ -1,4 +1,4 @@
-.PHONY: build run clean install test help test-verbose test-coverage-html coverage-badge test-race
+.PHONY: build run clean install test help test-verbose test-coverage-html coverage-badge test-race lint lint-fix fmt deps build-all build-frontend build-go run-tui run-analytics run-agents run-chats run-help
 
 # Binary name
 BINARY_NAME=cct
@@ -134,7 +134,25 @@ fmt:
 # Lint code
 lint:
 	@echo "Linting code..."
-	@golangci-lint run || go vet ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout=5m; \
+	else \
+		echo "⚠️  golangci-lint not found, falling back to go vet"; \
+		echo "   Install golangci-lint: https://golangci-lint.run/usage/install/"; \
+		go vet ./...; \
+	fi
+	@echo "✅ Lint complete"
+
+# Lint with autofix
+lint-fix:
+	@echo "Linting code with autofix..."
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --fix --timeout=5m; \
+	else \
+		echo "⚠️  golangci-lint not found"; \
+		echo "   Install golangci-lint: https://golangci-lint.run/usage/install/"; \
+		exit 1; \
+	fi
 	@echo "✅ Lint complete"
 
 # Download dependencies
@@ -169,6 +187,7 @@ help:
 	@echo "Code Quality:"
 	@echo "  make fmt                 - Format code"
 	@echo "  make lint                - Lint code"
+	@echo "  make lint-fix            - Lint code with autofix"
 	@echo ""
 	@echo "Maintenance:"
 	@echo "  make clean               - Remove build artifacts"

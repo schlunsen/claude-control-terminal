@@ -13,6 +13,7 @@ Thank you for your interest in contributing to Go Claude Templates! This documen
 - [Development Workflow](#development-workflow)
 - [Code Style Requirements](#code-style-requirements)
 - [Testing Requirements](#testing-requirements)
+- [CI/CD Pipeline](#cicd-pipeline)
 - [Commit Message Conventions](#commit-message-conventions)
 - [Pull Request Process](#pull-request-process)
 
@@ -258,6 +259,164 @@ Run the automated test suites:
 # Category search tests (9 tests)
 ./TEST_CATEGORIES.sh
 ```
+
+## CI/CD Pipeline
+
+### Continuous Integration
+
+The project uses GitHub Actions for automated testing and quality checks. CI runs automatically on:
+
+- **All branches**: When you push commits to any branch
+- **Pull Requests**: When PRs are created or updated against `main`
+- **Main branch**: On direct commits (only during releases)
+
+### CI Workflow Jobs
+
+The CI pipeline (`ci.yml`) includes four main jobs:
+
+#### 1. Test Matrix
+
+Runs comprehensive tests across multiple platforms and Go versions:
+
+- **Operating Systems**: Ubuntu, macOS, Windows
+- **Go Versions**: 1.23, 1.24
+- **Features**:
+  - Race condition detection (`-race` flag)
+  - Code coverage tracking
+  - Coverage threshold check (≥20%)
+  - Codecov upload (Ubuntu + Go 1.24 only)
+
+```bash
+# Locally replicate CI tests
+make test-verbose  # Runs tests with race detector
+make test-coverage # Generates coverage report
+```
+
+#### 2. Linting
+
+Ensures code quality and consistency:
+
+- Runs `golangci-lint` with comprehensive checks
+- Configuration: `.golangci.yml`
+- Timeout: 5 minutes
+
+```bash
+# Install golangci-lint
+brew install golangci-lint  # macOS
+# or
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Run locally
+make lint           # Lint with fallback to go vet
+make lint-fix       # Lint with automatic fixes
+```
+
+#### 3. Build Check
+
+Verifies the project builds successfully:
+
+- Compiles the binary
+- Runs `--help` to verify functionality
+- Ensures no build errors
+
+```bash
+# Locally test build
+make build
+./cct --help
+```
+
+#### 4. Security Scan
+
+Scans for security vulnerabilities:
+
+- Uses `gosec` security scanner
+- Generates SARIF reports
+- Uploads to GitHub Security tab
+- Does not fail CI (informational only)
+
+### Scheduled Tests
+
+Daily comprehensive testing runs at 8:00 AM UTC:
+
+- **Workflow**: `scheduled-tests.yml`
+- **Purpose**: Catch regressions and dependency issues
+- **Matrix**: Same as CI (3 OS × 2 Go versions)
+- **Coverage**: Full coverage reports with HTML output
+- **Trigger**: Can be manually triggered via GitHub Actions UI
+
+### Pre-Push Checklist
+
+Before pushing your branch, run these commands locally:
+
+```bash
+# 1. Format code
+make fmt
+
+# 2. Run linter
+make lint
+
+# 3. Run tests with race detector
+make test-verbose
+
+# 4. Build binary
+make build
+
+# 5. Verify binary works
+./cct --help
+```
+
+### CI Failures
+
+If CI fails on your PR:
+
+1. **Check the failure**: Click "Details" next to the failed check
+2. **Review logs**: Identify which job failed and why
+3. **Fix locally**: Reproduce and fix the issue locally
+4. **Re-run tests**: Ensure `make test` and `make lint` pass
+5. **Push fix**: Push the fix to your branch (CI will re-run automatically)
+
+### GitHub Actions Secrets
+
+Required secrets (already configured for maintainers):
+
+- `CODECOV_TOKEN`: For uploading coverage to Codecov (optional)
+- `GITHUB_TOKEN`: Automatically provided by GitHub
+
+### Branch Protection
+
+The `main` branch is protected with the following rules:
+
+- ✅ All CI checks must pass before merging
+- ✅ Pull request reviews required
+- ✅ No direct commits to `main` (except releases)
+- ✅ Branch must be up-to-date with `main`
+
+### Local CI Testing
+
+To test your changes like CI does:
+
+```bash
+# Full CI simulation
+make fmt && \
+make lint && \
+make test-verbose && \
+make test-coverage && \
+make build
+
+# Quick pre-push check
+make fmt && make lint && make test
+```
+
+### Coverage Reports
+
+Coverage reports are generated automatically:
+
+- **Local**: Run `make test-coverage-html` to open coverage in browser
+- **CI**: Coverage uploaded to Codecov for all PRs
+- **Threshold**: Minimum 20% coverage enforced
+- **Filtered**: Excludes `main.go`, static files, and interactive TUI
+
+View coverage badge in README.md (updated on main branch).
 
 ## Commit Message Conventions
 

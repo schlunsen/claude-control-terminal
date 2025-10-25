@@ -57,6 +57,8 @@ type AgentSession struct {
 	active                 bool
 	client                 *claude.Client // Streaming client for this session
 	mu                     sync.Mutex     // Protects client field
+	pendingReload          bool           // Track if we should reload after next message
+	pendingReloadMu        sync.Mutex     // Protects pendingReload field
 }
 
 // NewSessionManager creates a new session manager
@@ -1265,6 +1267,33 @@ func (sm *SessionManager) receiveQueryResponses(session *AgentSession, messages 
 			case <-session.ctx.Done():
 				logging.Info("Session %s: Context cancelled after %d messages", session.ID, messageCount)
 				return
+			}
+
+			// Check if we should reload after this message (from "Allow Similar" flow)
+			session.pendingReloadMu.Lock()
+			shouldReload := session.pendingReload
+			if shouldReload {
+				session.pendingReload = false // Clear the flag
+			}
+			session.pendingReloadMu.Unlock()
+
+			if shouldReload {
+				logging.Info("🔄 Pending reload detected - reloading session settings after message")
+				// Reload in a goroutine so we don't block message processing
+				go func() {
+					time.Sleep(300 * time.Millisecond) // Small delay to ensure message is fully processed
+					if err := sm.ReloadSessionSettings(session.ID); err != nil {
+						logging.Error("Failed to reload session settings: %v", err)
+						return
+					}
+
+					// After reloading, send "continue" to resume
+					logging.Info("▶️  Auto-resuming session with 'continue' command")
+					time.Sleep(200 * time.Millisecond)
+					if err := sm.SendPrompt(session.ID, "continue"); err != nil {
+						logging.Error("Failed to auto-continue session: %v", err)
+					}
+				}()
 			}
 
 			// Reset timeout after each message
