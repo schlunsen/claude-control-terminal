@@ -70,7 +70,7 @@ func (cp *ConversationParser) ParseConversationFile(filePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck
 
 	toolMap := make(map[string]*ToolExecution)
 	scanner := bufio.NewScanner(file)

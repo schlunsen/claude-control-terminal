@@ -137,7 +137,7 @@ func (l *Launcher) Start() error {
 		// In foreground mode, defer close since we'll wait for signal
 		// In background mode, keep file open for ongoing server logging
 		if !l.Background {
-			defer logFile.Close()
+			defer logFile.Close() //nolint:errcheck
 		}
 		// Redirect logging to file
 		log.SetOutput(logFile)

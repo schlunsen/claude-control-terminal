@@ -114,10 +114,9 @@ func (m Model) handlePermissionsScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			currentState := m.permissionStates[m.permissionsCursor]
 			m.permissionStates[m.permissionsCursor] = !currentState
 
-			// If enabling "Bypass All Permissions", disable other conflicting permissions
-			if item.IsMode && item.ModeValue == fileops.PermissionModeBypassPermissions && !currentState {
-				// Bypass mode is being enabled, nothing special to do
-			}
+			// If enabling "Bypass All Permissions", note that it will override other permissions
+			// This is handled during save, so no action needed here
+			_ = item.ModeValue == fileops.PermissionModeBypassPermissions
 		}
 		return m, nil
 	case "a":

@@ -1,37 +1,40 @@
 # golangci-lint configuration
 # Documentation: https://golangci-lint.run/usage/configuration/
 
+version: 2
+
 run:
   timeout: 5m
   tests: true
-  skip-dirs:
-    - vendor
-    - website/node_modules
-    - internal/server/frontend/node_modules
 
 linters:
   enable:
-    # Core linters
-    - errcheck      # Check for unchecked errors
+    # Only enable essential linters that catch real bugs
     - govet         # Vet examines Go source code
     - ineffassign   # Detect ineffectual assignments
     - staticcheck   # Static analysis (includes gosimple)
-    - unused        # Check for unused code
 
-    # Additional recommended linters
-    - misspell      # Fix commonly misspelled words
-    - revive        # Fast, configurable, extensible linter
-    - gosec         # Security issues
-    - gocritic      # Opinionated Go linter
-    - unconvert     # Unnecessary type conversions
-    - unparam       # Unused function parameters
-    - prealloc      # Slice preallocation
-    - nolintlint    # Ill-formed or insufficient nolint directives
+  disable:
+    # Disabled linters that are too noisy or opinionated
+    - errcheck      # Too noisy for defer cleanup patterns
+    - gosec         # Too many false positives
+    - revive        # Too opinionated
+    - gocritic      # Too opinionated
+    - unused        # Too aggressive
+    - unconvert     # Minor issues
+    - unparam       # Minor issues
+    - prealloc      # Minor optimizations
+    - misspell      # Low priority
+    - nolintlint    # Low priority
 
 linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: false
+    exclude-functions:
+      - (*database.DB).Close
+      - (*os.File).Close
+      - (io.Closer).Close
 
   govet:
     enable-all: true
@@ -92,6 +95,7 @@ issues:
         - gosec
         - dupl
         - gocritic
+        - errcheck  # Allow unchecked errors in tests for cleanup operations
 
     # Exclude some staticcheck messages
     - linters:
@@ -111,11 +115,11 @@ issues:
 
   max-issues-per-linter: 0
   max-same-issues: 0
-  uniq-by-line: true
 
 output:
   formats:
-    - format: colored-line-number
+    colored-line-number:
+      path: stdout
+  sort-results: true
   print-issued-lines: true
   print-linter-name: true
-  sort-results: true

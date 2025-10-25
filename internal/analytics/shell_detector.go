@@ -152,9 +152,10 @@ func (sd *ShellDetector) GetShellStats() (*ShellStats, error) {
 	idleCount := 0
 
 	for _, shell := range shells {
-		if shell.Status == "running" {
+		switch shell.Status {
+		case "running":
 			runningCount++
-		} else if shell.Status == "idle" {
+		case "idle":
 			idleCount++
 		}
 	}

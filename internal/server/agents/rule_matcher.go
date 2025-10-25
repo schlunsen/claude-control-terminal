@@ -176,16 +176,9 @@ func FormatPatternDescription(pattern *RulePattern, toolName string) string {
 	}
 
 	// Check if this is a wildcard rule (allow all)
-	isWildcard := false
-	if pattern.CommandPrefix != nil && *pattern.CommandPrefix == "*" {
-		isWildcard = true
-	}
-	if pattern.DirectoryPath != nil && *pattern.DirectoryPath == "*" {
-		isWildcard = true
-	}
-	if pattern.PathPattern != nil && *pattern.PathPattern == "*" {
-		isWildcard = true
-	}
+	isWildcard := (pattern.CommandPrefix != nil && *pattern.CommandPrefix == "*") ||
+		(pattern.DirectoryPath != nil && *pattern.DirectoryPath == "*") ||
+		(pattern.PathPattern != nil && *pattern.PathPattern == "*")
 
 	if isWildcard {
 		// Wildcard pattern - allow ALL of this tool type

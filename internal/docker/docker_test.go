@@ -201,6 +201,7 @@ func TestNewDockerManagerWithDifferentPaths(t *testing.T) {
 			dm := NewDockerManager(tt.path)
 			if dm == nil {
 				t.Error("NewDockerManager returned nil")
+				return
 			}
 			if dm.ProjectDir != tt.path {
 				t.Errorf("expected project dir %q, got %q", tt.path, dm.ProjectDir)

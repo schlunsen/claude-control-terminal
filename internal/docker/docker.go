@@ -39,7 +39,7 @@ func (dm *DockerManager) IsDockerAvailable() bool {
 // BuildImage builds a Docker image with the current configuration
 func (dm *DockerManager) BuildImage(dockerfilePath string) error {
 	if !dm.IsDockerAvailable() {
-		return fmt.Errorf("Docker is not installed or not running")
+		return fmt.Errorf("docker is not installed or not running")
 	}
 
 	fmt.Printf("🐳 Building Docker image: %s:%s\n", dm.ImageName, dm.ImageTag)
@@ -63,7 +63,7 @@ func (dm *DockerManager) BuildImage(dockerfilePath string) error {
 // RunContainer runs a Docker container with the specified configuration
 func (dm *DockerManager) RunContainer(opts RunOptions) error {
 	if !dm.IsDockerAvailable() {
-		return fmt.Errorf("Docker is not installed or not running")
+		return fmt.Errorf("docker is not installed or not running")
 	}
 
 	// Stop existing container if it exists
@@ -112,7 +112,7 @@ func (dm *DockerManager) RunContainer(opts RunOptions) error {
 // StopContainer stops and removes the Docker container
 func (dm *DockerManager) StopContainer() error {
 	if !dm.IsDockerAvailable() {
-		return fmt.Errorf("Docker is not installed or not running")
+		return fmt.Errorf("docker is not installed or not running")
 	}
 
 	fmt.Printf("🛑 Stopping container: %s\n", dm.ContainerName)
@@ -131,7 +131,7 @@ func (dm *DockerManager) StopContainer() error {
 // GetContainerLogs retrieves logs from the running container
 func (dm *DockerManager) GetContainerLogs(follow bool) error {
 	if !dm.IsDockerAvailable() {
-		return fmt.Errorf("Docker is not installed or not running")
+		return fmt.Errorf("docker is not installed or not running")
 	}
 
 	args := []string{"logs"}
@@ -150,7 +150,7 @@ func (dm *DockerManager) GetContainerLogs(follow bool) error {
 // ExecInContainer executes a command inside the running container
 func (dm *DockerManager) ExecInContainer(command string) error {
 	if !dm.IsDockerAvailable() {
-		return fmt.Errorf("Docker is not installed or not running")
+		return fmt.Errorf("docker is not installed or not running")
 	}
 
 	args := []string{"exec", "-it", dm.ContainerName}

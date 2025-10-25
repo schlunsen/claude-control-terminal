@@ -273,12 +273,12 @@ func (ci *ClaudeInstaller) installNPM() *InstallResult {
 	nodeInfo := detector.DetectNode()
 
 	if !nodeInfo.Installed {
-		result.Error = fmt.Errorf("Node.js not found. Please install Node.js v18+ or use native installation method")
+		result.Error = fmt.Errorf("node.js not found, please install Node.js v18+ or use native installation method")
 		return result
 	}
 
 	if !nodeInfo.VersionOK {
-		result.Error = fmt.Errorf("Node.js version %s is too old. Required: v18+", nodeInfo.Version)
+		result.Error = fmt.Errorf("node.js version %s is too old, required: v18+", nodeInfo.Version)
 		return result
 	}
 
