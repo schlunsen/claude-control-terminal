@@ -187,6 +187,7 @@ jobs:
 
           const emoji = (status) => status === 'success' ? '✅' : status === 'failure' ? '❌' : '⚠️';
 
+          const commitSha = '${{ github.sha }}';
           const body = `## CI Results
 
           | Job | Status |
@@ -197,7 +198,7 @@ jobs:
           | Security | ${emoji(results.security)} ${results.security} |
 
           ---
-          *Triggered by commit ${{ github.sha.substring(0, 7) }}*`;
+          *Triggered by commit ${commitSha.substring(0, 7)}*`;
 
           github.rest.issues.createComment({
             issue_number: context.issue.number,
