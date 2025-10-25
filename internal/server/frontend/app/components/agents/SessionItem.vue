@@ -18,7 +18,6 @@
       <div class="session-meta">
         <span class="session-id">{{ session.id.slice(0, 8) }}</span>
         <span class="session-status" :class="session.status">{{ session.status }}</span>
-        <span class="session-messages">{{ session.message_count }} messages</span>
         <span v-if="session.cost_usd && session.cost_usd > 0" class="session-cost">
           ${{ session.cost_usd.toFixed(4) }}
         </span>
