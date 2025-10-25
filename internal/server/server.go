@@ -4,6 +4,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -390,6 +391,7 @@ func (s *Server) setupRoutes() {
 	// Config endpoints (for frontend to get API key securely)
 	api.Get("/config/api-key", s.handleGetAPIKey)
 	api.Get("/config/cwd", s.handleGetCWD)
+	api.Get("/config/permissions", s.handleGetProjectPermissions)
 
 	// Agent endpoints (serve agents from project directory)
 	api.Get("/agents", s.handleListAgents)
@@ -1697,6 +1699,105 @@ func (s *Server) handleGetCWD(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"cwd": cwd,
 	})
+}
+
+// Handler: Get project permissions from .claude/settings.local.json
+func (s *Server) handleGetProjectPermissions(c *fiber.Ctx) error {
+	// Get current working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to get current working directory",
+		})
+	}
+
+	// Build path to settings.local.json
+	settingsPath := filepath.Join(cwd, ".claude", "settings.local.json")
+
+	// Check if file exists
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		return c.JSON(fiber.Map{
+			"total":      0,
+			"categories": fiber.Map{},
+			"file_path":  settingsPath,
+			"error":      "settings.local.json not found",
+		})
+	}
+
+	// Read file
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to read settings file: %v", err),
+		})
+	}
+
+	// Parse JSON
+	var settings struct {
+		Permissions struct {
+			Allow []string `json:"allow"`
+		} `json:"permissions"`
+	}
+
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return c.Status(500).JSON(fiber.Map{
+			"error": fmt.Sprintf("Failed to parse settings file: %v", err),
+		})
+	}
+
+	// Categorize permissions
+	categories := categorizePermissions(settings.Permissions.Allow)
+
+	return c.JSON(fiber.Map{
+		"total":      len(settings.Permissions.Allow),
+		"categories": categories,
+		"file_path":  settingsPath,
+	})
+}
+
+// Helper function to categorize permissions
+func categorizePermissions(permissions []string) map[string]interface{} {
+	categories := map[string][]string{
+		"bash":     []string{},
+		"read":     []string{},
+		"write":    []string{},
+		"edit":     []string{},
+		"webfetch": []string{},
+		"mcp":      []string{},
+		"other":    []string{},
+	}
+
+	for _, perm := range permissions {
+		switch {
+		case strings.HasPrefix(perm, "Bash("):
+			categories["bash"] = append(categories["bash"], perm)
+		case strings.HasPrefix(perm, "Read("):
+			categories["read"] = append(categories["read"], perm)
+		case strings.HasPrefix(perm, "Write("):
+			categories["write"] = append(categories["write"], perm)
+		case strings.HasPrefix(perm, "Edit("):
+			categories["edit"] = append(categories["edit"], perm)
+		case strings.HasPrefix(perm, "WebFetch("):
+			categories["webfetch"] = append(categories["webfetch"], perm)
+		case strings.HasPrefix(perm, "mcp__"):
+			categories["mcp"] = append(categories["mcp"], perm)
+		default:
+			categories["other"] = append(categories["other"], perm)
+		}
+	}
+
+	// Build response with counts
+	result := make(map[string]interface{})
+	for category, perms := range categories {
+		if len(perms) > 0 {
+			result[category] = fiber.Map{
+				"count":       len(perms),
+				"permissions": perms,
+			}
+		}
+	}
+
+	return result
 }
 
 // Handler: List all available agents from .claude/agents/ directory

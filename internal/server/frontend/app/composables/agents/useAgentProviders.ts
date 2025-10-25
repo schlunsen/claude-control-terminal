@@ -1,12 +1,12 @@
 import { ref, computed } from 'vue'
 
 export function useAgentProviders() {
-  // Session creation form
+  // Session creation form - Default to Anthropic/Sonnet
   const sessionForm = ref({
     workingDirectory: '',
     permissionMode: 'default',
-    modelProvider: '', // Will be set by loadProviders()
-    model: '', // Will be set by loadProviders()
+    modelProvider: 'anthropic', // Default to Anthropic
+    model: 'claude-sonnet-4-5-20250929', // Default to Sonnet
     systemPrompt: '',
     promptMode: 'agent', // 'agent' or 'custom'
     selectedAgent: '',

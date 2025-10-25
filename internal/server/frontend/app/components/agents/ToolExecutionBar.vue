@@ -46,8 +46,8 @@ defineProps<Props>()
 <style scoped>
 .tool-execution-bar {
   padding: 0.75rem;
-  background: var(--color-info-alpha);
-  border-left: 3px solid var(--color-info);
+  background: rgba(139, 92, 246, 0.1);
+  border-left: 3px solid var(--accent-purple);
   margin-bottom: 1rem;
   border-radius: 0.375rem;
 }
@@ -70,7 +70,7 @@ defineProps<Props>()
 
 .tool-execution-name {
   font-weight: 600;
-  color: var(--color-text-primary);
+  color: var(--text-primary);
   font-size: 0.875rem;
   display: flex;
   align-items: center;
@@ -79,17 +79,17 @@ defineProps<Props>()
 
 .tool-execution-detail-badge {
   padding: 0.125rem 0.5rem;
-  background: var(--color-bg-secondary);
+  background: var(--bg-secondary);
   border-radius: 0.25rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   font-family: 'Monaco', 'Courier New', monospace;
 }
 
 .tool-execution-info {
   font-size: 0.75rem;
-  color: var(--color-text-secondary);
+  color: var(--text-secondary);
   margin-top: 0.25rem;
   font-family: 'Monaco', 'Courier New', monospace;
   white-space: nowrap;
@@ -101,7 +101,7 @@ defineProps<Props>()
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--color-info);
+  background: var(--accent-purple);
   flex-shrink: 0;
   animation: pulse 2s ease-in-out infinite;
 }

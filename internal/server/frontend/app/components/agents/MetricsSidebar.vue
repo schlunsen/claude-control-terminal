@@ -66,6 +66,11 @@
         :permission-stats="permissionStats"
         :hide-header="true"
       />
+
+      <!-- Project Permissions Section -->
+      <div v-if="projectPermissions" class="project-permissions-section">
+        <ProjectPermissions :permissions="projectPermissions" />
+      </div>
     </div>
   </aside>
 </template>
@@ -74,10 +79,12 @@
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import SessionMetrics from '~/components/SessionMetrics.vue'
 import ContextUsageBar from '~/components/agents/ContextUsageBar.vue'
+import ProjectPermissions from '~/components/agents/ProjectPermissions.vue'
 
 interface Props {
   show: boolean
   session: any
+  projectPermissions?: any
   messageCount: number
   toolExecutions: any
   permissionStats: any
@@ -422,6 +429,12 @@ watch(sessionStartTime, (newVal) => {
   .metrics-sidebar.collapsed {
     width: 48px;
   }
+}
+
+.project-permissions-section {
+  padding: 0.75rem;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
 }
 
 @media (max-width: 768px) {

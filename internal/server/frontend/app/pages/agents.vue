@@ -138,6 +138,8 @@
                 :permission="permission"
                 :connected="agentWs.connected"
                 @approve="approvePermission"
+                @approve-exact="approvePermissionExact"
+                @approve-similar="approvePermissionSimilar"
                 @deny="denyPermission"
               />
             </div>
@@ -158,6 +160,7 @@
           :permission-stats="activeSessionPermissionMetrics"
           :context-usage="activeSessionContextUsage"
           :context-loading="contextUsageLoading"
+          :project-permissions="projectPermissions"
           @refresh-context="handleRefreshContext"
         />
       </main>
@@ -301,6 +304,29 @@ const { parseContextResponse } = useContextUsage()
 const contextUsageLoading = ref(false)
 const contextUsageTimeoutId = ref<number | null>(null)
 
+// Project permissions
+const projectPermissions = ref(null)
+
+// Fetch project permissions from settings.local.json
+const fetchProjectPermissions = async () => {
+  try {
+    const response = await fetch('/api/config/permissions', {
+      headers: {
+        'Authorization': `Bearer ${(document as any)._apiKey || ''}`
+      }
+    })
+    if (response.ok) {
+      projectPermissions.value = await response.json()
+    } else {
+      console.error('Failed to fetch project permissions')
+      projectPermissions.value = null
+    }
+  } catch (error) {
+    console.error('Error fetching project permissions:', error)
+    projectPermissions.value = null
+  }
+}
+
 // Diff display setting
 const { diffDisplayLocation } = useDiffDisplaySetting()
 
@@ -422,6 +448,8 @@ const {
 const {
   sendMessage,
   approvePermission,
+  approvePermissionExact,
+  approvePermissionSimilar,
   denyPermission,
   sendPermissionResponse,
   deleteAllSessions,
@@ -440,7 +468,8 @@ const {
   sessionPermissions,
   sessionPermissionStats,
   autoScrollIfNearBottom,
-  messagesContainer
+  messagesContainer,
+  refreshProjectPermissions: fetchProjectPermissions
 })
 
 // Handle send message with image attachments
@@ -608,6 +637,9 @@ onMounted(() => {
   // Load available providers
   loadProviders()
 
+  // Fetch project permissions
+  fetchProjectPermissions()
+
   // Register global action for keyboard shortcut
   const { setGlobalAction } = useKeyboardShortcuts()
   setGlobalAction('create-new-session', () => {
@@ -769,8 +801,6 @@ watch(activeSessionId, (newSessionId, oldSessionId) => {
 .permission-requests {
   padding: 16px 24px;
   border-top: 1px solid var(--border-color);
-  max-height: 200px;
-  overflow-y: auto;
   flex-shrink: 0;
 }
 </style>

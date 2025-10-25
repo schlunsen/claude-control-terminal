@@ -34,9 +34,10 @@ type PermissionRequest struct {
 
 // PermissionResponse represents the user's response to a permission request
 type PermissionResponse struct {
-	Approved      bool
-	UpdatedInput  *map[string]interface{}
-	DenyMessage   string
+	Approved           bool
+	UpdatedInput       *map[string]interface{}
+	UpdatedPermissions []types.PermissionUpdate
+	DenyMessage        string
 }
 
 // AgentSession represents an active agent session
@@ -460,6 +461,35 @@ func (sm *SessionManager) InterruptSession(sessionID uuid.UUID) error {
 	return nil
 }
 
+// ReloadSessionSettings closes and recreates the client to reload settings from disk
+// This is useful after adding always-allow rules to settings.local.json
+func (sm *SessionManager) ReloadSessionSettings(sessionID uuid.UUID) error {
+	sm.mu.RLock()
+	session, exists := sm.sessions[sessionID]
+	sm.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	logging.Info("🔄 Reloading settings for session %s (closing and recreating client)", sessionID)
+
+	// Close existing client if exists
+	session.mu.Lock()
+	if session.client != nil {
+		session.client.Close(session.ctx)
+		session.client = nil
+		logging.Info("  ✅ Closed existing client")
+	}
+	session.mu.Unlock()
+
+	// The next SendPrompt/SendPromptWithContent will automatically create a new client
+	// with fresh settings loaded from disk (settings.local.json)
+	logging.Info("  ✅ Session settings will reload on next prompt")
+
+	return nil
+}
+
 // EndSession ends a session
 func (sm *SessionManager) EndSession(sessionID uuid.UUID) error {
 	sm.mu.Lock()
@@ -694,14 +724,21 @@ func (sm *SessionManager) SendPrompt(sessionID uuid.UUID, prompt string) error {
 		case response := <-responseChan:
 			logging.Info("Permission response received: approved=%v, requestID=%s", response.Approved, requestID)
 			if response.Approved {
-				result := types.PermissionResultAllow{}
+				result := types.PermissionResultAllow{
+					Behavior: "allow",
+				}
 				if response.UpdatedInput != nil {
 					result.UpdatedInput = response.UpdatedInput
+				}
+				if response.UpdatedPermissions != nil && len(response.UpdatedPermissions) > 0 {
+					result.UpdatedPermissions = response.UpdatedPermissions
+					logging.Info("✨ Including %d permission update(s) in approval response", len(response.UpdatedPermissions))
 				}
 				return result, nil
 			} else {
 				return types.PermissionResultDeny{
-					Message: response.DenyMessage,
+					Behavior: "deny",
+					Message:  response.DenyMessage,
 				}, nil
 			}
 		case <-ctx.Done():
@@ -1039,13 +1076,60 @@ func (sm *SessionManager) SendPromptWithContent(sessionID uuid.UUID, content []C
 	return nil
 }
 
+// RestartClient closes the current client and forces a new client to be created
+// on the next SendPrompt. This is useful after updating permissions in settings.local.json.
+func (sm *SessionManager) RestartClient(sessionID uuid.UUID) error {
+	sm.mu.Lock()
+	session, exists := sm.sessions[sessionID]
+	sm.mu.Unlock()
+
+	if !exists {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
+	if session.client != nil {
+		logging.Info("Closing existing client for session %s to reload permissions", sessionID)
+		// Close the existing client
+		if err := session.client.Close(session.ctx); err != nil {
+			logging.Warning("Error closing client: %v", err)
+		}
+		// Clear the client reference so a new one will be created
+		session.client = nil
+		logging.Info("✅ Client restarted for session %s - permissions will be reloaded", sessionID)
+	} else {
+		logging.Info("No active client for session %s - nothing to restart", sessionID)
+	}
+
+	return nil
+}
+
 // createPermissionCallback creates the permission callback function for a session
 func (sm *SessionManager) createPermissionCallback(session *AgentSession) types.CanUseToolFunc {
+	sessionID := session.ID // Capture session ID to look up latest rules
 	return func(ctx context.Context, toolName string, input map[string]interface{}, permCtx types.ToolPermissionContext) (interface{}, error) {
 		requestID := uuid.New().String()
 		logging.Info("🔐 PERMISSION CALLBACK: tool=%s, requestID=%s", toolName, requestID)
 
-		// Check if WebSocket is connected before proceeding
+		// Check always-allow rules first - get latest rules from session manager
+		sm.mu.RLock()
+		currentSession, exists := sm.sessions[sessionID]
+		if exists {
+			logging.Info("📋 Checking %d always-allow rules for tool %s", len(currentSession.Options.AlwaysAllowRules), toolName)
+			if matched, ruleDesc := CheckAlwaysAllowRules(currentSession.Options.AlwaysAllowRules, toolName, input); matched {
+				sm.mu.RUnlock()
+				logging.Info("✅ AUTO-APPROVED via always-allow rule: %s (rule: %s)", toolName, ruleDesc)
+				return types.PermissionResultAllow{}, nil
+			}
+			logging.Info("❌ No matching always-allow rule found for tool %s", toolName)
+		} else {
+			logging.Warning("⚠️ Session %s not found in session manager", sessionID)
+		}
+		sm.mu.RUnlock()
+
+		// Check if WebSocket is connected before proceeding with permission request
 		if !session.IsWebSocketConnected() {
 			logging.Warning("Permission request rejected: WebSocket not connected (tool=%s, requestID=%s)", toolName, requestID)
 			return types.PermissionResultDeny{Message: "WebSocket connection lost - cannot request permission"}, nil
@@ -1089,14 +1173,23 @@ func (sm *SessionManager) createPermissionCallback(session *AgentSession) types.
 		case response := <-responseChan:
 			if response.Approved {
 				logging.Info("✅ Permission APPROVED for %s (request %s)", toolName, requestID)
-				result := types.PermissionResultAllow{}
+				result := types.PermissionResultAllow{
+					Behavior: "allow",
+				}
 				if response.UpdatedInput != nil {
 					result.UpdatedInput = response.UpdatedInput
+				}
+				if response.UpdatedPermissions != nil && len(response.UpdatedPermissions) > 0 {
+					result.UpdatedPermissions = response.UpdatedPermissions
+					logging.Info("✨ Including %d permission update(s) in approval response", len(response.UpdatedPermissions))
 				}
 				return result, nil
 			} else {
 				logging.Info("❌ Permission DENIED for %s (request %s): %s", toolName, requestID, response.DenyMessage)
-				return types.PermissionResultDeny{Message: response.DenyMessage}, nil
+				return types.PermissionResultDeny{
+					Behavior: "deny",
+					Message:  response.DenyMessage,
+				}, nil
 			}
 		case <-ctx.Done():
 			logging.Warning("⏱️ Context cancelled while waiting for permission (tool=%s, request %s)", toolName, requestID)

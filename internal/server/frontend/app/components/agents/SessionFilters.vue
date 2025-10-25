@@ -42,9 +42,9 @@ defineEmits<{
 .filter-tab {
   flex: 1;
   padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-primary);
-  color: var(--color-text-secondary);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
   border-radius: 0.375rem;
   cursor: pointer;
   font-size: 0.875rem;
@@ -57,14 +57,14 @@ defineEmits<{
 }
 
 .filter-tab:hover {
-  border-color: var(--color-primary);
-  background: var(--color-bg-secondary);
+  border-color: var(--accent-purple);
+  background: var(--bg-secondary);
 }
 
 .filter-tab.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-alpha);
-  color: var(--color-primary);
+  border-color: var(--accent-purple);
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--accent-purple);
 }
 
 .filter-count {
@@ -75,13 +75,13 @@ defineEmits<{
   height: 1.25rem;
   padding: 0 0.375rem;
   border-radius: 0.625rem;
-  background: var(--color-bg-tertiary);
+  background: var(--bg-tertiary);
   font-size: 0.75rem;
   font-weight: 600;
 }
 
 .filter-tab.active .filter-count {
-  background: var(--color-primary);
+  background: var(--accent-purple);
   color: white;
 }
 </style>
