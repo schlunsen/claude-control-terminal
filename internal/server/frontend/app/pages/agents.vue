@@ -71,6 +71,7 @@
           :connected="agentWs.connected"
           :is-thinking="isThinking"
           :is-processing="isProcessing"
+          :has-modal-open="showToolDiffOverlay || showLightbox"
           @send="handleSendMessage"
           @interrupt="interruptSession"
         >
@@ -114,6 +115,7 @@
               :format-time="formatTime"
               :format-message="formatMessage"
               @open-lightbox="openLightbox"
+              @tool-click="handleToolClick"
             >
               <!-- Edit Diff Slot (only when diffDisplayLocation is 'chat') -->
               <template #edit-diff>
@@ -204,6 +206,34 @@
       :is-open="showLightbox"
       @close="closeLightbox"
     />
+
+    <!-- Tool Diff Overlay Modal -->
+    <Teleport to="body">
+      <transition name="fade">
+        <div v-if="showToolDiffOverlay && selectedToolData" class="tool-diff-modal-backdrop" @click="closeToolDiffOverlay">
+          <div class="tool-diff-modal" @click.stop>
+            <div class="modal-header">
+              <h3>Edit Diff</h3>
+              <button class="close-btn" @click="closeToolDiffOverlay">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            <div class="modal-body">
+              <EditDiffMessage
+                :file-path="selectedToolData.input?.file_path || 'Unknown file'"
+                :old-string="selectedToolData.input?.old_string || ''"
+                :new-string="selectedToolData.input?.new_string || ''"
+                :replace-all="selectedToolData.input?.replace_all || false"
+                status="completed"
+              />
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
 
   </div>
 </template>
@@ -427,7 +457,8 @@ const {
   extractTextContent,
   isCompleteSignal,
   extractCostData,
-  extractToolName
+  extractToolName,
+  extractToolUses
 } = useMessageHelpers()
 
 // Tool management composable
@@ -496,6 +527,26 @@ const openLightbox = ({ images, startIndex }: { images: any[], startIndex: numbe
   lightboxImages.value = images
   lightboxStartIndex.value = startIndex
   showLightbox.value = true
+}
+
+// Tool diff overlay state
+const showToolDiffOverlay = ref(false)
+const selectedToolData = ref<any>(null)
+
+// Handle tool click (for showing diff overlay)
+const handleToolClick = ({ tool }: { tool: any }) => {
+  if (tool && tool.name === 'Edit') {
+    selectedToolData.value = tool
+    showToolDiffOverlay.value = true
+  }
+}
+
+// Close tool diff overlay
+const closeToolDiffOverlay = () => {
+  showToolDiffOverlay.value = false
+  setTimeout(() => {
+    selectedToolData.value = null
+  }, 300)
 }
 
 // Close lightbox
@@ -571,6 +622,7 @@ const { setupHandlers } = useWebSocketHandlers({
   parseTodoWrite,
   parseToolUse,
   extractToolName,
+  extractToolUses,
   isCompleteSignal,
   extractCostData,
   extractTextContent,
@@ -629,6 +681,27 @@ watch(activeSessionTodos, (todos) => {
   }
 }, { deep: true })
 
+// Handle ESC key to close tool diff modal
+const handleEscKey = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    // Priority 1: Close tool diff modal if open (don't interrupt session)
+    if (showToolDiffOverlay.value) {
+      closeToolDiffOverlay()
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    // Priority 2: Close lightbox if open
+    if (showLightbox.value) {
+      closeLightbox()
+      event.preventDefault()
+      event.stopPropagation()
+      return
+    }
+    // If neither modal is open, allow other ESC handlers (like session interruption)
+  }
+}
+
 // Load existing sessions on mount
 onMounted(() => {
   if (agentWs.connected) {
@@ -645,12 +718,18 @@ onMounted(() => {
   setGlobalAction('create-new-session', () => {
     createNewSession()
   })
+
+  // Add ESC key handler for modals
+  window.addEventListener('keydown', handleEscKey)
 })
 
 // Cleanup on unmount
 onUnmounted(() => {
   const { removeGlobalAction } = useKeyboardShortcuts()
   removeGlobalAction('create-new-session')
+
+  // Remove ESC key handler
+  window.removeEventListener('keydown', handleEscKey)
 })
 
 // Watch for connection changes
@@ -802,5 +881,79 @@ watch(activeSessionId, (newSessionId, oldSessionId) => {
   padding: 16px 24px;
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
+}
+
+/* Tool Diff Modal */
+.tool-diff-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+}
+
+.tool-diff-modal {
+  background: var(--card-bg);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-diff-modal .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tool-diff-modal .modal-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-diff-modal .close-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+  border-radius: 8px;
+}
+
+.tool-diff-modal .close-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.tool-diff-modal .modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Fade transition for modal */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

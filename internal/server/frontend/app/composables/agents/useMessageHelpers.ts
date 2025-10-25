@@ -236,7 +236,7 @@ export function useMessageHelpers() {
     return null
   }
 
-  // Helper to extract tool name from tool_uses JSON
+  // Helper to extract tool name from tool_uses JSON (legacy - single tool)
   const extractToolName = (toolUses: any): string | undefined => {
     if (!toolUses) return undefined
 
@@ -260,6 +260,36 @@ export function useMessageHelpers() {
     return undefined
   }
 
+  // Helper to extract ALL tool uses from tool_uses JSON (new - array)
+  const extractToolUses = (toolUses: any): Array<{ name: string; input?: any }> => {
+    if (!toolUses) return []
+
+    try {
+      // Parse if it's a JSON string
+      const parsed = typeof toolUses === 'string' ? JSON.parse(toolUses) : toolUses
+
+      // If it's an array, return all tools
+      if (Array.isArray(parsed)) {
+        return parsed.map(tool => ({
+          name: tool.name || tool.type || 'Unknown',
+          input: tool.input || tool.parameters || undefined
+        }))
+      }
+
+      // If it's a single object, return it as a single-item array
+      if (parsed.name || parsed.type) {
+        return [{
+          name: parsed.name || parsed.type,
+          input: parsed.input || parsed.parameters || undefined
+        }]
+      }
+    } catch (e) {
+      console.warn('Failed to parse tool_uses:', e)
+    }
+
+    return []
+  }
+
   return {
     formatRelativeTime,
     parseTodoWrite,
@@ -269,6 +299,7 @@ export function useMessageHelpers() {
     extractTextContent,
     isCompleteSignal,
     extractCostData,
-    extractToolName
+    extractToolName,
+    extractToolUses
   }
 }

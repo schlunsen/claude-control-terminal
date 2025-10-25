@@ -286,6 +286,7 @@ interface Props {
   connected: boolean
   isThinking: boolean
   isProcessing: boolean
+  hasModalOpen?: boolean
 }
 
 const props = defineProps<Props>()
@@ -509,8 +510,8 @@ function handleKeydown(event: KeyboardEvent) {
     return
   }
 
-  // Escape to interrupt processing (when not in modal)
-  if (event.code === 'Escape' && !showRecordingModal.value && props.isProcessing && props.connected) {
+  // Escape to interrupt processing (when not in any modal)
+  if (event.code === 'Escape' && !showRecordingModal.value && !props.hasModalOpen && props.isProcessing && props.connected) {
     event.preventDefault()
     emit('interrupt')
     return
