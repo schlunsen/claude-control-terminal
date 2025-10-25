@@ -768,6 +768,35 @@ go clean -cache -modcache -i -r
 
 ## Git Workflow
 
+### Branch Protection Policy
+
+**CRITICAL**: Never commit directly to the `main` branch unless it's during a release process!
+
+**Rules**:
+- All development work MUST be done on feature branches
+- Feature branches should follow naming conventions:
+  - `feature/` - New features (e.g., `feature/agent-session-manager`)
+  - `fix/` - Bug fixes (e.g., `fix/websocket-connection-error`)
+  - `docs/` - Documentation updates (e.g., `docs/update-readme`)
+  - `refactor/` - Code refactoring (e.g., `refactor/analytics-module`)
+  - `test/` - Test additions/updates (e.g., `test/add-agent-tests`)
+  - `chore/` - Maintenance tasks (e.g., `chore/update-dependencies`)
+
+**Workflow**:
+1. Always create a feature branch before making changes
+2. Make commits on the feature branch
+3. Create a pull request to merge into `main`
+4. Only during release processes (version bumps, release tags) should commits be made to `main`
+
+**Exception**: Release commits are the ONLY commits allowed directly on `main`:
+```bash
+# ONLY during release process
+git checkout main
+git commit -m "chore: release v1.0.0"
+git tag v1.0.0
+git push origin main --tags
+```
+
 ### Commit Message Format
 
 ```text
@@ -784,7 +813,7 @@ Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 ### Creating Pull Requests
 
 ```bash
-# Create feature branch
+# ALWAYS create a feature branch first
 git checkout -b feature/new-feature
 
 # Make changes and commit
